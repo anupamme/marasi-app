@@ -9,7 +9,9 @@
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Launchpad` or press `Command+5`. A fresh project shows `No Launchpads` and `Create one from ledger.` Users add an entry from a Ledger request with `Send to Launchpad`. From the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action; the row's right-click menu offers it too. Groups and entries have no list. Icon-only arrow buttons labelled `X of Y` and `Request X of Y`, or `⌘]`/`⌘[` and `⌘⇧]`/`⌘⇧[`, move between them.
+Select the rail item titled `Launchpad` or press `Command+5`. A fresh project shows `No Launchpads` and `Create one from ledger.` Users add an entry from a Ledger request with `Send to Launchpad`. From the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action; the row's right-click menu offers it too. Groups and entries have no list. Unlabelled icon-only arrow buttons beside the `Launchpad X of Y` and `Request X of Y` counters (no `aria-label` or `title`; target them with `click` and `nth`), or `⌘]`/`⌘[` and `⌘⇧]`/`⌘⇧[`, move between them.
+
+Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
 
 ## Driving it with Chrome CDP
 

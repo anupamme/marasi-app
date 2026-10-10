@@ -11,6 +11,8 @@
 
 Select the rail item titled `Workshop` or press `Command+8`. A ready page exposes `Workshop Settings` and a Lua editor with `data-language="lua"`. `Update Workshop` (`⌘⇧R`) and `Show Logs` (`⌘⇧L`) are commands in the `⌘K` palette and shortcuts only; they are not buttons on the page. The settings panel holds a single `Execute` button.
 
+Shortcuts: every menu shortcut for this feature is a catalog action in context `workshop` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+
 ## Driving it with Chrome CDP
 
 Run `scripts/drive.sh workshop` for route proof. Proven behavior sequence (replace `<token>` with a unique marker):

@@ -11,6 +11,8 @@
 
 Select the rail item titled `Armory` or press `Command+6`. A fresh scratchpad shows `No templates yet` and `No template selected`. `Armory Settings` is only a placeholder panel and works as a route marker. The run controls (attack type, concurrency, HTTPS, wordlists, `Create Draft`, `Launch`) appear in the centre panel once a template is selected.
 
+Shortcuts: every menu shortcut for this feature is a catalog action in context `armory.page` and `armory.drawer` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+
 ## Driving it with Chrome CDP
 
 Run `scripts/drive.sh armory` for route proof. For a run, write a one-line wordlist to `$APP_CONFIG_DIR/wordlists/verify-one.txt`, serve a local HTTP endpoint, and drive this proven sequence:
@@ -40,5 +42,5 @@ Then query `select status, max_concurrent from armory_run`, and check that `requ
 - Validation is debounced by 300 ms and starts out pending, so `Launch` is disabled until it finishes. Wait with `waitEnabledText`.
 - Harpoon and broadside require exactly one wordlist; tandem and maelstrom require one per payload position.
 - Run status comes from a 1.5 s poll. Wait for the `.badge` to read `complete`, not for any `complete` text. Traffic rows can arrive after the run completes.
-- Template delete and run delete are icon-only buttons with no label; target them through their card.
+- Template delete (a `Trash2` icon in the editor header beside Save) and run delete (in its run card) are icon-only buttons with no label; target them through the editor header or the run card.
 - Armory traffic goes through the proxy listener, so the listener must be online.

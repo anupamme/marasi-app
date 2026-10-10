@@ -591,3 +591,21 @@ export function browse({ catalog, profile, platform, query = "", filter = "all" 
     conflictCount: total("conflictCount"),
   };
 }
+
+// The settings sidebar's first column: one entry per page, holding its
+// page/state groups in browse() order, with their counts summed.
+export function pagesOf(groups) {
+  const pages = [];
+  for (const group of groups) {
+    let entry = pages.find((page) => page.page === group.page);
+    if (!entry) {
+      entry = { page: group.page, groups: [], actionCount: 0, unboundCount: 0, conflictCount: 0 };
+      pages.push(entry);
+    }
+    entry.groups.push(group);
+    entry.actionCount += group.actionCount;
+    entry.unboundCount += group.unboundCount;
+    entry.conflictCount += group.conflictCount;
+  }
+  return pages;
+}

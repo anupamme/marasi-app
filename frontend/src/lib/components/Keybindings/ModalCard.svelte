@@ -13,7 +13,7 @@
 	>
 		<h3 class="text-xl font-bold">{title}</h3>
 		<slot />
-		<footer class="flex justify-end gap-2">
+		<footer class="modal-footer flex justify-end gap-2">
 			<slot name="footer" />
 		</footer>
 	</div>

@@ -93,7 +93,7 @@ export const CONTEXTS = [
     tier: "drawer",
     label: "Ledger drawer (WebSocket upgrade)",
     page: "Ledger",
-    state: "Drawer open on a WebSocket upgrade",
+    state: "Drawer open (WebSocket)",
     overlaps: ["ledger.drawer-open"],
     isEligible: (state) =>
       onRoute("/ledger")(state) &&

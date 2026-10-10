@@ -10,6 +10,7 @@ import {
   captureKey,
   isDirty,
   openDraft,
+  pagesOf,
   removeBinding,
   replaceBinding,
   resetAction,
@@ -313,7 +314,7 @@ test("the real catalog's factory draft lists every page and state with nothing u
     "Extensions / Open extension pages",
     "Ledger / Drawer closed",
     "Ledger / Drawer open",
-    "Ledger / Drawer open on a WebSocket upgrade",
+    "Ledger / Drawer open (WebSocket)",
     "WebSocket / Inject tab",
     "Armory / Request drawer open",
     "Repeater / Extension page",
@@ -569,4 +570,21 @@ test("save problems include profile names and the active profile, as the backend
   const blank = { ...draft, profiles: draft.profiles.map((p) => (p.id === "other" ? { ...p, name: "  " } : p)) };
   assert.deepEqual(saveProblems(catalog, blank).map((p) => p.message), ["A profile has no name"]);
   assert.deepEqual(saveProblems(catalog, { ...draft, activeProfile: "gone" }).map((p) => p.message), ["The active profile does not exist"]);
+});
+
+test("pagesOf groups page/state entries under one page, in order, with summed counts", () => {
+  const groups = [
+    { id: "global", page: "Global", state: "Every page", actionCount: 19, unboundCount: 0, conflictCount: 0 },
+    { id: "websocket", page: "WebSocket", state: "Every tab", actionCount: 3, unboundCount: 1, conflictCount: 0 },
+    { id: "websocket.stream", page: "WebSocket", state: "Stream tab", actionCount: 5, unboundCount: 0, conflictCount: 2 },
+    { id: "ledger.drawer-closed", page: "Ledger", state: "Drawer closed", actionCount: 6, unboundCount: 0, conflictCount: 0 },
+  ];
+  const pages = pagesOf(groups);
+  assert.deepEqual(pages.map((p) => p.page), ["Global", "WebSocket", "Ledger"]);
+  const websocket = pages[1];
+  assert.deepEqual(websocket.groups.map((g) => g.state), ["Every tab", "Stream tab"]);
+  assert.deepEqual(
+    { actionCount: websocket.actionCount, unboundCount: websocket.unboundCount, conflictCount: websocket.conflictCount },
+    { actionCount: 8, unboundCount: 1, conflictCount: 2 },
+  );
 });

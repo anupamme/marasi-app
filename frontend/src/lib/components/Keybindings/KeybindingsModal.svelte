@@ -283,7 +283,7 @@
 			</section>
 		</div>
 
-		<footer class="flex items-center justify-between gap-4">
+		<footer class="modal-footer flex items-center justify-between gap-4">
 			<div class="min-w-0 text-sm" aria-live="polite">
 				{#if saveError}
 					<p class="text-error-600 dark:text-error-400" data-save-error>{saveError}</p>

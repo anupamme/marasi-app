@@ -815,8 +815,14 @@
 	:global(.dark .modal-prompt-input) {
 		background-color: rgb(var(--color-surface-700)) !important;
 	}
+	/* The rail still scrolls when extension tiles overflow it, but without a
+	   scrollbar: one would take its width from the tiles and clip labels. */
 	:global(.nav-rail) {
 		overflow-x: hidden;
 		overflow-y: auto;
+		scrollbar-width: none;
+	}
+	:global(.nav-rail::-webkit-scrollbar) {
+		display: none;
 	}
 </style>

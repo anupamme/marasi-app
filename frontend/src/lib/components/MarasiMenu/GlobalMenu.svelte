@@ -56,6 +56,7 @@
 	import { menuDispatcher } from "../../keybindings/app.js";
 	import {
 		buildCatalog,
+		extensionsWithGUI,
 		extensionNavigationActionId,
 	} from "../../keybindings/catalog.js";
 	import { OPEN_MENU } from "../../keybindings/dispatcher.js";
@@ -149,9 +150,16 @@
 				.map(([name, ui]) => [name, ui.menu]),
 		),
 	);
+	// Only extensions that rendered a GUI get a page and a navigation action,
+	// like the rail; the list changes rarely, unlike their state.
+	$: guiExtensionNames = extensionsWithGUI($extensions, $extensions_ui)
+		.map((extension) => extension.Name)
+		.join("\n");
 	$: menuDispatcher.configure({
 		catalog: buildCatalog({
-			extensions: $extensions,
+			extensions: $extensions.filter((extension) =>
+				guiExtensionNames.split("\n").includes(extension.Name),
+			),
 			extensionMenus: JSON.parse(extensionMenusJSON),
 		}),
 	});

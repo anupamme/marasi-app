@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { buildCatalog, createCatalog } from "./catalog.js";
+import { buildCatalog, createCatalog, extensionsWithGUI } from "./catalog.js";
 import { createKeymap } from "./keymap.js";
 import { MACOS, WINDOWS_LINUX } from "./platform.js";
 
@@ -181,4 +181,24 @@ test("an override replaces an action's defaults and an empty override unbinds it
   assert.deepEqual(keymap.actionsFor("meta+1"), []);
   assert.deepEqual(keymap.bindingsFor("global.go-ledger"), []);
   assert.deepEqual(keymap.bindingsFor("global.go-compass"), ["meta+3"]);
+});
+
+test("only extensions that rendered a GUI get a page: Workshop's core page is not duplicated", () => {
+  const extensions = [{ Name: "compass" }, { Name: "checkpoint" }, { Name: "workshop" }, { Name: "probe" }, { Name: "quiet" }];
+  const ui = {
+    workshop: { state: { count: 1 } }, // state only: no GUI
+    probe: { state: {}, icon: { type: "icon", name: "Bug" } },
+    quiet: { state: {}, main: { type: "text" } },
+  };
+  assert.deepEqual(extensionsWithGUI(extensions, ui).map((e) => e.Name), ["probe", "quiet"]);
+
+  const catalog = buildCatalog({ extensions: extensionsWithGUI(extensions, ui) });
+  assert.equal(catalog.get("global.open-extension.workshop"), undefined);
+  assert.equal(catalog.contexts.some((c) => c.id === "extension-page.workshop"), false);
+  // Positional defaults count GUI extensions only.
+  assert.deepEqual(catalog.get("global.open-extension.probe").defaults[MACOS], ["meta+alt+1"]);
+  assert.deepEqual(catalog.get("global.open-extension.quiet").defaults[MACOS], ["meta+alt+2"]);
+
+  const withWorkshopGUI = { ...ui, workshop: { state: {}, icon: { type: "icon", name: "Hammer" } } };
+  assert.ok(buildCatalog({ extensions: extensionsWithGUI(extensions, withWorkshopGUI) }).get("global.open-extension.workshop"));
 });

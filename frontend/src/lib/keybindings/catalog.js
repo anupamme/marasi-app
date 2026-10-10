@@ -201,6 +201,20 @@ export function extensionMenuActionId(extensionName, declaredAction) {
   return slug ? `extension.${slugify(extensionName)}.${slug}` : null;
 }
 
+// GUI targets an extension renders that persist (toasts do not). Only an
+// extension that rendered one has a page worth opening: every extension is
+// a Lua script, and Workshop, for one, has its own core page and would
+// otherwise appear twice.
+const GUI_TARGETS = ["icon", "main", "panel", "menu"];
+
+// The loaded extensions that rendered a GUI, in load order. `extensionsUI`
+// is the per-extension store of rendered targets.
+export function extensionsWithGUI(extensions = [], extensionsUI = {}) {
+  return extensions.filter((extension) =>
+    GUI_TARGETS.some((target) => extensionsUI?.[extension?.Name]?.[target] != null),
+  );
+}
+
 // Extensions with a page and a navigation action, in load order. Names whose
 // slug is empty or already taken keep only the first extension.
 function navigableExtensions(extensions) {

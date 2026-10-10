@@ -1,5 +1,10 @@
 <script>
-	import { Pencil, X } from "lucide-svelte";
+	// Settings, one section at a time. The sections list is styled like
+	// Marasi menu entries; each setting is a row with its name and help on
+	// the left and its control in one fixed-width column on the right, so
+	// inputs, buttons and switches line up. Lists are tables with the add
+	// row underneath.
+	import { Chrome, Globe, Info, Keyboard, Pencil, Replace, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -14,6 +19,7 @@
 		GetBuildInfo,
 	} from "../../lib/wailsjs/go/main/App";
 	import {
+		keybindingState,
 		marasiConfig,
 		populateWaypoints,
 		waypoints,
@@ -28,9 +34,19 @@
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
 
-	function openKeybindings() {
-		modalStore.trigger({ type: "component", component: "Keybindings" });
-	}
+	const sections = [
+		{ id: "editing", name: "Keyboard & Editor", hint: "Shortcuts, Vim, syntax", icon: Keyboard },
+		{ id: "listener", name: "Listener", hint: "Default interface and port", icon: Globe },
+		{ id: "waypoints", name: "Waypoints", hint: "Host overrides", icon: Replace },
+		{ id: "browser", name: "Browser", hint: "Chrome paths and profiles", icon: Chrome },
+		{ id: "about", name: "About", hint: "Version and build", icon: Info },
+	];
+	const syntaxModes = [
+		["disabled", "Disabled"],
+		["auto", "Auto"],
+		["enabled", "Enabled"],
+	];
+	let section = "editing";
 
 	let targetHost = "";
 	let override = "";
@@ -41,32 +57,91 @@
 	let chromePaths = [];
 	let chromeProfiles = [];
 	let buildInfo = null;
-	function handleSyntaxModeChange(event) {
-		const value = event?.target?.value;
-		switch (value) {
-			case "enabled":
-				SetFlag("syntax_mode", "enabled").then(
-					(config) => {
-						marasiConfig.set(config);
-					},
-				);
-				break;
-			case "auto":
-				SetFlag("syntax_mode", "auto").then(
-					(config) => {
-						marasiConfig.set(config);
-					},
-				);
-				break;
-			case "disabled":
-				SetFlag("syntax_mode", "disabled").then(
-					(config) => {
-						marasiConfig.set(config);
-					},
-				);
-				break;
-		}
+
+	$: primary = $modeCurrent
+		? "variant-ghost-primary ring-0 shadow-none"
+		: "variant-filled-primary";
+	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
+	const tableField =
+		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
+	const row =
+		"flex items-center justify-between gap-8 py-4 border-b border-surface-300 dark:border-surface-600";
+	const control = "flex w-80 shrink-0";
+
+	$: keybindingSummary = (() => {
+		const config = $keybindingState?.config;
+		const active = config?.profiles?.find(
+			(profile) => profile.id === config.activeProfile,
+		);
+		if (!active) return "Factory shortcuts";
+		const count = config.profiles.length;
+		return `${active.name} profile active · ${count} profile${count === 1 ? "" : "s"}`;
+	})();
+
+	function openKeybindings() {
+		modalStore.trigger({ type: "component", component: "Keybindings" });
 	}
+	function setFlag(name, value) {
+		SetFlag(name, value).then((config) => {
+			marasiConfig.set(config);
+		});
+	}
+	function saveWaypoint() {
+		CreateWaypoint(targetHost, override)
+			.then(() => {
+				targetHost = "";
+				override = "";
+				selected = "";
+				populateWaypoints();
+			})
+			.catch((waypointErr) => {
+				console.log(waypointErr);
+			});
+	}
+	function deleteWaypoint(host) {
+		DeleteWaypoint(host)
+			.then(() => {
+				populateWaypoints();
+			})
+			.catch((deleteError) => {
+				console.log(deleteError);
+			});
+	}
+	function addChromePath() {
+		AddChromePath(selectedPath, selectedOS).then((paths) => {
+			chromePaths = paths;
+			selectedPath = "";
+			selectedOS = "";
+		});
+	}
+	function addChromeProfile() {
+		AddChromeProfile(selectedProfile)
+			.then((profiles) => {
+				chromeProfiles = profiles;
+			})
+			.catch((error) => {
+				toastStore.trigger({
+					message: error.includes("already exists")
+						? "Profile already exists"
+						: "Error creating profile",
+					background: "variant-filled-error",
+				});
+			});
+		selectedProfile = "";
+	}
+	function deleteChromeProfile(profile) {
+		DeleteChromeProfile(profile)
+			.then((profiles) => {
+				chromeProfiles = profiles;
+			})
+			.catch(() => {
+				toastStore.trigger({
+					message: "Error deleting profile",
+					background: "variant-filled-error",
+				});
+			});
+	}
+
 	onMount(() => {
 		GetBuildInfo().then((info) => {
 			buildInfo = info;
@@ -75,511 +150,334 @@
 			chromePaths = paths;
 		});
 		GetChromeProfiles().then((profiles) => {
-			console.log(profiles);
 			chromeProfiles = profiles;
 		});
 	});
 </script>
 
-<div class="no-select p-4 space-y-2 text-surface-900-50-token">
-	<div class="mb-6">
+<div class="no-select flex h-full min-h-0 flex-col p-4 text-surface-900-50-token">
+	<header class="mb-4 flex items-baseline gap-3">
 		<h2 class="text-2xl font-bold">Marasi Settings</h2>
 		{#if buildInfo}
-			<p
-				class="text-sm font-mono"
+			<span
+				class="font-mono text-sm"
 				class:text-primary-500={buildInfo.Channel === "nightly"}
 				class:text-success-500={buildInfo.Channel === "release"}
 				class:opacity-60={buildInfo.Channel === "dev"}
 			>
 				{buildInfo.Version}
-			</p>
+			</span>
 		{/if}
+	</header>
+
+	<div class="flex min-h-0 flex-1 border-t border-surface-300 dark:border-surface-600">
+		<nav
+			class="w-64 shrink-0 overflow-y-auto border-r border-surface-300 py-2 dark:border-surface-600"
+			aria-label="Settings sections"
+		>
+			{#each sections as entry}
+				<button
+					type="button"
+					class="flex w-full items-center gap-3 border-l-4 px-3 py-2 text-left hover:bg-surface-200 focus:!outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-primary-500 dark:hover:bg-surface-700 {section ===
+					entry.id
+						? 'border-primary-500 bg-surface-200 dark:bg-surface-700'
+						: 'border-transparent'}"
+					aria-current={section === entry.id ? "true" : undefined}
+					on:click={() => (section = entry.id)}
+				>
+					<svelte:component this={entry.icon} size={18} class="shrink-0 opacity-80" />
+					<span class="flex flex-col">
+						<span>{entry.name}</span>
+						<span class="text-sm opacity-70">{entry.hint}</span>
+					</span>
+				</button>
+			{/each}
+		</nav>
+
+		<section class="min-w-0 flex-1 overflow-y-auto px-8 py-4">
+			{#if section === "editing"}
+				<h3 class="text-xl font-bold">Keyboard & Editor</h3>
+				<div class={row}>
+					<div>
+						<p>Keybindings</p>
+						<p class="text-sm opacity-70">{keybindingSummary}</p>
+					</div>
+					<div class={control}>
+						<button type="button" class="btn w-full {primary}" on:click={openKeybindings}
+							>Configure Keybindings</button
+						>
+					</div>
+				</div>
+				<div class={row}>
+					<div>
+						<p>Vim mode</p>
+						<p class="text-sm opacity-70">Vim keys in every code editor</p>
+					</div>
+					<div class="{control} justify-end">
+						<SlideToggle
+							name="vim-enabled"
+							label="Vim mode"
+							active="bg-primary-500"
+							bind:checked={$marasiConfig.VimEnabled}
+							on:change={() => {
+								ToggleFlag("vim_enabled").then((config) => {
+									marasiConfig.set(config);
+								});
+							}}
+						/>
+					</div>
+				</div>
+				<div class={row}>
+					<div>
+						<p>Syntax highlighting</p>
+						<p class="text-sm opacity-70">
+							Auto highlights requests and responses it recognises
+						</p>
+					</div>
+					<div class="{control} grid grid-cols-3" role="radiogroup" aria-label="Syntax highlighting">
+						{#each syntaxModes as [value, label]}
+							<button
+								type="button"
+								role="radio"
+								aria-checked={$marasiConfig.SyntaxMode === value}
+								class="btn !border-0 !ring-0 {$marasiConfig.SyntaxMode === value
+									? 'variant-filled-primary'
+									: 'variant-soft-primary !text-surface-900 dark:!text-surface-50'}"
+								on:click={() => setFlag("syntax_mode", value)}>{label}</button
+							>
+						{/each}
+					</div>
+				</div>
+			{:else if section === "listener"}
+				<h3 class="text-xl font-bold">Listener</h3>
+				<p class="text-sm opacity-70">
+					Used when Marasi starts. Change the running listener from the dashboard.
+				</p>
+				<div class={row}>
+					<div>
+						<p>Default interface</p>
+						<p class="text-sm opacity-70">Address the proxy listens on</p>
+					</div>
+					<div class={control}>
+						<input
+							class="input w-full"
+							type="text"
+							placeholder="Listener"
+							aria-label="Default interface"
+							bind:value={$marasiConfig.DefaultAddress}
+							on:change={(event) => setFlag("default_address", event?.target?.value)}
+						/>
+					</div>
+				</div>
+				<div class={row}>
+					<div>
+						<p>Default port</p>
+						<p class="text-sm opacity-70">Port the proxy listens on</p>
+					</div>
+					<div class={control}>
+						<input
+							class="input w-full"
+							type="text"
+							placeholder="Listener"
+							aria-label="Default port"
+							bind:value={$marasiConfig.DefaultPort}
+							on:change={(event) => setFlag("default_port", event?.target?.value)}
+						/>
+					</div>
+				</div>
+			{:else if section === "waypoints"}
+				<h3 class="text-xl font-bold">Waypoints</h3>
+				<p class="mb-4 text-sm opacity-70">Send traffic for a host to a different host:port.</p>
+				<div class="table-container">
+					<table class="table">
+						<thead>
+							<tr>
+								<th class="w-[40%]">Host</th>
+								<th class="w-[40%]">Override</th>
+								<th class="w-[20%]"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each Object.keys($waypoints) as host}
+								<tr>
+									<td class="font-mono">{host}</td>
+									<td class="font-mono">{$waypoints[host]}</td>
+									<td class="text-center">
+										<div class="flex items-center justify-center space-x-2">
+											<button
+												type="button"
+												class={iconButton}
+												title="Edit"
+												on:click={() => {
+													selected = host;
+													targetHost = host;
+													override = $waypoints[host];
+												}}><Pencil size={15} /></button
+											>
+											<button
+												type="button"
+												class={iconButton}
+												title="Delete"
+												on:click={() => deleteWaypoint(host)}><X size={15} /></button
+											>
+										</div>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<td>
+									<input
+										type="text"
+										placeholder="Enter host (host:port)"
+										class={tableField}
+										bind:value={targetHost}
+									/>
+								</td>
+								<td>
+									<input
+										type="text"
+										placeholder="Enter override (host:port)"
+										class={tableField}
+										bind:value={override}
+									/>
+								</td>
+								<td>
+									<button
+										type="button"
+										class="btn w-full {primary}"
+										disabled={targetHost === "" ||
+											override === "" ||
+											(targetHost in $waypoints && selected !== targetHost)}
+										on:click={saveWaypoint}
+										>{selected === targetHost && targetHost !== ""
+											? "Update Waypoint"
+											: "Add Waypoint"}</button
+									>
+								</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			{:else if section === "browser"}
+				<h3 class="text-xl font-bold">Browser</h3>
+				<p class="mb-4 text-sm opacity-70">Chrome that Marasi starts with the proxy configured.</p>
+				<div class="table-container mb-6">
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Chrome Path</th>
+								<th class="w-44">OS</th>
+								<th class="w-44"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each chromePaths as path}
+								<tr>
+									<td class="font-mono">{path.Path}</td>
+									<td>{path.OS}</td>
+									<td class="text-center">
+										<button
+											type="button"
+											class={iconButton}
+											title="Delete"
+											on:click={() => {
+												DeleteChromePath(path.Path, path.OS).then((paths) => {
+													chromePaths = paths;
+												});
+											}}><X size={15} /></button
+										>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<td>
+									<input
+										type="text"
+										placeholder="Enter Chrome Path (e.g. /usr/bin/google-chrome)"
+										class={tableField}
+										bind:value={selectedPath}
+									/>
+								</td>
+								<td>
+									<select class={tableField} bind:value={selectedOS}>
+										<option value="">Select OS</option>
+										<option value="windows">windows</option>
+										<option value="darwin">darwin</option>
+										<option value="linux">linux</option>
+									</select>
+								</td>
+								<td>
+									<button
+										type="button"
+										class="btn w-full {primary}"
+										disabled={selectedOS === "" || selectedPath === ""}
+										on:click={addChromePath}>Add Path</button
+									>
+								</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+				<div class="table-container">
+					<table class="table">
+						<thead>
+							<tr>
+								<th>Chrome Profile</th>
+								<th class="w-44"></th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each chromeProfiles as profile}
+								<tr>
+									<td>{profile}</td>
+									<td class="text-center">
+										<button
+											type="button"
+											class={iconButton}
+											title="Delete"
+											on:click={() => deleteChromeProfile(profile)}><X size={15} /></button
+										>
+									</td>
+								</tr>
+							{/each}
+						</tbody>
+						<tfoot>
+							<tr>
+								<td>
+									<input
+										type="text"
+										placeholder="Enter profile name"
+										class={tableField}
+										bind:value={selectedProfile}
+									/>
+								</td>
+								<td>
+									<button
+										type="button"
+										class="btn w-full {primary}"
+										disabled={selectedProfile === ""}
+										on:click={addChromeProfile}>Add Profile</button
+									>
+								</td>
+							</tr>
+						</tfoot>
+					</table>
+				</div>
+			{:else}
+				<h3 class="text-xl font-bold">About</h3>
+				<div class={row}>
+					<p>Version</p>
+					<p class="{control} font-mono text-sm">{buildInfo?.Version ?? "…"}</p>
+				</div>
+				<div class={row}>
+					<p>Channel</p>
+					<p class="{control} font-mono text-sm">{buildInfo?.Channel ?? "…"}</p>
+				</div>
+			{/if}
+		</section>
 	</div>
-	<div class="label">
-		<span>Keybindings</span>
-		<div>
-			<button
-				type="button"
-				class="btn {$modeCurrent
-					? 'variant-ghost-primary ring-0 shadow-none'
-					: 'variant-filled-primary'}"
-				on:click={openKeybindings}>Configure Keybindings</button
-			>
-		</div>
-	</div>
-	<SlideToggle
-		name="slider-label"
-		active="bg-primary-500"
-		on:change={(event) => {
-			ToggleFlag("vim_enabled").then((config) => {
-				marasiConfig.set(config);
-			});
-		}}
-		bind:checked={$marasiConfig.VimEnabled}>Vim Enabled</SlideToggle
-	>
-	<label class="label">
-		<span>Syntax Mode:</span>
-		<div class="space-y-2">
-			<label class="flex items-center space-x-2">
-				<input
-					class="radio"
-					type="radio"
-					name="radio-direct"
-					value="disabled"
-					bind:group={$marasiConfig.SyntaxMode}
-					on:change={handleSyntaxModeChange}
-				/>
-				<p>Disabled</p>
-			</label>
-			<label class="flex items-center space-x-2">
-				<input
-					class="radio"
-					type="radio"
-					name="radio-direct"
-					value="auto"
-					bind:group={$marasiConfig.SyntaxMode}
-					on:change={handleSyntaxModeChange}
-				/>
-				<p>Auto</p>
-			</label>
-			<label class="flex items-center space-x-2">
-				<input
-					class="radio"
-					type="radio"
-					name="radio-direct"
-					value="enabled"
-					bind:group={$marasiConfig.SyntaxMode}
-					on:change={handleSyntaxModeChange}
-				/>
-				<p>Enabled</p>
-			</label>
-		</div>
-	</label>
-	<label class="label">
-		<span>Default Interface</span>
-		<input
-			on:change={(event) => {
-				console.log(event.target.value);
-				SetFlag(
-					"default_address",
-					event?.target?.value,
-				).then((config) => {
-					marasiConfig.set(config);
-				});
-			}}
-			bind:value={$marasiConfig.DefaultAddress}
-			class="input"
-			title="Input (text)"
-			type="text"
-			placeholder="Listener"
-		/>
-	</label>
-	<label class="label">
-		<span>Default Port</span>
-		<input
-			on:change={(event) => {
-				SetFlag(
-					"default_port",
-					event?.target?.value,
-				).then((config) => {
-					marasiConfig.set(config);
-				});
-			}}
-			bind:value={$marasiConfig.DefaultPort}
-			class="input"
-			title="Input (text)"
-			type="text"
-			placeholder="Listener"
-		/>
-	</label>
-	<label class="label">
-		<span>Waypoints</span>
-		<div class="table-container">
-			<table class="table">
-				<thead>
-					<tr>
-						<th class="text-center w-[40%]"
-							>Host</th
-						>
-						<th class="text-center w-[40%]"
-							>Override</th
-						>
-						<th
-							class="bg-primar-500 w-[20%]"
-						></th>
-					</tr>
-					<tr>
-						<td>
-							<input
-								type="text"
-								placeholder="Enter host (host:port)"
-								class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
-								bind:value={
-									targetHost
-								}
-							/>
-						</td>
-						<td>
-							<input
-								type="text"
-								placeholder="Enter override (host:port)"
-								class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
-								bind:value={
-									override
-								}
-							/>
-						</td>
-						<td>
-							<button
-								disabled={targetHost ===
-									"" ||
-									override ===
-										"" ||
-									(targetHost in
-										$waypoints &&
-										selected !==
-											targetHost)}
-								type="button"
-								class="btn block mx-auto w-full {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-								on:click={() => {
-									CreateWaypoint(
-										targetHost,
-										override,
-									)
-										.then(
-											() => {
-												console.log(
-													"Addedd",
-												);
-												targetHost =
-													"";
-												override =
-													"";
-												selected =
-													"";
-												populateWaypoints();
-											},
-										)
-										.catch(
-											(
-												waypointErr,
-											) => {
-												console.log(
-													waypointErr,
-												);
-											},
-										);
-								}}
-								>{#if selected === targetHost && targetHost !== ""}Update
-									Waypoint{:else}Add
-									Waypoint{/if}</button
-							>
-						</td>
-					</tr>
-				</thead>
-				<tbody>
-					{#each Object.keys($waypoints) as host}
-						<tr>
-							<td>{host}</td>
-							<td
-								>{$waypoints[
-									host
-								]}</td
-							>
-							<td class="text-center">
-								<div
-									class="flex justify-center items-center space-x-2"
-								>
-									<button
-										on:click={() => {
-											DeleteWaypoint(
-												host,
-											)
-												.then(
-													() => {
-														populateWaypoints();
-													},
-												)
-												.catch(
-													(
-														deleteError,
-													) => {
-														console.log(
-															deleteError,
-														);
-													},
-												);
-										}}
-										type="button"
-										class="btn-icon inline-flex items-center justify-center p-1 w-auto h-auto {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-									>
-										<X
-											size={15}
-										/>
-									</button>
-									<button
-										on:click={() => {
-											selected =
-												host;
-											targetHost =
-												host;
-											override =
-												$waypoints[
-													host
-												];
-										}}
-										type="button"
-										class="btn-icon inline-flex items-center justify-center p-1 w-auto h-auto {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-									>
-										<Pencil
-											size={15}
-										/>
-									</button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</label>
-	<label class="label">
-		<span>Chrome Paths</span>
-		<div class="table-container">
-			<table class="table">
-				<thead>
-					<tr>
-						<th class="text-center w-[40%]"
-							>Path</th
-						>
-						<th class="text-center w-[40%]"
-							>OS</th
-						>
-						<th class="bg-primary w-[20%]"
-						></th>
-					</tr>
-					<tr>
-						<td>
-							<input
-								type="text"
-								placeholder="Enter Chrome Path (e.g. /usr/bin/google-chrome)"
-								class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
-								bind:value={
-									selectedPath
-								}
-							/>
-						</td>
-						<td>
-							<select
-								class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
-								bind:value={
-									selectedOS
-								}
-							>
-								<option
-									class="varient-filled-primary"
-									value=""
-									>Select
-									OS</option
-								>
-								<option
-									value="windows"
-									>windows</option
-								>
-								<option
-									value="darwin"
-									>darwin</option
-								>
-								<option
-									value="linux"
-									>linux</option
-								>
-							</select>
-						</td>
-						<td>
-							<button
-								disabled={selectedOS ===
-									"" ||
-									selectedPath ===
-										""}
-								type="button"
-								class="btn block mx-auto w-full {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-								on:click={() => {
-									AddChromePath(
-										selectedPath,
-										selectedOS,
-									).then(
-										(
-											paths,
-										) => {
-											chromePaths =
-												paths;
-										},
-									);
-								}}
-								>Add Path</button
-							>
-						</td>
-					</tr>
-				</thead>
-				<tbody>
-					{#each chromePaths as path}
-						<tr>
-							<td>{path.Path}</td>
-							<td>{path.OS}</td>
-							<td class="text-center">
-								<div
-									class="flex justify-center items-center space-x-2"
-								>
-									<button
-										on:click={() => {
-											DeleteChromePath(
-												path.Path,
-												path.OS,
-											).then(
-												(
-													paths,
-												) => {
-													chromePaths =
-														paths;
-												},
-											);
-										}}
-										type="button"
-										class="btn-icon inline-flex items-center justify-center p-1 w-auto h-auto {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-									>
-										<X
-											size={15}
-										/>
-									</button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</label>
-	<label class="label">
-		<span>Chrome Profiles</span>
-		<div class="table-container">
-			<table class="table">
-				<thead>
-					<tr>
-						<th class="text-center w-[80%]"
-							>Profile Name</th
-						>
-						<th class="bg-primary w-[20%]"
-						></th>
-					</tr>
-					<tr>
-						<td>
-							<input
-								type="text"
-								placeholder="Enter profile name"
-								class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
-								bind:value={
-									selectedProfile
-								}
-							/>
-						</td>
-						<td>
-							<button
-								disabled={selectedProfile ===
-									""}
-								type="button"
-								class="btn block mx-auto w-full {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-								on:click={() => {
-									AddChromeProfile(
-										selectedProfile,
-									)
-										.then(
-											(
-												profiles,
-											) => {
-												chromeProfiles =
-													profiles;
-											},
-										)
-										.catch(
-											(
-												error,
-											) => {
-												const message =
-													error.includes(
-														"already exists",
-													)
-														? "Profile already exists"
-														: "Error creating profile";
-												const toastSettings =
-													{
-														message: message,
-														background: "variant-filled-error",
-													};
-												toastStore.trigger(
-													toastSettings,
-												);
-											},
-										);
-									selectedProfile =
-										"";
-								}}
-								>Add Profile</button
-							>
-						</td>
-					</tr>
-				</thead>
-				<tbody>
-					{#each chromeProfiles as profile}
-						<tr>
-							<td>{profile}</td>
-							<td
-								class="text-center text-xl"
-							>
-								<div
-									class="flex justify-center items-center space-x-2"
-								>
-									<button
-										on:click={() => {
-											DeleteChromeProfile(
-												profile,
-											)
-												.then(
-													(
-														profiles,
-													) => {
-														chromeProfiles =
-															profiles;
-													},
-												)
-												.catch(
-													(
-														_,
-													) => {
-														const toastSettings =
-															{
-																message: "Error deleting profile",
-																background: "variant-filled-error",
-															};
-														toastStore.trigger(
-															toastSettings,
-														);
-													},
-												);
-										}}
-										type="button"
-										class="btn-icon inline-flex items-center justify-center p-1 w-auto h-auto {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
-									>
-										<X
-											size={15}
-										/>
-									</button>
-								</div>
-							</td>
-						</tr>
-					{/each}
-				</tbody>
-			</table>
-		</div>
-	</label>
 </div>

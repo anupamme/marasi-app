@@ -844,15 +844,16 @@ func (a *App) GetRecentProjects() []struct {
 }
 
 // Chrome settings live in the machine config shared with service instances,
-// so each call rereads it under the shared config lock.
+// so each call rereads it under the shared config lock. A config the reread
+// refuses, such as a negative websocket_max_message_size, comes back as
+// Marasi's "invalid configuration" error, which the frontend shows.
 
-func (a *App) GetChromeProfiles() []string {
+func (a *App) GetChromeProfiles() ([]string, error) {
 	profiles, err := a.chrome.Profiles(context.Background())
 	if err != nil {
-		log.Printf("reading chrome profiles: %v", err)
-		return a.Proxy.Config.ChromeProfiles
+		return []string{}, fmt.Errorf("reading chrome profiles: %w", err)
 	}
-	return profiles
+	return profiles, nil
 }
 
 func (a *App) AddChromeProfile(name string) ([]string, error) {
@@ -871,31 +872,28 @@ func (a *App) DeleteChromeProfile(name string) ([]string, error) {
 	return profiles, nil
 }
 
-func (a *App) GetChromePaths() []chrome.PathConfig {
+func (a *App) GetChromePaths() ([]chrome.PathConfig, error) {
 	paths, err := a.chrome.Paths(context.Background())
 	if err != nil {
-		log.Printf("reading chrome paths: %v", err)
-		return a.Proxy.Config.ChromeDirs
+		return []chrome.PathConfig{}, fmt.Errorf("reading chrome paths: %w", err)
 	}
-	return paths
+	return paths, nil
 }
 
-func (a *App) AddChromePath(path, os string) []chrome.PathConfig {
+func (a *App) AddChromePath(path, os string) ([]chrome.PathConfig, error) {
 	paths, err := a.chrome.AddPath(context.Background(), chrome.PathConfig{OS: os, Path: path})
 	if err != nil {
-		// Return something useful here
-		return []chrome.PathConfig{}
+		return []chrome.PathConfig{}, fmt.Errorf("adding chrome path: %w", err)
 	}
-	return paths
+	return paths, nil
 }
 
-func (a *App) DeleteChromePath(path, os string) []chrome.PathConfig {
+func (a *App) DeleteChromePath(path, os string) ([]chrome.PathConfig, error) {
 	paths, err := a.chrome.RemovePath(context.Background(), chrome.PathConfig{OS: os, Path: path})
 	if err != nil {
-		// Return something useful here
-		return []chrome.PathConfig{}
+		return []chrome.PathConfig{}, fmt.Errorf("deleting chrome path: %w", err)
 	}
-	return paths
+	return paths, nil
 }
 
 func (a *App) DownloadCert() (bool, error) {

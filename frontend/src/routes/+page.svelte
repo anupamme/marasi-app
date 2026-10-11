@@ -15,6 +15,7 @@
 	import { ChevronDown, Download, FolderOpen } from "lucide-svelte";
 	import { listener } from "../stores";
 	import {
+		chromeError,
 		downloadCertificate,
 		listenerModal,
 		projectModal,
@@ -30,10 +31,14 @@
 	};
 
 	onMount(() => {
-		GetChromeProfiles().then((profiles) => {
-			chromeProfiles = profiles;
-		});
+		GetChromeProfiles()
+			.then((profiles) => {
+				chromeProfiles = profiles;
+			})
+			.catch(chromeError(toastStore, "Error reading Chrome profiles"));
 	});
+	const startChrome = (profile) =>
+		StartBrowser(profile).catch(chromeError(toastStore, "Error starting Chrome"));
 </script>
 
 <div class="content">
@@ -99,10 +104,7 @@
 								class="btn flex-1 {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 								class:rounded-none={chromeProfiles.length >
 									0}
-								on:click={() =>
-									StartBrowser(
-										"",
-									)}
+								on:click={() => startChrome("")}
 							>
 								<span
 									><ChromeIcon
@@ -139,10 +141,7 @@
 									<button
 										type="button"
 										class="w-full p-3 text-left text-sm hover:variant-soft-primary focus:variant-soft-primary"
-										on:click={() =>
-											StartBrowser(
-												profile,
-											)}
+										on:click={() => startChrome(profile)}
 									>
 										{profile}
 									</button>

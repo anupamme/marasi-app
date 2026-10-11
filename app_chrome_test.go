@@ -5,7 +5,10 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"os"
+	"path/filepath"
 	"slices"
+	"strings"
 	"testing"
 
 	marasi "github.com/tfkr-ae/marasi"
@@ -21,7 +24,7 @@ func TestAppChrome(t *testing.T) {
 		if _, err := other.AddPath(context.Background(), added); err != nil {
 			t.Fatalf("adding path from another instance: %v", err)
 		}
-		if paths := app.GetChromePaths(); !slices.Contains(paths, added) {
+		if paths, _ := app.GetChromePaths(); !slices.Contains(paths, added) {
 			t.Fatalf("wanted: %v in paths\ngot: %v", added, paths)
 		}
 	})
@@ -35,7 +38,10 @@ func TestAppChrome(t *testing.T) {
 			t.Fatalf("adding path from another instance: %v", err)
 		}
 		fromApp := chrome.PathConfig{OS: "darwin", Path: "/app/chrome"}
-		paths := app.AddChromePath(fromApp.Path, fromApp.OS)
+		paths, err := app.AddChromePath(fromApp.Path, fromApp.OS)
+		if err != nil {
+			t.Fatalf("adding path: %v", err)
+		}
 		if !slices.Contains(paths, fromService) || !slices.Contains(paths, fromApp) {
 			t.Fatalf("wanted: %v and %v in paths\ngot: %v", fromService, fromApp, paths)
 		}
@@ -54,8 +60,27 @@ func TestAppChrome(t *testing.T) {
 		if _, err := other.AddProfile(context.Background(), "service-profile"); err != nil {
 			t.Fatalf("adding profile from another instance: %v", err)
 		}
-		if profiles := app.GetChromeProfiles(); !slices.Contains(profiles, "service-profile") {
+		if profiles, _ := app.GetChromeProfiles(); !slices.Contains(profiles, "service-profile") {
 			t.Fatalf("wanted: service-profile in profiles\ngot: %v", profiles)
+		}
+	})
+
+	t.Run("should report an invalid websocket_max_message_size from every Chrome setting", func(t *testing.T) {
+		app := newProjectApp(t)
+		writeInvalidMaxMessageSize(t, app)
+		calls := map[string]func() error{
+			"GetChromePaths":      func() error { _, err := app.GetChromePaths(); return err },
+			"AddChromePath":       func() error { _, err := app.AddChromePath("/app/chrome", "darwin"); return err },
+			"DeleteChromePath":    func() error { _, err := app.DeleteChromePath("/app/chrome", "darwin"); return err },
+			"GetChromeProfiles":   func() error { _, err := app.GetChromeProfiles(); return err },
+			"AddChromeProfile":    func() error { _, err := app.AddChromeProfile("p"); return err },
+			"DeleteChromeProfile": func() error { _, err := app.DeleteChromeProfile("p"); return err },
+		}
+		for name, call := range calls {
+			err := call()
+			if err == nil || !strings.Contains(err.Error(), "invalid configuration") || !strings.Contains(err.Error(), "websocket_max_message_size") {
+				t.Errorf("%s: wanted: invalid configuration error naming websocket_max_message_size\ngot: %v", name, err)
+			}
 		}
 	})
 
@@ -65,6 +90,21 @@ func TestAppChrome(t *testing.T) {
 			t.Fatalf("wanted: %v\ngot: %v", service.ErrListenerInactive, err)
 		}
 	})
+}
+
+// writeInvalidMaxMessageSize appends a negative websocket_max_message_size
+// to the machine config that the app's Chrome settings reread.
+func writeInvalidMaxMessageSize(t *testing.T, app *App) {
+	t.Helper()
+	path := filepath.Join(app.Proxy.ConfigDir, "marasi_config.yaml")
+	file, err := os.OpenFile(path, os.O_APPEND|os.O_WRONLY|os.O_CREATE, 0600)
+	if err != nil {
+		t.Fatalf("opening config: %v", err)
+	}
+	defer file.Close()
+	if _, err := file.WriteString("\nwebsocket_max_message_size: -1\n"); err != nil {
+		t.Fatalf("writing config: %v", err)
+	}
 }
 
 // newSharedConfigChrome stands in for a service instance using the app's config dir.

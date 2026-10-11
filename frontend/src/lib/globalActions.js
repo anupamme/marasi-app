@@ -139,3 +139,17 @@ export async function copyCertificate(toastStore) {
 		});
 	}
 }
+
+// chromeError returns a rejection handler for the Chrome bindings. They
+// reread the machine config, so a config Marasi refuses (for example a
+// negative websocket_max_message_size) arrives as its "invalid
+// configuration" error, which is shown as is; anything else shows fallback.
+export function chromeError(toastStore, fallback) {
+	return (error) => {
+		const text = String(error);
+		toastStore.trigger({
+			message: text.includes("invalid configuration") ? text : fallback,
+			background: "variant-filled-error",
+		});
+	};
+}

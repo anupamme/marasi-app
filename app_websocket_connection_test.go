@@ -32,7 +32,7 @@ func TestAppWebSocketConnectionDetails(t *testing.T) {
 			t.Fatalf("starting listener: %v", err)
 		}
 
-		upgradeThroughAppOffering(t, app, upstream, offers)
+		dialWebSocketOffering(t, app, upstream, offers)
 
 		conn, ok := waitForEvent(t, events, "ws-open")[0].(domain.WebSocketConnection)
 		if !ok {
@@ -67,7 +67,7 @@ func TestAppWebSocketConnectionDetails(t *testing.T) {
 			t.Fatalf("starting listener: %v", err)
 		}
 
-		client := upgradeThroughAppOffering(t, app, upstream, offers)
+		client := dialWebSocketOffering(t, app, upstream, offers)
 		conn := waitForEvent(t, events, "ws-open")[0].(domain.WebSocketConnection)
 		client.Close()
 		waitForEvent(t, events, "ws-close")
@@ -90,7 +90,7 @@ func TestAppWebSocketConnectionDetails(t *testing.T) {
 			t.Fatalf("starting listener: %v", err)
 		}
 
-		upgradeThroughAppOffering(t, app, upstream, []string{"permessage-deflate"})
+		dialWebSocketOffering(t, app, upstream, []string{"permessage-deflate"})
 
 		conn := waitForEvent(t, events, "ws-open")[0].(domain.WebSocketConnection)
 		if conn.Deflate != nil {
@@ -144,10 +144,10 @@ func newNegotiatingUpstream(t *testing.T, accepts []string) *httptest.Server {
 	return upstream
 }
 
-// upgradeThroughAppOffering opens a WebSocket to upstream through the app's
+// dialWebSocketOffering opens a WebSocket to upstream through the app's
 // proxy listener, offering the given extensions, and returns the client
 // connection. The connection is closed when the test ends.
-func upgradeThroughAppOffering(t *testing.T, app *App, upstream *httptest.Server, offers []string) net.Conn {
+func dialWebSocketOffering(t *testing.T, app *App, upstream *httptest.Server, offers []string) net.Conn {
 	t.Helper()
 	client, err := net.Dial("tcp", listenerAddress(t, app))
 	if err != nil {

@@ -93,6 +93,7 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 	listener.BindProject(app.projects)
 	app.listener = listener
 	app.chrome = service.NewChrome(proxy, listener, logWriter)
+	app.configureWebSocketHandlers()
 	return app
 }
 
@@ -123,7 +124,6 @@ func (a *App) startup(ctx context.Context) {
 		}),
 		marasi.WithLogger(logHandler),
 	)
-	a.configureWebSocketHandlers()
 }
 func (a *App) ToggleFlag(name string) (*Config, error) {
 	err := a.Config.ToggleFlag(name)

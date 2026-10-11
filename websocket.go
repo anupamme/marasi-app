@@ -5,25 +5,27 @@ import (
 	marasi "github.com/tfkr-ae/marasi"
 	"github.com/tfkr-ae/marasi/domain"
 	marasiws "github.com/tfkr-ae/marasi/websocket"
-	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
+// configureWebSocketHandlers sends Marasi's WebSocket events to the frontend
+// through the app's emitter. The handlers read a.emitEvent when they fire, so
+// tests can swap it to observe the events.
 func (a *App) configureWebSocketHandlers() {
 	a.Proxy.WithOptions(
 		marasi.WithWebSocketOpenHandler(func(conn domain.WebSocketConnection) error {
-			runtime.EventsEmit(a.ctx, "ws-open", conn)
+			a.emitEvent("ws-open", conn)
 			return nil
 		}),
 		marasi.WithWebSocketMessageHandler(func(msg domain.WebSocketMessage) error {
-			runtime.EventsEmit(a.ctx, "ws-message", msg)
+			a.emitEvent("ws-message", msg)
 			return nil
 		}),
 		marasi.WithWebSocketCloseHandler(func(conn domain.WebSocketConnection) error {
-			runtime.EventsEmit(a.ctx, "ws-close", conn)
+			a.emitEvent("ws-close", conn)
 			return nil
 		}),
 		marasi.WithWebSocketInterceptHandler(func(msg domain.WebSocketMessage) error {
-			runtime.EventsEmit(a.ctx, "ws-intercepted", msg)
+			a.emitEvent("ws-intercepted", msg)
 			return nil
 		}),
 	)

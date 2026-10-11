@@ -59,13 +59,13 @@
 				payloadText,
 			);
 			toastStore.trigger({
-				message: "WebSocket frame injected",
+				message: "WebSocket message injected",
 				background: "variant-filled-success",
 			});
 		} catch (err) {
 			error = String(err);
 			toastStore.trigger({
-				message: "Unable to inject WebSocket frame",
+				message: "Unable to inject WebSocket message",
 				background: "variant-filled-error",
 			});
 		} finally {

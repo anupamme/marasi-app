@@ -115,8 +115,8 @@
 	}
 
 	function frameStateTitle(msg) {
-		if (msg.Metadata?.dropped) return "Dropped intercepted frame";
-		if (msg.Metadata?.intercepted) return "Forwarded intercepted frame";
+		if (msg.Metadata?.dropped) return "Dropped intercepted message";
+		if (msg.Metadata?.intercepted) return "Forwarded intercepted message";
 		return "";
 	}
 
@@ -429,7 +429,7 @@
 									class="p-4 text-center opacity-60"
 								>
 									No
-									frames
+									messages
 									yet
 								</td>
 							</tr>
@@ -487,7 +487,7 @@
 							{/if}
 						{:else}
 							<span class="opacity-60"
-								>No frame
+								>No message
 								selected</span
 							>
 						{/if}
@@ -510,7 +510,7 @@
 								class="mr-1"
 							/>
 							{view === "metadata"
-								? "View Frame"
+								? "View Message"
 								: "Metadata"}
 						</button>
 						<button

@@ -61,7 +61,7 @@ export const FACTORY_ACTIONS = [
     ["open-request", "Open", "Open Request Drawer", "open", primary("shift+o")],
   ]),
   ...pageActions("ledger.drawer-open.websocket", [
-    ["open-stream", "Open WebSocket Stream", "Open the upgraded connection stream", "open websocket upgrade stream frames", primary("shift+o")],
+    ["open-stream", "Open WebSocket Stream", "Open the upgraded connection stream", "open websocket upgrade stream messages", primary("shift+o")],
   ]),
   ...pageActions("ledger.drawer-open", [
     ["next-request", "Next Request", "Jump to the next item in the table", "next", primary("shift+]")],
@@ -147,21 +147,21 @@ export const FACTORY_ACTIONS = [
     ["close-connection", "Close WebSocket Connection", "Close the active WebSocket connection", "websocket close disconnect", primary("shift+x")],
   ]),
   ...pageActions("websocket.stream", [
-    ["previous-frame", "Previous WebSocket Frame", "Select the previous frame in the stream", "websocket previous frame message", primary("shift+[")],
-    ["next-frame", "Next WebSocket Frame", "Select the next frame in the stream", "websocket next frame message", primary("shift+]")],
-    ["jump-to-bottom", "Jump to Bottom", "Jump to the newest frame and resume auto-scroll", "websocket stream bottom newest follow auto-scroll", primary("shift+down")],
-    ["toggle-frame-metadata", "Toggle Frame Metadata", "Switch between the frame payload and metadata", "websocket frame metadata payload", primary("shift+m")],
-    ["copy-frame-to-inject", "Copy Frame to Inject", "Copy the selected frame into the Inject tab", "websocket frame copy inject", primary("shift+i")],
+    ["previous-frame", "Previous WebSocket Message", "Select the previous message in the stream", "websocket previous message", primary("shift+[")],
+    ["next-frame", "Next WebSocket Message", "Select the next message in the stream", "websocket next message", primary("shift+]")],
+    ["jump-to-bottom", "Jump to Bottom", "Jump to the newest message and resume auto-scroll", "websocket stream bottom newest follow auto-scroll", primary("shift+down")],
+    ["toggle-frame-metadata", "Toggle Message Metadata", "Switch between the message payload and metadata", "websocket message metadata payload", primary("shift+m")],
+    ["copy-frame-to-inject", "Copy Message to Inject", "Copy the selected message into the Inject tab", "websocket message copy inject", primary("shift+i")],
   ]),
   ...pageActions("websocket.checkpoint", [
     ["toggle-intercept", "Toggle WebSocket Intercept", "Enable or disable WebSocket interception", "websocket checkpoint intercept toggle", primary("shift+i")],
-    ["forward-frame", "Forward WebSocket Frame", "Forward the current intercepted frame", "websocket checkpoint forward frame", primary("shift+f")],
-    ["drop-frame", "Drop WebSocket Frame", "Drop the current intercepted frame", "websocket checkpoint drop frame", primary("shift+d")],
+    ["forward-frame", "Forward WebSocket Message", "Forward the current intercepted message", "websocket checkpoint forward message", primary("shift+f")],
+    ["drop-frame", "Drop WebSocket Message", "Drop the current intercepted message", "websocket checkpoint drop message", primary("shift+d")],
   ]),
   ...pageActions("websocket.inject", [
-    ["toggle-direction", "Toggle Inject Direction", "Switch the injected frame direction", "websocket inject direction client server", primary("shift+d")],
+    ["toggle-direction", "Toggle Inject Direction", "Switch the injected message direction", "websocket inject direction client server", primary("shift+d")],
     ["cycle-opcode", "Cycle Inject Opcode", "Select the next WebSocket opcode", "websocket inject opcode cycle", primary("shift+o")],
-    ["inject-frame", "Inject WebSocket Frame", "Inject the current message into the connection", "websocket inject send frame message", primary("shift+enter")],
+    ["inject-frame", "Inject WebSocket Message", "Inject the current message into the connection", "websocket inject send message", primary("shift+enter")],
   ]),
 ];
 

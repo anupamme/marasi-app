@@ -5,13 +5,13 @@
  * Returns progressByRequestId with record as its connection's progress.
  * ws-progress can arrive after the message it describes, or after the
  * connection closed, so record is ignored when messages already holds its
- * message or connection is no longer open.
+ * message, held (Checkpoint's queue) holds it, or connection is no longer
+ * open.
  */
-export function applyProgress(progressByRequestId, record, { messages = [], connection = null } = {}) {
+export function applyProgress(progressByRequestId, record, { messages = [], held = [], connection = null } = {}) {
   if (connection && connection.State !== "open") return progressByRequestId;
-  if (messages.some((message) => message.ID === record.MessageID)) {
-    return progressByRequestId;
-  }
+  const known = (message) => message.ID === record.MessageID;
+  if (messages.some(known) || held.some(known)) return progressByRequestId;
   return { ...progressByRequestId, [record.RequestID]: record };
 }
 
@@ -24,6 +24,14 @@ export function finishMessage(progressByRequestId, message) {
     return progressByRequestId;
   }
   return clearProgress(progressByRequestId, message.RequestID);
+}
+
+/**
+ * Returns progressByRequestId without the record for message, once
+ * Checkpoint holds it: a held message has been received in full.
+ */
+export function holdMessage(progressByRequestId, message) {
+  return finishMessage(progressByRequestId, message);
 }
 
 /**

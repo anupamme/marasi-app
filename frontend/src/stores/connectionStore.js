@@ -12,6 +12,7 @@ import {
 	applyProgress,
 	clearProgress,
 	finishMessage,
+	holdMessage,
 } from "../lib/websocket/progress.js";
 
 // Draft payload for the Inject tab (set via "Copy to Inject").
@@ -65,6 +66,10 @@ function createConnectionStore() {
 					...state.interceptionsByRequestId,
 					[msg.RequestID]: next,
 				},
+				progressByRequestId: holdMessage(
+					state.progressByRequestId,
+					msg,
+				),
 			};
 		});
 	}
@@ -238,6 +243,7 @@ function createConnectionStore() {
 					record,
 					{
 						messages: state.messagesByRequestId[record.RequestID],
+						held: state.interceptionsByRequestId[record.RequestID],
 						connection:
 							state.connectionsByRequestId[record.RequestID],
 					},

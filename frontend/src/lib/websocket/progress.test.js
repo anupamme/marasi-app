@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyProgress, clearProgress, finishMessage, progressChip } from "./progress.js";
+import { applyProgress, clearProgress, finishMessage, holdMessage, progressChip } from "./progress.js";
 
 const progress = (fields) => ({
   MessageID: "m1",
@@ -49,6 +49,26 @@ test("progress for a closed connection is ignored", () => {
     const state = applyProgress({}, progress(), { connection: { State } });
     assert.deepEqual(state, {}, State);
   }
+});
+
+// A message Checkpoint holds has been received in full, so the chip must not
+// keep saying "receiving" while it waits for a forward or drop.
+test("a message held in Checkpoint clears its progress record", () => {
+  const state = applyProgress({}, progress({ MessageID: "m1" }));
+  assert.deepEqual(holdMessage(state, { ID: "m1", RequestID: "r1" }), {});
+});
+
+test("a held message leaves progress for another message on the connection", () => {
+  const state = applyProgress({}, progress({ MessageID: "m2" }));
+  assert.deepEqual(holdMessage(state, { ID: "m1", RequestID: "r1" }), state);
+});
+
+test("progress for a message already held in Checkpoint is ignored", () => {
+  const state = applyProgress({}, progress({ MessageID: "m1" }), {
+    held: [{ ID: "m1" }],
+    connection: { State: "open" },
+  });
+  assert.deepEqual(state, {});
 });
 
 test("progress for an open connection with earlier messages is kept", () => {

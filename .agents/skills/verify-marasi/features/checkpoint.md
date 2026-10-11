@@ -5,7 +5,8 @@
 - Lua interception rules for requests and responses
 - Global HTTP intercept enable/disable state
 - Edit, forward, and drop actions
-- HTTP intercepted items and the separate per-connection WebSocket checkpoint queue
+- HTTP intercepted items, including dropped WebSocket upgrade responses
+- The WebSocket modal's Checkpoint tab: a separate per-connection message queue
 
 ## How to get to it (user POV)
 
@@ -50,6 +51,16 @@ Start the matching request in the background and record its timing, for example 
 
 The sender must finish only after the forward.
 
+### WebSocket upgrade drop
+
+Narrow `interceptResponse` to the upgrade path (`return response:request():path() == "/ws-drop"`), start the upgrade, wait for the `101` response in the queue, and click `Drop`. The Ledger row then shows the neutral slashed icon titled `Upgrade response dropped` and cannot open a stream (see [ledger.md](ledger.md)). Drop the response, not the request: a dropped request never reaches the response pipeline, so it does not set `dropped`.
+
+### WebSocket Checkpoint tab
+
+Open the upgrade's WebSocket modal from the Ledger and select `Checkpoint`. The toolbar shows `Queue empty`, `1 message queued`, or `N messages queued`, and the buttons `Forward` (`⌘⇧F`, `Forward WebSocket Message`), `Intercept On`/`Intercept Off` (`⌘⇧I`, `Toggle WebSocket Intercept`), and `Drop` (`⌘⇧D`, `Drop WebSocket Message`). An empty queue reads `No WebSocket messages in the interception queue`. A held message shows its direction (`Client to server`/`Server to client`), opcode, time, the same properties grid as Stream, and an editable payload.
+
+Prove each path on one connection: turn `Intercept On`, send a message, then forward one unchanged, edit and forward another (the peer receives the edit), and drop a third. In Stream, forwarded rows read `Forwarded intercepted message` on hover and the dropped row is struck through with the `Dropped` flag. Turn `Intercept Off` afterwards.
+
 ## Gotchas
 
 - Broad rules can hold unrelated traffic. Use a unique verification host or path.
@@ -58,4 +69,4 @@ The sender must finish only after the forward.
 - Parse errors arrive asynchronously after each edit. Wait for `No Error` before `Forward`.
 - The queue view refreshes on the next `intercepted` event, after its own Forward or Drop, or on a remount. Items removed elsewhere stay visible until then.
 - A request left intercepted can keep clients waiting during cleanup.
-- WebSocket interception uses a separate `Intercept On`/`Intercept Off` toggle and queue inside each Ledger WebSocket modal. The toggle is process-global; the queued frames are per connection.
+- WebSocket interception has its own `Intercept On`/`Intercept Off` toggle, independent of `Global Intercept`; both need the checkpoint extension enabled. The toggle is process-global and holds every message on every connection; queues are per connection. With it off, `interceptWebSocketMessage` in the Lua rules decides.

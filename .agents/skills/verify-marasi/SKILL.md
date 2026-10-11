@@ -17,7 +17,7 @@ Run from the repository root on macOS:
 
 The helper runs `wails dev -m -nosyncgomod -nocolour -devserver localhost:34115` with `GOWORK=off`, creates an isolated home directory, and writes verification-only config with `first_run: false`. It starts an isolated headless Chrome against the Wails dev server with the app's `1600x900` window size. It defaults to proxy port `18080`; set `MARASI_VERIFY_PROXY_PORT` before launch to choose another free port. It returns after browser JavaScript sees the scratchpad dashboard through the real Go bindings.
 
-Chrome still starts on Home so its menus and global hotkeys initialize. During that first navigation, the driver intercepts the root HTML response and removes duplicate Wails bridge script tags; Wails v2.10.1 injects them alongside the explicit tags in `app.html`. The real backend and runtime scripts remain unchanged, and the native GUI still runs. Chrome needs the `loopback-network` DevTools permission, granted only to the Wails origin in the isolated profile, because response interception loses the document's loopback classification.
+Chrome still starts on Home. During that first navigation, the driver intercepts the root HTML response and removes duplicate Wails bridge script tags; Wails v2.10.1 injects them alongside the explicit tags in `app.html`. The real backend and runtime scripts remain unchanged, and the native GUI still runs. Chrome needs the `loopback-network` DevTools permission, granted only to the Wails origin in the isolated profile, because response interception loses the document's loopback classification.
 
 The driver also intercepts Chrome's compiled layout module during startup. Both the native GUI and Chrome bootstrap the listener; the second `StartProxy` rejects with `listener already active`, which otherwise makes Chrome's UI offline despite a running proxy. Only that startup rejection falls back to the real `UpdateProxy` with the configured address and port. Other failures retain the application's error path, and interactive listener controls remain unchanged. Launch requires the Home listener indicator to be online. Application source files are untouched; this is verification-only response normalization, not a production fix.
 
@@ -30,6 +30,16 @@ Teardown only the instance recorded by the helper:
 ```bash
 .agents/skills/verify-marasi/scripts/cleanup.sh
 ```
+
+## Restart
+
+To prove that a saved preference survives an app restart, restart the recorded instance instead of cleaning up:
+
+```bash
+.agents/skills/verify-marasi/scripts/restart.sh
+```
+
+Restart stops the recorded Chrome and Wails processes, keeps the isolated home (including `marasi_appconfig.yaml` and the scratch project), and relaunches with `MARASI_VERIFY_KEEP_CONFIG=1`, so launch reads the existing config instead of rewriting it. It creates a new evidence directory. Inspect the YAML before and after the restart. `cleanup.sh` still removes everything at the end.
 
 ## Doctor
 
@@ -81,7 +91,7 @@ On timeout, the error names every match and why it was rejected (for example `co
 
 Exactly one fixed wait remains. After `insert` into a CodeMirror editor, the driver waits 350 ms, because `svelte-codemirror-editor` copies edits into the bound store only after a 300 ms debounce, and nothing in the page signals the commit. Without it, an immediate `⌘⇧R` runs the old code while still showing an `Updated …` toast.
 
-Most in-app actions have that painted control plus a MarasiKeys binding. Root bindings live in `frontend/src/routes/+page.svelte` as `⌘+key`. Page bindings live in that route's MarasiKeys menu as `⌘+⇧+key` on macOS. Prove both paths with:
+Most in-app actions have that painted control plus a MarasiKeys binding. Global bindings (`⌘+key`, including `⌘K` for the menu) live in the action catalog, `frontend/src/lib/keybindings/catalog.js`, with handlers in `frontend/src/lib/components/MarasiMenu/GlobalMenu.svelte`; they work on every route. Page and drawer bindings (mostly `⌘+⇧+key` on macOS) are in the same catalog, keyed to a menu context in `frontend/src/lib/keybindings/contexts.js` (for example `ledger.drawer-closed` and `ledger.drawer-open`); their handlers stay in the route's component. Opening the Ledger or Armory request drawer swaps which actions keys reach and which entries the `⌘K` menu lists. The WebSocket modal is an overlay: its shared context `websocket` plus the open tab's (`websocket.stream`, `websocket.checkpoint`, `websocket.inject`) and the global context are live there, never the drawer beneath. Extension pages use `extension-page.<name-slug>` (Toggle Settings) with the extension's declared actions as `extension.<name-slug>.<action-slug>`. A modal closes again on the binding of the action that opened it (`toggleAction` in its trigger), unless the open modal binds that key itself, as the Inject tab does with `⌘⇧O`. Prove both paths with:
 
 ```bash
 .agents/skills/verify-marasi/scripts/drive.sh dashboard compare "Open Project" "cmd+o"
@@ -89,12 +99,12 @@ Most in-app actions have that painted control plus a MarasiKeys binding. Root bi
 
 The compare action requires the feature route to already be visible. It clicks the actionable label, waits for the overlay or route change, and then waits until that text stops changing for 500 ms before capturing. Overlays fill in after they paint; the Project modal shows `No recent projects` until `GetRecentProjects` resolves. It restores the starting page, then sends the shortcut through `Input.dispatchKeyEvent` (`MetaLeft` down, key, key up, `MetaLeft` up). It fails unless both paths paint the same overlay text or land on the same route. Pass or fail, it dismisses its overlay with Escape so the next drive is not blocked.
 
-The dashboard `theme` action leaves Home for Settings, sends `Command+U` twice, and fails unless the global appearance changes and returns to its original mode. This proves the dashboard-owned shortcut still reads live state after Home is destroyed.
+The dashboard `theme` action leaves Home for Settings, sends `Command+U` twice, and fails unless the global appearance changes and returns to its original mode. This proves the global shortcut still reads live state after Home is destroyed.
 
 For behavioral actions beyond navigation, use a named sequence of real UI inputs:
 
 ```bash
-.agents/skills/verify-marasi/scripts/drive.sh settings steps '{"name":"vim-toggle","steps":[{"text":"Vim Enabled"}]}'
+.agents/skills/verify-marasi/scripts/drive.sh settings steps '{"name":"vim-toggle","steps":[{"click":"section [role=switch]"}]}'
 ```
 
 `steps` requires the feature route to already be visible. Use one action per step.

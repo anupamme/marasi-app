@@ -33,16 +33,29 @@ function getActiveOverlay({ modalOpen, drawerOpen }) {
   return null;
 }
 
-function isModalToggleShortcut(event, modal) {
-  const shortcut = modal.toggleShortcut;
-
+// A modal triggered with `toggleAction` (the id of the menu action that
+// opens it) closes again on that action's binding. `stores.isModalToggle`
+// resolves the binding through the keybinding dispatcher.
+function isModalToggleShortcut(event, modal, stores) {
   return Boolean(
-    shortcut &&
-      (event.metaKey || event.ctrlKey) &&
-      event.altKey === Boolean(shortcut.altKey) &&
-      event.shiftKey === Boolean(shortcut.shiftKey) &&
-      event.key.toLowerCase() === shortcut.key,
+    modal.toggleAction && stores.isModalToggle?.(event, modal.toggleAction),
   );
+}
+
+// Escape normally closes the open modal before the modal's own code sees the
+// key. A modal component that must decide for itself (the keybindings modal:
+// cancel a shortcut capture, dismiss an in-modal card, or ask before
+// discarding edits) registers a handler while it is mounted. The handler
+// receives the already-consumed event and decides whether to close.
+// Returns a function that removes exactly this handler.
+const modalEscapeHandlers = [];
+
+export function interceptModalEscape(handler) {
+  modalEscapeHandlers.push(handler);
+  return () => {
+    const index = modalEscapeHandlers.lastIndexOf(handler);
+    if (index !== -1) modalEscapeHandlers.splice(index, 1);
+  };
 }
 
 export function hasBlockingOverlay(modalStore) {
@@ -215,7 +228,7 @@ export function isolateOverlays(appRoot, stores) {
     if (
       overlay.matches(".modal-backdrop") &&
       currentModal &&
-      isModalToggleShortcut(event, currentModal)
+      isModalToggleShortcut(event, currentModal, stores)
     ) {
       event.preventDefault();
       event.stopImmediatePropagation();
@@ -229,6 +242,8 @@ export function isolateOverlays(appRoot, stores) {
       if (overlay instanceof HTMLDialogElement) {
         const cancelEvent = new Event("cancel", { cancelable: true });
         if (overlay.dispatchEvent(cancelEvent)) overlay.close();
+      } else if (overlay.matches(".modal-backdrop") && modalEscapeHandlers.length) {
+        modalEscapeHandlers.at(-1)(event);
       } else if (overlay.matches(".modal-backdrop")) {
         currentModal?.response?.(false);
         stores.modalStore.close();

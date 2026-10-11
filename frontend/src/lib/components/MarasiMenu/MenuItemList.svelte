@@ -13,7 +13,8 @@
 <script>
 	import { createEventDispatcher } from "svelte";
 	import { flip } from "svelte/animate";
-	import { marasiConfig } from "../../../stores.js";
+	import { menuDispatcher } from "../../keybindings/app.js";
+	import { formatBinding } from "../../keybindings/keys.js";
 
 	// Types
 	const dispatch = createEventDispatcher();
@@ -154,22 +155,16 @@
 
 							<!-- Right side: shortcut keys -->
 							<div class="flex items-center gap-2">
-								{#if Array.isArray(option.action.keys)}
-									{#if $marasiConfig.DesktopOS === "darwin"}
+								{#if option.actionId}
+									{#each $menuDispatcher.bindingsFor(option.actionId) as binding}
 										<kbd
 											class="kbd text-surface-400 text-sm"
-											>{option.action.keys[0]}</kbd
+											>{formatBinding(
+												binding,
+												$menuDispatcher.platform,
+											)}</kbd
 										>
-									{:else}
-										<kbd
-											class="kbd text-surface-400 text-sm"
-											>{option.action.keys[1]}</kbd
-										>
-									{/if}
-								{:else}
-									<kbd class="kbd text-surface-400 text-sm"
-										>{option.action.keys}</kbd
-									>
+									{/each}
 								{/if}
 							</div>
 						</button>

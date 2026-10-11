@@ -1,23 +1,26 @@
 <svelte:options accessors />
 
 <script>
-	import hotkeys from "hotkeys-js";
 	import MenuItemList from "./MenuItemList.svelte";
 	import { onMount } from "svelte";
+	import {
+		menuDispatcher,
+		menuPalettes,
+	} from "../../keybindings/app.js";
 
 	let dialog;
 
 	let isOpen = false;
 	let commandInput = "";
-	let mounted = false;
-	let boundOptions = [];
-	let boundMenuOptions;
-	let previousScope = "all";
-	const commandKeys = "cmd+k, ctrl+k";
 
+	// Catalog entries: { actionId, icon }, optionally overriding name,
+	// subtitle or keywords. Text, keys and handlers come from the catalog and
+	// the central dispatcher. An entry without an actionId (an extension menu
+	// item that declares no action) is listed without keys and runs nothing.
 	export let menuOptions = [];
-	export let scope = "all";
-	export let persistOptions = false;
+	// Menu-context tier of this menu: the menu shortcut opens the most
+	// specific mounted menu (overlay, then page, then global).
+	export let paletteTier = "page";
 	export function toggleDialog() {
 		if (!dialog) return;
 		if (!dialog.open) {
@@ -47,7 +50,8 @@
 
 	function onSelection(event) {
 		if (isOpen) closeDialog();
-		event.detail.action.handler();
+		const option = event.detail;
+		if (option.actionId) menuDispatcher.run(option.actionId);
 	}
 	function handleCancel(event) {
 		event.preventDefault();
@@ -57,55 +61,26 @@
 		isOpen = false;
 	}
 
-	function handleCommandKey(event) {
-		event.preventDefault();
-		toggleDialog();
-		return false;
-	}
-
-	function bindOptions(options) {
-		options.forEach((option) => {
-			const keys = Array.isArray(option.action.keys)
-				? option.action.keys.join()
-				: option.action.keys;
-			const handler = () => {
-				if (isOpen) toggleDialog();
-				option.action.handler();
-				return false;
-			};
-			hotkeys(keys, { ...option.action.options, scope }, handler);
-			boundOptions.push({ keys, handler });
-		});
-	}
-
-	function unbindOptions() {
-		boundOptions.forEach(({ keys, handler }) => {
-			hotkeys.unbind(keys, scope, handler);
-		});
-		boundOptions = [];
-	}
-
-	$: if (mounted && menuOptions !== boundMenuOptions) {
-		unbindOptions();
-		bindOptions(menuOptions);
-		boundMenuOptions = menuOptions;
-	}
-
-	onMount(() => {
-		previousScope = hotkeys.getScope();
-		hotkeys.setScope(scope);
-		hotkeys(commandKeys, { scope, single: true }, handleCommandKey);
-		bindOptions(menuOptions);
-		boundMenuOptions = menuOptions;
-		mounted = true;
-		return () => {
-			mounted = false;
-			if (persistOptions) boundOptions = [];
-			else unbindOptions();
-			hotkeys.unbind(commandKeys, scope, handleCommandKey);
-			if (hotkeys.getScope() === scope) hotkeys.setScope(previousScope);
+	function withCatalogText(option, catalog) {
+		const action = option.actionId && catalog.get(option.actionId);
+		if (!action) return option;
+		return {
+			name: action.label,
+			subtitle: action.description,
+			keywords: action.keywords,
+			...option,
 		};
-	});
+	}
+
+	$: entries = menuOptions.map((option) =>
+		withCatalogText(option, $menuDispatcher.catalog),
+	);
+
+	onMount(() =>
+		menuPalettes.register(paletteTier, {
+			toggle: toggleDialog,
+		}),
+	);
 </script>
 
 <!-- 
@@ -120,13 +95,6 @@
 	on:close={handleClose}
 	on:cancel={handleCancel}
 	on:click={handleClickOutside}
-	on:keydown={(event) => {
-		if (event.key.toLowerCase() === 'k' && (event.metaKey || event.ctrlKey)) {
-			event.preventDefault();
-			event.stopImmediatePropagation();
-			closeDialog();
-		}
-	}}
 	aria-label="Marasi commands"
 	aria-modal="true"
 >
@@ -141,7 +109,7 @@
 	<div class="card w-full" tabindex="-1">
 		<MenuItemList
 			bind:input={commandInput}
-			options={menuOptions}
+			options={entries}
 			on:selection={onSelection}
 		/>
 	</div>

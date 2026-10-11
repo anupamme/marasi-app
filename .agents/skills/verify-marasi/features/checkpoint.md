@@ -25,6 +25,8 @@ Palette commands and shortcuts:
 
 Global `⌘+I` toggles global intercept.
 
+Shortcuts: every menu shortcut for this feature is a catalog action in context `checkpoint` (and the WebSocket modal's `websocket.checkpoint` tab) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+
 ## Driving it with Chrome CDP
 
 Run `scripts/drive.sh checkpoint` for route proof. Its marker is `Checkpoint Settings`, because the rail label `Checkpoint` is always visible. Proven sequence, with `Global Intercept` left off:
@@ -54,6 +56,6 @@ The sender must finish only after the forward.
 - `Global Intercept` holds every HTTP request and response regardless of a narrow Lua rule, but only while the checkpoint extension is enabled.
 - To verify `Edit Intercepted Item` (`⌘⇧I`), queue a request, click `No Error` to move focus away from the editor, send the shortcut, and wait for `.cm-content:focus`. Repeat with Syntax Mode set to Disabled, then restore the setting. With an empty queue, the command should leave focus unchanged.
 - Parse errors arrive asynchronously after each edit. Wait for `No Error` before `Forward`.
-- The queue view refreshes only on the next `intercepted` event or a remount. Items removed elsewhere stay visible until then.
+- The queue view refreshes on the next `intercepted` event, after its own Forward or Drop, or on a remount. Items removed elsewhere stay visible until then.
 - A request left intercepted can keep clients waiting during cleanup.
 - WebSocket interception uses a separate `Intercept On`/`Intercept Off` toggle and queue inside each Ledger WebSocket modal. The toggle is process-global; the queued frames are per connection.

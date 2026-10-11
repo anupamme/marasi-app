@@ -1,0 +1,611 @@
+import { slugify } from "./catalog.js";
+import { contextsConflict } from "./contexts.js";
+import { isReservedBinding, reservedBindingProblem } from "./gate.js";
+import { bindingFromEvent, formatBinding, normalizeBinding } from "./keys.js";
+import { OPEN_MENU } from "./keymap.js";
+import { PLATFORM_NAMES } from "./platform.js";
+import {
+  catalogDescriptor,
+  factoryKeybindings,
+  factoryProfile,
+  profileKeymap,
+  settleProfile,
+  validateProfile,
+} from "./profiles.js";
+
+// The keybinding settings modal's model, independent of Svelte. The modal
+// edits a draft: a whole keybinding config ({ version, activeProfile,
+// profiles }, see profiles.js) that is persisted only by Save. Every edit
+// returns a new draft; nothing here mutates its input.
+
+function copyConfig(config) {
+  return structuredClone(config);
+}
+
+// The draft for the saved state from GetKeybindings ({ config, problem }).
+// Every profile is settled against `catalog` (ADR 0001), so the draft shows
+// the new-default rule's outcome as explicit unbinding and edits are judged
+// against known actions: capturing a key an inherited default holds is a
+// conflict, never a silent unbind of the other action.
+export function openDraft(state, catalog) {
+  const config = copyConfig(state?.config ?? factoryKeybindings());
+  return { ...config, profiles: config.profiles.map((profile) => settleProfile(catalog, profile)) };
+}
+
+// The bindings `actionId` resolves to in one profile and platform variant.
+export function actionBindings(catalog, profile, platform, actionId) {
+  return profileKeymap(catalog, profile, platform).bindingsFor(actionId);
+}
+
+// An edit target: one action in one profile's platform variant.
+//   { profileId, platform, actionId }
+
+function updateVariant(draft, { profileId, platform }, update) {
+  return {
+    ...draft,
+    profiles: draft.profiles.map((profile) =>
+      profile.id === profileId
+        ? { ...profile, overrides: { ...profile.overrides, [platform]: update(profile.overrides?.[platform] ?? []) } }
+        : profile,
+    ),
+  };
+}
+
+function sameSet(a, b) {
+  return a.length === b.length && a.every((binding) => b.includes(binding));
+}
+
+// Sets the complete binding list of the target action. Repeats are dropped.
+// A list equal to the factory default becomes inheritance again, so only
+// real customizations are stored.
+function setBindings(catalog, draft, target, keys) {
+  const unique = [...new Set(keys)];
+  const defaults = catalog.get(target.actionId)?.defaults?.[target.platform];
+  const inherit = defaults && sameSet(unique, defaults);
+  return updateVariant(draft, target, (list) => {
+    const rest = list.filter((o) => o.action !== target.actionId);
+    if (inherit) return rest;
+    const index = list.findIndex((o) => o.action === target.actionId);
+    const next = { action: target.actionId, keys: unique };
+    if (index === -1) return [...rest, next];
+    return list.map((o, i) => (i === index ? next : o));
+  });
+}
+
+function currentBindings(catalog, draft, target) {
+  const profile = draft.profiles.find((item) => item.id === target.profileId);
+  return actionBindings(catalog, profile, target.platform, target.actionId);
+}
+
+// Adds an alternative binding (a canonical binding from keys.js).
+export function addBinding(catalog, draft, target, binding) {
+  return setBindings(catalog, draft, target, [...currentBindings(catalog, draft, target), binding]);
+}
+
+// Replaces the alternative at `index` (a chip re-recorded).
+export function replaceBinding(catalog, draft, target, index, binding) {
+  const keys = currentBindings(catalog, draft, target).map((key, i) => (i === index ? binding : key));
+  return setBindings(catalog, draft, target, keys);
+}
+
+// Removes the alternative at `index`. Removing the last one leaves the
+// action intentionally unbound (an empty override).
+export function removeBinding(catalog, draft, target, index) {
+  const keys = currentBindings(catalog, draft, target).filter((_, i) => i !== index);
+  return setBindings(catalog, draft, target, keys);
+}
+
+// Returns one action to its factory default in that variant only.
+export function resetAction(draft, target) {
+  return updateVariant(draft, target, (list) => list.filter((o) => o.action !== target.actionId));
+}
+
+// A variant: one profile's platform bindings, { profileId, platform }.
+
+// Whether any available action of the variant has its own binding list,
+// so resetting the platform would change something.
+export function isPlatformCustomized(catalog, draft, { profileId, platform }) {
+  const profile = draft.profiles.find((item) => item.id === profileId);
+  return (profile?.overrides?.[platform] ?? []).some((o) => catalog.has(o.action));
+}
+
+// Returns every action of the variant to its factory default. The other
+// platform is untouched. Overrides of actions missing from the catalog
+// (an extension that is not installed) are kept: they have no row to
+// restore them from.
+export function resetPlatform(catalog, draft, variant) {
+  return updateVariant(draft, variant, (list) => list.filter((o) => !catalog.has(o.action)));
+}
+
+// Profile lifecycle. Profiles are created, duplicated, renamed, activated
+// and deleted in the draft like any other edit; only Save persists them.
+// A profile's id is its stable identity: it is chosen once, from the name
+// at creation, and never changes when the profile is renamed.
+
+// A profile id (lowercase letters, digits and single dashes, as the backend
+// requires) derived from `name` and unused in the draft.
+export function newProfileId(draft, name) {
+  const base = slugify(name) || "profile";
+  const taken = new Set(draft.profiles.map((p) => p.id));
+  let id = base;
+  for (let n = 2; taken.has(id); n++) id = `${base}-${n}`;
+  return id;
+}
+
+// Why `name` cannot name a profile in the draft ("" when it can). Names
+// are trimmed and compared case-insensitively, as the backend does.
+// `exceptId` is the profile being renamed, which may keep its own name.
+export function profileNameProblem(draft, name, exceptId) {
+  const wanted = name.trim().toLowerCase();
+  if (!wanted) return "Enter a profile name";
+  const other = draft.profiles.find((p) => p.id !== exceptId && p.name.trim().toLowerCase() === wanted);
+  return other ? `Another profile is already named ${other.name.trim()}` : "";
+}
+
+function checkName(draft, name, exceptId) {
+  const problem = profileNameProblem(draft, name, exceptId);
+  if (problem) throw new Error(problem);
+  return name.trim();
+}
+
+function updateProfile(draft, profileId, update) {
+  return { ...draft, profiles: draft.profiles.map((p) => (p.id === profileId ? update(p) : p)) };
+}
+
+// Renames a profile. Its id, and so its identity, stays the same.
+export function renameProfile(draft, profileId, name) {
+  const trimmed = checkName(draft, name, profileId);
+  return updateProfile(draft, profileId, (p) => ({ ...p, name: trimmed }));
+}
+
+function addProfile(draft, profile) {
+  return { ...draft, profiles: [...draft.profiles, profile] };
+}
+
+// `base`, or `base 2`, `base 3`, ... : the first that no profile uses.
+export function suggestProfileName(draft, base) {
+  let name = base;
+  for (let n = 2; profileNameProblem(draft, name); n++) name = `${base} ${n}`;
+  return name;
+}
+
+// Adds a profile with factory defaults, settled against the catalog like
+// every profile in the draft. It is not activated.
+export function createProfile(catalog, draft, name) {
+  const trimmed = checkName(draft, name);
+  return addProfile(draft, settleProfile(catalog, factoryProfile(newProfileId(draft, trimmed), trimmed)));
+}
+
+// Adds a copy of a profile under a new identity and name. The copy keeps
+// both platform variants, every override (unbinding and dormant extension
+// overrides included) and the known actions, so it resolves exactly like
+// the source. It is not activated.
+export function duplicateProfile(draft, sourceId, name) {
+  const trimmed = checkName(draft, name);
+  const source = draft.profiles.find((p) => p.id === sourceId);
+  return addProfile(draft, { ...structuredClone(source), id: newProfileId(draft, trimmed), name: trimmed });
+}
+
+const profileName = (draft, profileId) => draft.profiles.find((p) => p.id === profileId)?.name ?? profileId;
+
+// Why the profile cannot be made active ("" when it can).
+export function makeActiveBlocker(draft, profileId) {
+  return draft.activeProfile === profileId ? `${profileName(draft, profileId)} is already the active profile` : "";
+}
+
+// Chooses the profile dispatch uses once the draft is saved.
+export function makeActive(draft, profileId) {
+  return { ...draft, activeProfile: profileId };
+}
+
+// Why the profile cannot be deleted ("" when it can): the last profile
+// stays, and the active one needs a replacement made active first.
+export function deleteBlocker(draft, profileId) {
+  if (draft.profiles.length <= 1) return "The last profile cannot be deleted";
+  if (draft.activeProfile === profileId) {
+    return `Make another profile active before deleting ${profileName(draft, profileId)}`;
+  }
+  return "";
+}
+
+export function deleteProfile(draft, profileId) {
+  const blocker = deleteBlocker(draft, profileId);
+  if (blocker) throw new Error(blocker);
+  return { ...draft, profiles: draft.profiles.filter((p) => p.id !== profileId) };
+}
+
+// A comparable form of a config: override order is not meaningful.
+function canonicalConfig(config) {
+  return JSON.stringify({
+    version: config.version,
+    activeProfile: config.activeProfile,
+    profiles: config.profiles.map((profile) => ({
+      id: profile.id,
+      name: profile.name,
+      knownActions: [...(profile.knownActions ?? [])].sort(),
+      overrides: Object.fromEntries(
+        Object.keys(profile.overrides ?? {})
+          .sort()
+          .map((platform) => [
+            platform,
+            [...profile.overrides[platform]].sort((a, b) => a.action.localeCompare(b.action)),
+          ]),
+      ),
+    })),
+  });
+}
+
+// Whether the draft has unsaved edits relative to the draft as opened.
+export function isDirty(draft, opened) {
+  return canonicalConfig(draft) !== canonicalConfig(opened);
+}
+
+// What a keydown means while a binding is being recorded:
+//   null                          keep waiting (modifier-only, IME
+//                                 composition, auto-repeat)
+//   { type: "cancel" }            Escape: drop the capture, change nothing
+//   { type: "reserved", binding } Escape/Tab/Enter (with Shift at most) stay
+//                                 dialog and focus keys and cannot be bound
+//   { type: "binding", binding }  the canonical binding to record
+export function captureKey(event) {
+  if (event.repeat) return null;
+  const binding = bindingFromEvent(event);
+  if (!binding) return null;
+  if (binding === "escape") return { type: "cancel" };
+  if (isReservedBinding(binding)) return { type: "reserved", binding };
+  return { type: "binding", binding };
+}
+
+// Persists the whole draft, and only after the write succeeded hands the
+// returned state to `apply` (which updates live dispatch and the palette).
+// `save` is SaveKeybindings(config, catalog); the backend validates the
+// whole section and leaves disk and memory unchanged on any error. Returns
+// { ok: true, state } or { ok: false, error } (the draft stays the caller's).
+export async function saveDraft({ draft, catalog, save, apply }) {
+  let state;
+  try {
+    state = await save(draft, catalogDescriptor(catalog));
+  } catch (error) {
+    return { ok: false, error: error?.message ?? String(error) };
+  }
+  apply(state);
+  return { ok: true, state };
+}
+
+const EXTENSION_NAVIGATION = "global.open-extension.";
+const EXTENSIONS_GROUP = "global.extensions";
+
+// The sidebar entry an action is listed under (see actionGroups).
+function groupIdOf(action) {
+  return action.id.startsWith(EXTENSION_NAVIGATION) ? EXTENSIONS_GROUP : action.context;
+}
+
+// Sidebar entries: one per menu context (its `page` and `state`), in catalog
+// context order, except that opening extension pages, which lives in the
+// global context, gets its own entry right after it. Contexts without
+// actions are left out.
+function actionGroups(catalog) {
+  const groups = [];
+  const add = (id, page, state, actions) => {
+    if (actions.length) groups.push({ id, page, state, actions });
+  };
+  for (const context of catalog.contexts) {
+    const actions = catalog.inContext(context.id);
+    const page = context.page ?? context.label;
+    const state = context.state ?? "";
+    if (context.id === "global") {
+      add("global", page, state, actions.filter((a) => !a.id.startsWith(EXTENSION_NAVIGATION)));
+      add(EXTENSIONS_GROUP, "Extensions", "Open extension pages", actions.filter((a) => a.id.startsWith(EXTENSION_NAVIGATION)));
+    } else {
+      add(context.id, page, state, actions);
+    }
+  }
+  return groups;
+}
+
+// Overrides for extension actions the catalog lacks are dormant: the
+// extension (or that action of it) is missing. They stay in the profile,
+// never run, and are listed as unavailable so the researcher sees the
+// customization is kept. The ids follow catalog.js's extension id scheme;
+// other unknown ids are kept but not listed (they are not extension data).
+const EXTENSION_PAGE = /^(?:extension|extension-page)\.([a-z0-9-]+)\.([a-z0-9-.]+)$/;
+
+function unavailableAction(catalog, actionId) {
+  if (actionId.startsWith(EXTENSION_NAVIGATION)) {
+    const extension = actionId.slice(EXTENSION_NAVIGATION.length);
+    return {
+      group: "global.extensions",
+      note: "Extension unavailable",
+      action: { id: actionId, context: "global", label: extension, description: `Open ${extension}` },
+    };
+  }
+  const match = EXTENSION_PAGE.exec(actionId);
+  if (!match) return null;
+  const [, extension, slug] = match;
+  const context = `extension-page.${extension}`;
+  const installed = catalog.contexts.some((c) => c.id === context);
+  return {
+    group: context,
+    extension,
+    note: installed ? "Not offered by this extension" : "Extension unavailable",
+    action: {
+      id: actionId,
+      context,
+      label: slug === "toggle-settings" && actionId.startsWith("extension-page.") ? `Toggle ${extension} Settings` : slug,
+      description: "",
+    },
+  };
+}
+
+// Rows for the variant's dormant extension overrides, by sidebar entry id.
+// Their controls are disabled: Settings changes bindings of available
+// actions only, and the override must survive untouched until the
+// extension returns.
+function unavailableRows(catalog, profile, platform) {
+  const byGroup = new Map();
+  for (const { action: actionId, keys } of profile.overrides?.[platform] ?? []) {
+    if (catalog.has(actionId)) continue;
+    const found = unavailableAction(catalog, actionId);
+    if (!found) continue;
+    const bindings = [...new Set((keys ?? []).map(normalizeBinding).filter(Boolean))];
+    const rows = byGroup.get(found.group) ?? { extension: found.extension, rows: [] };
+    rows.rows.push({
+      action: found.action,
+      bindings,
+      display: bindings.map((binding) => formatBinding(binding, platform)),
+      resettable: false,
+      available: false,
+      status: "unavailable",
+      note: found.note,
+      problem: "",
+    });
+    byGroup.set(found.group, rows);
+  }
+  return byGroup;
+}
+
+function matches(row, group, query) {
+  const words = query.toLowerCase().split(/\s+/).filter(Boolean);
+  if (!words.length) return true;
+  const { action, bindings, display } = row;
+  const text = [action.label, action.description, action.keywords, group.page, group.state, row.note, ...bindings, ...display]
+    .filter(Boolean)
+    .join(" ")
+    .toLowerCase();
+  return words.every((word) => text.includes(word));
+}
+
+// A menu context as the sidebar names it: "Ledger · Drawer closed".
+function contextName(catalog, contextId) {
+  const context = catalog.contexts.find((c) => c.id === contextId);
+  if (!context) return contextId;
+  const page = context.page ?? context.label ?? contextId;
+  return context.state && context.id !== "global" ? `${page} · ${context.state}` : page;
+}
+
+// A validateProfile problem as [actionId, message] pairs, one per action
+// involved and worded for that action's row. The first pair is the action
+// the problem is located at.
+function explain(catalog, problem) {
+  const label = (id) => catalog.get(id)?.label ?? id;
+  const where = (id) => contextName(catalog, catalog.get(id)?.context);
+  // Another action, named with its context when that differs (overlapping
+  // contexts are one collision domain but different sidebar entries).
+  const other = (id, from) =>
+    catalog.get(id)?.context === catalog.get(from)?.context ? label(id) : `${label(id)} in ${where(id)}`;
+  const [first, ...rest] = problem.actions;
+  const binding = problem.binding && formatBinding(problem.binding, problem.platform);
+  switch (problem.kind) {
+    case "menu-unbound":
+      return [[first, "The Marasi menu must have a binding"]];
+    case "reserved":
+      return [[first, reservedBindingProblem(problem.binding)]];
+    case "duplicate":
+      return [
+        [first, `${binding} is also bound to ${other(rest[0], first)}`],
+        [rest[0], `${binding} is also bound to ${other(first, rest[0])}`],
+      ];
+    case "menu-shadowed":
+      return [
+        [first, `${binding} is shadowed by ${rest.map((id) => other(id, first)).join(", ")}; the menu must open everywhere`],
+        ...rest.map((id) => [id, `${binding} would shadow ${label(first)}, which must open everywhere`]),
+      ];
+    default:
+      return [[first, problem.message]];
+  }
+}
+
+// The variant's explanations, per action and worded for the action's own
+// row:
+//   conflicts  validation problems (validateProfile) that block Save
+//   shadows    allowed shadowing: an action outside the global context
+//              shares a binding with a global action, so where its context
+//              is eligible it wins and the global action does not run.
+//              The global context is eligible everywhere, so this needs no
+//              eligibility analysis. Shadowing the menu opening is a
+//              conflict instead (menu-shadowed).
+function rowProblems(catalog, profile, platform) {
+  const label = (id) => catalog.get(id)?.label ?? id;
+  const where = (id) => contextName(catalog, catalog.get(id)?.context);
+  const key = (binding) => formatBinding(binding, platform);
+  const conflicts = new Map();
+  const shadows = new Map();
+  const note = (messages, id, message) => {
+    const list = messages.get(id) ?? [];
+    if (!list.includes(message)) messages.set(id, [...list, message]);
+  };
+  for (const problem of validateProfile(catalog, profile)) {
+    if (problem.platform !== platform) continue;
+    for (const [id, message] of explain(catalog, problem)) note(conflicts, id, message);
+  }
+  const keymap = profileKeymap(catalog, profile, platform);
+  for (const action of catalog.actions) {
+    if (action.context === "global") continue;
+    for (const binding of keymap.bindingsFor(action.id)) {
+      for (const id of keymap.actionsFor(binding)) {
+        const shadowed = catalog.get(id);
+        if (shadowed.context !== "global" || id === OPEN_MENU) continue;
+        if (contextsConflict(catalog.contexts, shadowed.context, action.context)) continue;
+        note(shadows, action.id, `${key(binding)} shadows ${label(id)} (${where(id)}) here`);
+        note(shadows, id, `${key(binding)} is shadowed by ${label(action.id)} in ${where(action.id)}`);
+      }
+    }
+  }
+  return { conflicts, shadows };
+}
+
+// The profile-level rules SaveKeybindings checks before any binding
+// (checkKeybindingStructure in keybinding_validation.go): valid unique ids,
+// unique nonempty names (trimmed, case-insensitive) and an active profile
+// that exists. Bindings in a draft come from capture, so they are always
+// canonical and never reserved here.
+const PROFILE_ID = /^[a-z0-9]+(?:-[a-z0-9]+)*$/;
+
+function profileProblems(draft) {
+  const problems = [];
+  const at = (profile, message) => ({ profileId: profile?.id ?? null, platform: null, groupId: null, actionId: null, message });
+  const ids = new Set();
+  const names = new Set();
+  for (const profile of draft.profiles) {
+    if (!PROFILE_ID.test(profile.id)) problems.push(at(profile, `Profile id "${profile.id}" is invalid`));
+    else if (ids.has(profile.id)) problems.push(at(profile, `Profile id "${profile.id}" is used twice`));
+    ids.add(profile.id);
+    const name = (profile.name ?? "").trim();
+    if (!name) problems.push(at(profile, "A profile has no name"));
+    else if (names.has(name.toLowerCase())) problems.push(at(profile, `Profile name "${name}" is used twice`));
+    names.add(name.toLowerCase());
+  }
+  if (!draft.profiles.some((profile) => profile.id === draft.activeProfile)) {
+    problems.push(at(null, "The active profile does not exist"));
+  }
+  return problems;
+}
+
+// Everything that blocks saving `draft`: every profile and both platform
+// variants, not only the one on screen. Each problem says where it is, so
+// one on a hidden profile or platform can still be found and shown:
+//   { profileId, platform, groupId, actionId, message }
+// `message` reads "Profile · Platform · Page · State · Action: explanation".
+// Profile-level problems have null platform, groupId and actionId. With
+// `current` ({ profileId, platform }) that variant's problems come first.
+export function saveProblems(catalog, draft, current = {}) {
+  const variant = draft.profiles.flatMap((profile) =>
+    validateProfile(catalog, profile).map((problem) => {
+      const [actionId, explanation] = explain(catalog, problem)[0];
+      const action = catalog.get(actionId);
+      const place = [profile.name, PLATFORM_NAMES[problem.platform], contextName(catalog, action.context), action.label];
+      return {
+        profileId: profile.id,
+        platform: problem.platform,
+        groupId: groupIdOf(action),
+        actionId,
+        message: `${place.join(" · ")}: ${explanation}`,
+      };
+    }),
+  );
+  const onScreen = (p) => p.profileId === current.profileId && p.platform === current.platform;
+  return [...profileProblems(draft), ...variant.filter(onScreen), ...variant.filter((p) => !onScreen(p))];
+}
+
+const count = (rows, status) => rows.filter((row) => row.status === status).length;
+
+// Whether resetting the action would change its bindings in the variant.
+// An override equal to what inheriting gives (the factory default, an empty
+// default, or a positional default that yields anyway) is already at its
+// default, so Reset does not apply.
+function resetChanges(catalog, profile, platform, actionId, bindings) {
+  const list = profile.overrides?.[platform] ?? [];
+  if (!list.some((o) => o.action === actionId)) return false;
+  const inherited = { ...profile, overrides: { ...profile.overrides, [platform]: list.filter((o) => o.action !== actionId) } };
+  return !sameSet(bindings, profileKeymap(catalog, inherited, platform).bindingsFor(actionId));
+}
+
+// The modal's view of one profile's platform variant:
+//   { groups: [group], actionCount, unboundCount, conflictCount }
+//   group = { id, page, state, all: [row], items: [row], actionCount, unboundCount, conflictCount }
+// `all` is every row of the entry, `items` those matching `query` and
+// `filter` ("all" | "unbound" | "conflict"), and `actionCount` the available
+// actions (the sidebar's plain count). A row is
+//   { action, bindings, display, resettable, status, problem }
+// with `display` the palette notation of each binding, `resettable` whether
+// Reset would change its bindings, `status` "conflict"
+// (with `problem` explaining it), "unbound", "shadowing" (allowed, with
+// `problem`), "unavailable" or "". An unavailable row (`available: false`,
+// `note` saying why) is a dormant extension override: its status comes
+// before any other, it is listed after its entry's available actions (or in
+// an entry of its own for a missing extension page), and it is never counted
+// as an action, unbound or conflicting, or filtered as unbound or conflicting.
+export function browse({ catalog, profile, platform, query = "", filter = "all" }) {
+  const keymap = profileKeymap(catalog, profile, platform);
+  const { conflicts, shadows } = rowProblems(catalog, profile, platform);
+  const unavailable = unavailableRows(catalog, profile, platform);
+  const entries = actionGroups(catalog);
+  for (const [id, { extension }] of unavailable) {
+    if (entries.some((group) => group.id === id)) continue;
+    if (id === "global.extensions") {
+      const at = entries.findIndex((group) => group.id === "global") + 1;
+      entries.splice(at, 0, { id, page: "Extensions", state: "Open extension pages", actions: [] });
+    } else {
+      entries.push({ id, page: extension, state: "Extension unavailable", actions: [] });
+    }
+  }
+  const groups = entries.map((group) => {
+    const all = group.actions.map((action) => {
+      const bindings = keymap.bindingsFor(action.id);
+      const conflict = conflicts.get(action.id);
+      const shadow = shadows.get(action.id);
+      let status = "";
+      if (conflict) status = "conflict";
+      else if (!bindings.length) status = "unbound";
+      else if (shadow) status = "shadowing";
+      return {
+        action,
+        bindings,
+        display: bindings.map((binding) => formatBinding(binding, platform)),
+        resettable: resetChanges(catalog, profile, platform, action.id, bindings),
+        available: true,
+        status,
+        problem: (conflict ?? shadow ?? []).join("; "),
+      };
+    });
+    all.push(...(unavailable.get(group.id)?.rows ?? []));
+    const items = all.filter(
+      (row) => matches(row, group, query) && (filter === "all" || row.status === filter),
+    );
+    return {
+      id: group.id,
+      page: group.page,
+      state: group.state,
+      all,
+      items,
+      actionCount: all.filter((row) => row.available).length,
+      unboundCount: count(all, "unbound"),
+      conflictCount: count(all, "conflict"),
+    };
+  });
+  const total = (field) => groups.reduce((sum, group) => sum + group[field], 0);
+  return {
+    groups,
+    actionCount: total("actionCount"),
+    unboundCount: total("unboundCount"),
+    conflictCount: total("conflictCount"),
+  };
+}
+
+// The settings sidebar's first column: one entry per page, holding its
+// page/state groups in browse() order, with their counts summed.
+export function pagesOf(groups) {
+  const pages = [];
+  for (const group of groups) {
+    let entry = pages.find((page) => page.page === group.page);
+    if (!entry) {
+      entry = { page: group.page, groups: [], actionCount: 0, unboundCount: 0, conflictCount: 0 };
+      pages.push(entry);
+    }
+    entry.groups.push(group);
+    entry.actionCount += group.actionCount;
+    entry.unboundCount += group.unboundCount;
+    entry.conflictCount += group.conflictCount;
+  }
+  return pages;
+}

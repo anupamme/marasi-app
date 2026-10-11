@@ -81,11 +81,17 @@
 	import ModalWrapper from "../lib/extensions/components/ExtensionModalWrapper.svelte";
 	import SelectTestCaseModal from "../lib/components/SelectTestCaseModal.svelte";
 	import FindingModal from "../lib/components/FindingModal.svelte";
-	import {
-		hasBlockingOverlay,
-		isolateOverlays,
-	} from "../lib/overlayIsolation.js";
+	import { isolateOverlays } from "../lib/overlayIsolation.js";
 	import WebSocketModal from "../lib/components/WebSocketModal.svelte";
+	import KeybindingsModal from "../lib/components/Keybindings/KeybindingsModal.svelte";
+	import GlobalMenu from "../lib/components/MarasiMenu/GlobalMenu.svelte";
+	import { get } from "svelte/store";
+	import {
+		installMenuShortcuts,
+		menuDispatcher,
+		websocketTab,
+		keybindingCapture,
+	} from "../lib/keybindings/app.js";
 	let appRailIndex = 0;
 	let showChef = false;
 	let showExcali = false;
@@ -148,6 +154,7 @@
 		SelectFinding: { ref: SelectFindingModal },
 		SelectWordlist: { ref: SelectWordlistModal },
 		"extension-modal": { ref: ModalWrapper },
+		Keybindings: { ref: KeybindingsModal },
 	};
 	const StartupRoutine2 = new Promise((resolve) => {
 		readConfig().then(() => {
@@ -180,6 +187,23 @@
 				});
 		});
 	});
+	// The state menu contexts and the shortcut gate are resolved against.
+	function shortcutState() {
+		return {
+			route: get(page).url.pathname,
+			modal: get(modalStore)[0]?.component ?? null,
+			dialogOpen: Boolean(document.querySelector("dialog[open]")),
+			drawer: get(drawerStore),
+			websocketTab: get(websocketTab),
+			capturing: get(keybindingCapture),
+		};
+	}
+	// A modal triggered with `toggleAction: <menu action id>` closes on that
+	// action's current binding (overlayIsolation asks before Escape handling).
+	function isModalToggle(event, actionId) {
+		return menuDispatcher.isModalToggle(event, actionId, shortcutState());
+	}
+	let removeMenuShortcuts = () => {};
 	onMount(() => {
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
@@ -205,37 +229,7 @@
 					modalStore.trigger(modal);
 				}
 			}
-			hotkeys.filter = (event) => {
-				if (
-					hasBlockingOverlay(modalStore) &&
-					$modalStore[0]?.component !==
-						"WebsocketStream"
-				)
-					return false;
-				switch ($page.url.pathname) {
-					case "/ledger":
-						return true;
-					case "/logbook":
-						return true;
-					default:
-						var target =
-							event.target ||
-							event.srcElement;
-						var tagName = target.tagName;
-						return (
-							!(
-								tagName ==
-									"INPUT" ||
-								tagName ==
-									"SELECT" ||
-								tagName ==
-									"TEXTAREA"
-							) ||
-							target.id ===
-								"commandmenu"
-						);
-				}
-			};
+			removeMenuShortcuts = installMenuShortcuts(shortcutState);
 			$appState.isReady = true;
 
 			function handleNewLog(newLog) {
@@ -399,6 +393,7 @@
 			);
 		});
 		return () => {
+			removeMenuShortcuts();
 			EventsOff("request");
 			EventsOff("response");
 			EventsOff("ws-message");
@@ -415,10 +410,11 @@
 
 <div
 	class="flex flex-col h-screen"
-	use:isolateOverlays={{ modalStore, drawerStore, toastStore }}
+	use:isolateOverlays={{ modalStore, drawerStore, toastStore, isModalToggle }}
 >
 	<div class="flex flex-1 h-screen">
 		{#if $appState.isReady}
+			<GlobalMenu />
 			<AppRail
 				class="no-select h-full nav-rail"
 				background="bg-surface-50-800-token"
@@ -774,8 +770,10 @@
 {#if $appState.isReady}
 	<AppDrawer />
 {/if}
+<!-- Bottom-right toasts would cover the Keybindings modal's Save button;
+     while it is open they show at the top, over its title. -->
 <Toast
-	position="br"
+	position={$modalStore[0]?.component === "Keybindings" ? "t" : "br"}
 	buttonAction={$modeCurrent
 		? "btn variant-ghost-primary border-0 ring-0"
 		: "btn variant-filled-primary"}
@@ -817,8 +815,14 @@
 	:global(.dark .modal-prompt-input) {
 		background-color: rgb(var(--color-surface-700)) !important;
 	}
+	/* The rail still scrolls when extension tiles overflow it, but without a
+	   scrollbar: one would take its width from the tiles and clip labels. */
 	:global(.nav-rail) {
 		overflow-x: hidden;
 		overflow-y: auto;
+		scrollbar-width: none;
+	}
+	:global(.nav-rail::-webkit-scrollbar) {
+		display: none;
 	}
 </style>

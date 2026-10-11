@@ -10,6 +10,8 @@
 
 Select the rail item titled `Ledger` or press `Command+2`. The page exposes `Ledger Settings`, `#searchBox` (placeholder `Search traffic…`), an input with placeholder `Filter by Content Type`, and pagination buttons titled `First Page`, `Previous Page`, `Next Page`, and `Last Page`.
 
+Shortcuts: every menu shortcut for this feature is a catalog action in context `ledger.drawer-closed`, `ledger.drawer-open` and `ledger.drawer-open.websocket` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+
 ## Driving it with Chrome CDP
 
 Run `scripts/drive.sh ledger` for route proof. For capture, send a `text/html` request with a unique path through the isolated proxy (`curl -x http://127.0.0.1:18080 …` to a local disposable server), then wait for that path in the table:
@@ -40,7 +42,7 @@ For handoff, click a row with `{"click":"tbody tr","hasText":"<path>"}`, wait fo
 
 ## Gotchas
 
-- `#searchBox`, the content-type chips, and pagination live inside `Ledger Settings`, which starts closed and mounts its content only while open. Open it with `{"click":"button.accordion-control"}`: while a query is active the header reads `Ledger Settings Query <query> N matches`, so an exact `{"text":"Ledger Settings"}` match fails. Wait for `#searchBox` after opening it. `⌘⇧S` toggles the panel, so it closes an open one.
+- `#searchBox`, the content-type chips, and pagination live inside `Ledger Settings`, which starts closed and mounts its content only while open. Open it with `{"click":"button.accordion-control"}`: while a query is active the header reads `Ledger Settings Query <query> N matches`, so an exact `{"text":"Ledger Settings"}` match fails. Wait for `#searchBox` after opening it. `⌘P` toggles the panel, so it closes an open one; `⌘⇧S` opens it if needed and focuses `#searchBox` (pressing it again blurs the box).
 - Content-type chips exclude matching types. The defaults already hide images, fonts, media, JavaScript, CSS, PDF, archives, and office types. Use `text/html` for capture proof. They include `application/octet-stream`, which `python3 -m http.server` sends for extensionless paths, so serve a `.html` path.
 - An empty Ledger only proves navigation. Complete capture proof needs traffic through the proxy.
 - HTTPS traffic needs the verification instance's generated certificate.

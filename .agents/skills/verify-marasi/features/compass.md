@@ -2,7 +2,7 @@
 
 ## Sub-features
 
-- Default scope policy
+- Default scope policy (set only in Lua with `scope:set_default_allow`; the tester just reports it)
 - Lua include and exclude rules
 - Scope tester for a supplied URL
 - Extension logs and editor settings
@@ -10,6 +10,8 @@
 ## How to get to it (user POV)
 
 Select the rail item titled `Compass` or press `Command+3`. Expand `Compass Settings` for the scope tester: `#urlInput` and a `Test Rules` button. The Lua editor exposes `data-language="lua"`. `Update Compass Code` (`⌘⇧R`) and `Show Logs` (`⌘⇧L`) are `⌘K` palette commands and shortcuts, not page buttons. Vim behavior follows the global configuration.
+
+Shortcuts: every menu shortcut for this feature is a catalog action in context `compass` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
 
 ## Driving it with Chrome CDP
 

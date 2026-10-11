@@ -15,6 +15,7 @@ const TONE_CLASSES = {
   success: "text-success-500",
   warning: "text-warning-500",
   error: "text-error-500",
+  neutral: "text-surface-400",
 };
 
 // How each `websocket.state` is shown. A state not listed here (including no
@@ -22,6 +23,21 @@ const TONE_CLASSES = {
 const UPGRADE_STATES = {
   pending: { tone: "warning", slashed: false, tooltip: null, canOpen: true },
   open: { tone: "success", slashed: false, tooltip: null, canOpen: true },
+  // Marasi rejected the handshake; the reason is an ERROR entry in Home's logs.
+  failed: {
+    tone: "error",
+    slashed: true,
+    tooltip: "WebSocket handshake failed — see the logs on Home",
+    canOpen: false,
+  },
+  // The upgrade response was dropped in Checkpoint or by an extension: a
+  // deliberate choice, so neutral rather than an error.
+  dropped: {
+    tone: "neutral",
+    slashed: true,
+    tooltip: "Upgrade response dropped",
+    canOpen: false,
+  },
 };
 const FALLBACK_STATE = { tone: "error", slashed: false, tooltip: null, canOpen: true };
 

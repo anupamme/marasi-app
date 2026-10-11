@@ -277,6 +277,9 @@
 				);
 				patchWebSocketMetadata(conn);
 			});
+			EventsOn("ws-progress", (progress) =>
+				connectionStore.upsertProgress(progress),
+			);
 			EventsOn("log", (newLog) => {
 				if (typeof newLog?.Level !== "string") {
 					return;
@@ -400,6 +403,7 @@
 			EventsOff("ws-intercepted");
 			EventsOff("ws-open");
 			EventsOff("ws-close");
+			EventsOff("ws-progress");
 			EventsOff("intercepted");
 			EventsOff("log");
 			EventsOff("extension_gui_render");

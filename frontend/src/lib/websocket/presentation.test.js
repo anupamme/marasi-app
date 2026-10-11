@@ -76,6 +76,31 @@ test("a request with a nested Response is read the same way, and a live state ov
   }
 });
 
+test("a failed handshake shows a slashed red icon, points to Home's logs, and cannot be opened", () => {
+  const view = upgradePresentation(
+    upgradeFromLedgerRow({ Metadata: { protocol: "websocket", "websocket.state": "failed" } }),
+  );
+  assert.equal(view.isUpgrade, true);
+  assert.equal(view.state, "failed");
+  assert.equal(view.tone, "error");
+  assert.equal(view.iconClass, "text-error-500");
+  assert.equal(view.slashed, true);
+  assert.equal(view.tooltip, "WebSocket handshake failed — see the logs on Home");
+  assert.equal(view.canOpen, false);
+});
+
+test("a dropped upgrade response shows a slashed neutral icon, says it was dropped, and cannot be opened", () => {
+  const view = upgradePresentation(
+    upgradeFromLedgerRow({ Metadata: { protocol: "websocket", "websocket.state": "dropped" } }),
+  );
+  assert.equal(view.isUpgrade, true);
+  assert.equal(view.tone, "neutral");
+  assert.equal(view.iconClass, "text-surface-400");
+  assert.equal(view.slashed, true);
+  assert.equal(view.tooltip, "Upgrade response dropped");
+  assert.equal(view.canOpen, false);
+});
+
 test("an ordinary Ledger row is not an upgrade and gets no WebSocket icon", () => {
   const view = upgradePresentation(upgradeFromLedgerRow({ StatusCode: 200, ContentType: "html", Metadata: {} }));
   assert.equal(view.isUpgrade, false);

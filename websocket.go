@@ -43,8 +43,11 @@ func (a *App) GetWebSocketConnection(id uuid.UUID) *domain.WebSocketConnection {
 	return &conn
 }
 
-func (a *App) InjectWebSocketMessage(id uuid.UUID, direction string, opcode int, payload string) error {
-	_, err := a.Proxy.InjectWebSocketMessage(id, direction, opcode, []byte(payload), marasiws.InjectOptions{})
+// InjectWebSocketMessage sends payload on the connection's direction leg.
+// On a permessage-deflate connection, text and binary messages are
+// compressed unless neverCompress is set.
+func (a *App) InjectWebSocketMessage(id uuid.UUID, direction string, opcode int, payload string, neverCompress bool) error {
+	_, err := a.Proxy.InjectWebSocketMessage(id, direction, opcode, []byte(payload), marasiws.InjectOptions{NeverCompress: neverCompress})
 	return err
 }
 

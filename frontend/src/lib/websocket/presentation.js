@@ -107,6 +107,12 @@ export function upgradePresentation(upgrade) {
   };
 }
 
+// Whether the request in a Ledger drawer's meta is a WebSocket upgrade whose
+// stream can be opened.
+export function canOpenDrawerStream(meta) {
+  return upgradePresentation(upgradeFromDrawerMeta(meta)).canOpen;
+}
+
 // --- Messages --------------------------------------------------------------
 //
 // A message is Marasi's domain.WebSocketMessage: a whole message, however many

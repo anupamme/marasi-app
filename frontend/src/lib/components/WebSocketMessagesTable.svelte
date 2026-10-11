@@ -108,12 +108,13 @@
 		});
 	}
 
-	function frameStateClasses(msg) {
-		const closeFrame = msg.Opcode === 8 ? "!bg-primary-500/10" : "";
+	// presented is messageRow(msg), computed once per row by the caller.
+	function messageStateClasses(msg, presented) {
+		const closeMessage = msg.Opcode === 8 ? "!bg-primary-500/10" : "";
 		const dropped = msg.Metadata?.dropped
 			? "line-through decoration-error-500/70"
 			: "";
-		return `${closeFrame} ${dropped} ${messageRow(msg).edgeClass}`;
+		return `${closeMessage} ${dropped} ${presented.edgeClass}`;
 	}
 
 
@@ -370,12 +371,13 @@
 					</thead>
 					<tbody>
 						{#each $table.getRowModel().rows as row, i (row.original.ID)}
+							{@const presented = messageRow(row.original)}
 							<tr
 								class="cursor-pointer {selected?.ID ===
 								row.original.ID
 									? 'bg-surface-500/20 outline outline-1 outline-offset-[-1px] outline-primary-500'
-									: ''} {frameStateClasses(row.original)}"
-								title={messageRow(row.original).tooltip}
+									: ''} {messageStateClasses(row.original, presented)}"
+								title={presented.tooltip}
 								on:click={() =>
 									selectFrame(
 										row.original,

@@ -4,6 +4,7 @@ import (
 	"github.com/google/uuid"
 	marasi "github.com/tfkr-ae/marasi"
 	"github.com/tfkr-ae/marasi/domain"
+	marasiws "github.com/tfkr-ae/marasi/websocket"
 	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
@@ -41,7 +42,7 @@ func (a *App) GetWebSocketConnection(id uuid.UUID) *domain.WebSocketConnection {
 }
 
 func (a *App) InjectWebSocketMessage(id uuid.UUID, direction string, opcode int, payload string) error {
-	_, err := a.Proxy.InjectWebSocketMessage(id, direction, opcode, []byte(payload))
+	_, err := a.Proxy.InjectWebSocketMessage(id, direction, opcode, []byte(payload), marasiws.InjectOptions{})
 	return err
 }
 

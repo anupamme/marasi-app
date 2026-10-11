@@ -14,6 +14,7 @@
 		CornerLeftDown,
 		FlagIcon,
 		Forward,
+		Info,
 		RadioIcon,
 		RotateCw,
 		SendIcon,
@@ -24,8 +25,12 @@
 	import { onDestroy } from "svelte";
 	import MarasiKeys from "./MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions, websocketTab } from "../keybindings/app.js";
-	import { WEBSOCKET_TABS } from "../keybindings/contexts.js";
+	import {
+		stepWebSocketTab,
+		WEBSOCKET_TABS,
+	} from "../keybindings/contexts.js";
 	import WebSocketCheckpoint from "./WebSocketCheckpoint.svelte";
+	import WebSocketConnection from "./WebSocketConnection.svelte";
 	import WebSocketInject from "./WebSocketInject.svelte";
 	import WebSocketMessagesTable from "./WebSocketMessagesTable.svelte";
 	import { connectionStore } from "../../stores/connectionStore";
@@ -40,12 +45,18 @@
 	let checkpoint;
 	let injectEditor;
 
+	function stepTab(step) {
+		tabSet = WEBSOCKET_TABS.indexOf(
+			stepWebSocketTab(WEBSOCKET_TABS[tabSet], step),
+		);
+	}
+
 	function previousTab() {
-		tabSet = (tabSet + 2) % 3;
+		stepTab(-1);
 	}
 
 	function nextTab() {
-		tabSet = (tabSet + 1) % 3;
+		stepTab(1);
 	}
 
 	// Menu actions by context; labels and keys come from the catalog. All
@@ -131,6 +142,8 @@
 				handler: () => injectEditor?.inject(),
 			},
 		],
+		// Read-only: only the shared modal actions.
+		connection: [],
 	};
 
 	useMenuActions([...commonMenu, ...Object.values(tabMenus).flat()]);
@@ -266,6 +279,16 @@
 						<span>Inject</span>
 					</div>
 				</Tab>
+				<Tab
+					bind:group={tabSet}
+					name="connection"
+					value={3}
+				>
+					<div class="flex items-center gap-2">
+						<Info size={16} />
+						<span>Connection</span>
+					</div>
+				</Tab>
 			</TabGroup>
 		</div>
 
@@ -323,6 +346,18 @@
 							No request ID
 						</div>
 					{/if}
+				</div>
+			{:else if tabSet === 3}
+				<div
+					class="h-[70vh] w-full min-w-0 overflow-hidden"
+				>
+					<WebSocketConnection
+						{requestId}
+						{request}
+						url="{transport}://{host}{path}"
+						state={wsState}
+						tone={upgrade.tone}
+					/>
 				</div>
 			{/if}
 		</div>

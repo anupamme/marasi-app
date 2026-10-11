@@ -90,3 +90,64 @@ export function upgradePresentation(upgrade) {
     tooltip: shown.tooltip,
   };
 }
+
+// --- Connection summary ----------------------------------------------------
+//
+// What the Connection tab shows for a connection record
+// (domain.WebSocketConnection).
+
+const RECOMPRESS_NOTE =
+  "Marasi decompresses each message and recompresses it for the other leg, so the bytes on the two legs differ.";
+
+const takeover = (noContextTakeover) => (noContextTakeover ? "no (reset per message)" : "yes");
+
+function deflateRows(deflate) {
+  return [
+    { label: "Extension", value: "permessage-deflate" },
+    { label: "Client context takeover", value: takeover(deflate.ClientNoContextTakeover) },
+    { label: "Server context takeover", value: takeover(deflate.ServerNoContextTakeover) },
+    { label: "Client max window", value: `${deflate.ClientMaxWindowBits} bits` },
+    { label: "Server max window", value: `${deflate.ServerMaxWindowBits} bits` },
+  ];
+}
+
+// Without a connection record (none stored for this upgrade), what was
+// negotiated is unknown, which is not the same as "none".
+const NOT_RECORDED = "not recorded";
+
+function compressionRows(connection) {
+  if (!connection) return [{ label: "Extension", value: NOT_RECORDED }];
+  if (!connection.Deflate) return [{ label: "Extension", value: "none negotiated" }];
+  return deflateRows(connection.Deflate);
+}
+
+// Marasi closed the connection when it sent a close of its own: a message
+// whose metadata is marked generated.
+const isClosedByMarasi = (messages) => (messages ?? []).some((m) => Boolean(m?.Metadata?.generated));
+
+function closeText(code, reason, closedByMarasi) {
+  const parts = [];
+  if (code) parts.push(reason ? `${code} ${reason}` : String(code));
+  if (closedByMarasi) parts.push("closed by Marasi");
+  return parts.length ? parts.join(" — ") : "—";
+}
+
+// `connection` is the connection record, or null when none is stored. The
+// close then comes from the upgrade `request`'s `websocket.*` metadata.
+// `messages` are the connection's stored messages.
+export function connectionSummary({ connection, request, messages } = {}) {
+  const metadata = request?.Metadata ?? {};
+  const code = connection ? connection.CloseCode : metadata["websocket.close_code"];
+  const reason = connection ? connection.CloseReason : metadata["websocket.close_reason"];
+  const closedByMarasi = isClosedByMarasi(messages);
+  // Go sends a nil RemovedExtensions slice as null.
+  const strippedOffers = connection?.RemovedExtensions ?? [];
+  return {
+    close: closeText(code, reason, closedByMarasi),
+    closedByMarasi,
+    compression: compressionRows(connection),
+    compressionNote: connection?.Deflate ? RECOMPRESS_NOTE : "",
+    strippedOffers,
+    strippedNone: strippedOffers.length ? "" : connection ? "none" : NOT_RECORDED,
+  };
+}

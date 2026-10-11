@@ -35,7 +35,16 @@ func (a *App) GetWebSocketMessages(id uuid.UUID) ([]*domain.WebSocketMessage, er
 	return a.Proxy.GetWebSocketMessages(id)
 }
 
+// GetWebSocketConnection returns the stored connection record for an upgrade
+// request, live or closed, so the Connection tab can show a connection from
+// history. Before the record is stored it falls back to Marasi's live state,
+// which has no Deflate or RemovedExtensions.
 func (a *App) GetWebSocketConnection(id uuid.UUID) *domain.WebSocketConnection {
+	if a.Proxy.WebSocketRepo != nil {
+		if record, err := a.Proxy.WebSocketRepo.GetConnectionByRequestID(id); err == nil && record != nil {
+			return record
+		}
+	}
 	conn, ok := a.Proxy.GetWebSocketConnection(id)
 	if !ok {
 		return nil

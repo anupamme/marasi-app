@@ -142,8 +142,8 @@ export const FACTORY_ACTIONS = [
     ["show-logs", "Show Logs", "Show Extension Logs", "logs, lua", primary("shift+l")],
   ]),
   ...pageActions("websocket", [
-    ["previous-tab", "Previous WebSocket Tab", "Move to the previous WebSocket tab", "websocket previous tab stream checkpoint inject", primary("[")],
-    ["next-tab", "Next WebSocket Tab", "Move to the next WebSocket tab", "websocket next tab stream checkpoint inject", primary("]")],
+    ["previous-tab", "Previous WebSocket Tab", "Move to the previous WebSocket tab", "websocket previous tab stream checkpoint inject connection", primary("[")],
+    ["next-tab", "Next WebSocket Tab", "Move to the next WebSocket tab", "websocket next tab stream checkpoint inject connection", primary("]")],
     ["close-connection", "Close WebSocket Connection", "Close the active WebSocket connection", "websocket close disconnect", primary("shift+x")],
   ]),
   ...pageActions("websocket.stream", [

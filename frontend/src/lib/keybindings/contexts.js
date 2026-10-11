@@ -25,7 +25,14 @@ const requestDrawerOpen = (state) =>
 export const WEBSOCKET_MODAL = "WebsocketStream";
 // The WebSocket modal's tabs, in tab order. The modal publishes the open one
 // as `state.websocketTab`.
-export const WEBSOCKET_TABS = ["stream", "checkpoint", "inject"];
+export const WEBSOCKET_TABS = ["stream", "checkpoint", "inject", "connection"];
+// The tab `step` places after `tab` (negative steps go back), wrapping
+// around: what the previous-tab and next-tab actions move to.
+export function stepWebSocketTab(tab, step) {
+  const count = WEBSOCKET_TABS.length;
+  const index = Math.max(WEBSOCKET_TABS.indexOf(tab), 0);
+  return WEBSOCKET_TABS[(((index + step) % count) + count) % count];
+}
 const websocketModalOpen = (state) => state.modal === WEBSOCKET_MODAL;
 
 // `page` and `state` name the context for people (the keybinding settings
@@ -67,6 +74,7 @@ export const CONTEXTS = [
     ["stream", "Stream"],
     ["checkpoint", "Checkpoint"],
     ["inject", "Inject"],
+    ["connection", "Connection"],
   ].map(([tab, name]) => ({
     id: `websocket.${tab}`,
     tier: "overlay",

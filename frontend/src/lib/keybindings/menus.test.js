@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildCatalog, createCatalog } from "./catalog.js";
-import { CONTEXTS, contextsConflict } from "./contexts.js";
+import { CONTEXTS, contextsConflict, stepWebSocketTab } from "./contexts.js";
 import { createDispatcher } from "./dispatcher.js";
 import { MACOS, WINDOWS_LINUX } from "./platform.js";
 import { factoryKeybindings } from "./profiles.js";
@@ -361,4 +361,35 @@ test("WebSocket tab actions are inert while the modal is closed", () => {
   const dispatcher = mac();
   const state = { ...on("/ledger", requestDrawer(websocketUpgrade)), websocketTab: "inject" };
   assert.equal(dispatcher.resolve(cmdShift("D", "KeyD"), state), "ledger.drawer-open.unlink-test-case");
+});
+
+test("the WebSocket Connection tab offers only the modal's shared actions", () => {
+  const conflict = (a, b) => contextsConflict(CONTEXTS, a, b);
+  assert.ok(conflict("websocket.connection", "websocket"));
+  assert.ok(!conflict("websocket.connection", "websocket.stream"));
+  assert.ok(!conflict("websocket.connection", "websocket.inject"));
+  const catalog = buildCatalog();
+  assert.ok(catalog.contexts.some((c) => c.id === "websocket.connection"));
+  assert.deepEqual(catalog.actions.filter((a) => a.context === "websocket.connection"), []);
+
+  const dispatcher = mac();
+  const state = websocketModal("connection");
+  assert.equal(dispatcher.resolve(cmd("[", "BracketLeft"), state), "websocket.previous-tab");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), state), "websocket.next-tab");
+  assert.equal(dispatcher.resolve(cmdShift("X", "KeyX"), state), "websocket.close-connection");
+  for (const [key, code] of [["D", "KeyD"], ["I", "KeyI"], ["F", "KeyF"], ["Enter", "Enter"], ["}", "BracketRight"]]) {
+    assert.equal(dispatcher.resolve(cmdShift(key, code), state), null, key);
+  }
+});
+
+test("the previous-tab and next-tab keys cycle through all four WebSocket tabs", () => {
+  const forward = [];
+  let tab = "stream";
+  for (let i = 0; i < 4; i++) {
+    tab = stepWebSocketTab(tab, 1);
+    forward.push(tab);
+  }
+  assert.deepEqual(forward, ["checkpoint", "inject", "connection", "stream"]);
+  assert.equal(stepWebSocketTab("stream", -1), "connection");
+  assert.equal(stepWebSocketTab("connection", -1), "inject");
 });

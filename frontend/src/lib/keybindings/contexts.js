@@ -1,17 +1,9 @@
 // Menu contexts: Marasi-defined pages and interface states that decide which
 // menu actions are eligible. Each context has a tier; when several eligible
 // contexts bind the same key, the most specific tier wins.
-import {
-  upgradeFromDrawerMeta,
-  upgradePresentation,
-} from "../websocket/presentation.js";
+import { canOpenDrawerStream } from "../websocket/presentation.js";
 
 export const TIERS = ["overlay", "drawer", "page", "global"];
-
-// Whether the request in a drawer's meta is a WebSocket upgrade whose stream
-// can be opened.
-const canOpenDrawerStream = (meta) =>
-  upgradePresentation(upgradeFromDrawerMeta(meta)).canOpen;
 
 // A page (and its drawers) is eligible on its route while no modal covers
 // it. Only the WebSocket modal lets menu actions through the gate; under it,

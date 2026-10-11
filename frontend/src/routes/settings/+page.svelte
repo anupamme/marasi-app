@@ -31,6 +31,7 @@
 		modeCurrent,
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
+	import { chromeError } from "../../lib/globalActions.js";
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
 
@@ -108,25 +109,34 @@
 			});
 	}
 	function addChromePath() {
-		AddChromePath(selectedPath, selectedOS).then((paths) => {
-			chromePaths = paths;
-			selectedPath = "";
-			selectedOS = "";
-		});
+		AddChromePath(selectedPath, selectedOS)
+			.then((paths) => {
+				chromePaths = paths;
+				selectedPath = "";
+				selectedOS = "";
+			})
+			.catch(chromeError(toastStore, "Error adding path"));
+	}
+	function deleteChromePath(path) {
+		DeleteChromePath(path.Path, path.OS)
+			.then((paths) => {
+				chromePaths = paths;
+			})
+			.catch(chromeError(toastStore, "Error deleting path"));
 	}
 	function addChromeProfile() {
 		AddChromeProfile(selectedProfile)
 			.then((profiles) => {
 				chromeProfiles = profiles;
 			})
-			.catch((error) => {
-				toastStore.trigger({
-					message: error.includes("already exists")
+			.catch((error) =>
+				chromeError(
+					toastStore,
+					String(error).includes("already exists")
 						? "Profile already exists"
 						: "Error creating profile",
-					background: "variant-filled-error",
-				});
-			});
+				)(error),
+			);
 		selectedProfile = "";
 	}
 	function deleteChromeProfile(profile) {
@@ -134,24 +144,23 @@
 			.then((profiles) => {
 				chromeProfiles = profiles;
 			})
-			.catch(() => {
-				toastStore.trigger({
-					message: "Error deleting profile",
-					background: "variant-filled-error",
-				});
-			});
+			.catch(chromeError(toastStore, "Error deleting profile"));
 	}
 
 	onMount(() => {
 		GetBuildInfo().then((info) => {
 			buildInfo = info;
 		});
-		GetChromePaths().then((paths) => {
-			chromePaths = paths;
-		});
-		GetChromeProfiles().then((profiles) => {
-			chromeProfiles = profiles;
-		});
+		GetChromePaths()
+			.then((paths) => {
+				chromePaths = paths;
+			})
+			.catch(chromeError(toastStore, "Error reading Chrome paths"));
+		GetChromeProfiles()
+			.then((profiles) => {
+				chromeProfiles = profiles;
+			})
+			.catch(chromeError(toastStore, "Error reading Chrome profiles"));
 	});
 </script>
 
@@ -382,11 +391,7 @@
 											type="button"
 											class={iconButton}
 											title="Delete"
-											on:click={() => {
-												DeleteChromePath(path.Path, path.OS).then((paths) => {
-													chromePaths = paths;
-												});
-											}}><X size={15} /></button
+											on:click={() => deleteChromePath(path)}><X size={15} /></button
 										>
 									</td>
 								</tr>

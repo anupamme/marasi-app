@@ -1,17 +1,18 @@
 // In-flight message progress, keyed by the upgrade request ID. Each
 // connection holds at most one record: the latest ws-progress event.
+import { formatSize } from "./presentation.js";
 
 /**
  * Returns progressByRequestId with record as its connection's progress.
  * ws-progress can arrive after the message it describes, or after the
  * connection closed, so record is ignored when messages already holds its
- * message or connection is no longer open.
+ * message, held (Checkpoint's queue) holds it, or connection is no longer
+ * open.
  */
-export function applyProgress(progressByRequestId, record, { messages = [], connection = null } = {}) {
+export function applyProgress(progressByRequestId, record, { messages = [], held = [], connection = null } = {}) {
   if (connection && connection.State !== "open") return progressByRequestId;
-  if (messages.some((message) => message.ID === record.MessageID)) {
-    return progressByRequestId;
-  }
+  const known = (message) => message.ID === record.MessageID;
+  if (messages.some(known) || held.some(known)) return progressByRequestId;
   return { ...progressByRequestId, [record.RequestID]: record };
 }
 
@@ -27,6 +28,14 @@ export function finishMessage(progressByRequestId, message) {
 }
 
 /**
+ * Returns progressByRequestId without the record for message, once
+ * Checkpoint holds it: a held message has been received in full.
+ */
+export function holdMessage(progressByRequestId, message) {
+  return finishMessage(progressByRequestId, message);
+}
+
+/**
  * Returns the header chip for record: an arrow for the direction the message
  * travels and "receiving <size> · <n> frames".
  */
@@ -34,14 +43,8 @@ export function progressChip(record) {
   const frames = record.Frames === 1 ? "1 frame" : `${record.Frames} frames`;
   return {
     arrow: record.Direction === "client" ? "↑" : "↓",
-    label: `receiving ${formatBytes(record.Bytes)} · ${frames}`,
+    label: `receiving ${formatSize(record.Bytes)} · ${frames}`,
   };
-}
-
-function formatBytes(n) {
-  if (n < 1024) return `${n} B`;
-  if (n < 1024 * 1024) return `${(n / 1024).toFixed(1)} KB`;
-  return `${(n / 1024 / 1024).toFixed(1)} MB`;
 }
 
 /**

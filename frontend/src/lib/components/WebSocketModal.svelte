@@ -15,6 +15,7 @@
 		FlagIcon,
 		Forward,
 		Info,
+		Loader,
 		RadioIcon,
 		RotateCw,
 		SendIcon,
@@ -25,10 +26,7 @@
 	import { onDestroy } from "svelte";
 	import MarasiKeys from "./MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions, websocketTab } from "../keybindings/app.js";
-	import {
-		stepWebSocketTab,
-		WEBSOCKET_TABS,
-	} from "../keybindings/contexts.js";
+	import { stepWebSocketTab } from "../keybindings/contexts.js";
 	import WebSocketCheckpoint from "./WebSocketCheckpoint.svelte";
 	import WebSocketConnection from "./WebSocketConnection.svelte";
 	import WebSocketInject from "./WebSocketInject.svelte";
@@ -37,20 +35,18 @@
 	import { CloseWebSocket } from "../wailsjs/go/main/App";
 	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
 	import { progressChip } from "../websocket/progress.js";
-	import { Loader } from "lucide-svelte";
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
-	let tabSet = 0;
+	// The open tab, by its name in WEBSOCKET_TABS.
+	let openTab = "stream";
 	let closing = false;
 	let messagesTable;
 	let checkpoint;
 	let injectEditor;
 
 	function stepTab(step) {
-		tabSet = WEBSOCKET_TABS.indexOf(
-			stepWebSocketTab(WEBSOCKET_TABS[tabSet], step),
-		);
+		openTab = stepWebSocketTab(openTab, step);
 	}
 
 	function previousTab() {
@@ -150,7 +146,6 @@
 
 	useMenuActions([...commonMenu, ...Object.values(tabMenus).flat()]);
 
-	$: openTab = WEBSOCKET_TABS[tabSet];
 	$: websocketTab.set(openTab);
 	onDestroy(() => websocketTab.set(null));
 
@@ -167,9 +162,7 @@
 			$connectionStore.connectionsByRequestId[requestId]?.State,
 		),
 	);
-	$: wsState = upgrade.state;
-	$: wsColor = upgrade.iconClass;
-	$: frameCount = ($connectionStore.messagesByRequestId[requestId] || [])
+	$: messageCount = ($connectionStore.messagesByRequestId[requestId] || [])
 		.length;
 	$: transport =
 		request?.Metadata?.["websocket.transport"] ||
@@ -187,7 +180,7 @@
 	$: chip = progress ? progressChip(progress) : null;
 
 	async function closeConnection() {
-		if (!requestId || wsState !== "open" || closing) return;
+		if (!requestId || upgrade.state !== "open" || closing) return;
 		closing = true;
 		try {
 			await CloseWebSocket(requestId, 1000, "");
@@ -221,12 +214,12 @@
 	>
 		<header class="flex justify-between items-center gap-3">
 			<div class="flex min-w-0 items-center gap-2">
-				<RadioIcon size={24} class={wsColor} />
+				<RadioIcon size={24} class={upgrade.iconClass} />
 				<h2 class="truncate text-base">
 					{transport}://{host}{path}
 				</h2>
 				<span class="shrink-0 text-sm opacity-70"
-					>{frameCount} messages</span
+					>{messageCount} messages</span
 				>
 				{#if chip}
 					<span
@@ -243,7 +236,7 @@
 			<div class="flex items-center gap-2">
 				<button
 					class="btn btn-sm variant-soft-error"
-					disabled={wsState !== "open" || closing}
+					disabled={upgrade.state !== "open" || closing}
 					on:click={closeConnection}
 				>
 					<Unplug size={16} class="mr-1" />
@@ -264,9 +257,9 @@
 		<div class="mt-2 flex w-full justify-center">
 			<TabGroup>
 				<Tab
-					bind:group={tabSet}
+					bind:group={openTab}
 					name="stream"
-					value={0}
+					value="stream"
 				>
 					<div class="flex items-center gap-2">
 						<RadioIcon size={16} />
@@ -274,9 +267,9 @@
 					</div>
 				</Tab>
 				<Tab
-					bind:group={tabSet}
+					bind:group={openTab}
 					name="checkpoint"
-					value={1}
+					value="checkpoint"
 				>
 					<div class="flex items-center gap-2">
 						<FlagIcon size={16} />
@@ -284,9 +277,9 @@
 					</div>
 				</Tab>
 				<Tab
-					bind:group={tabSet}
+					bind:group={openTab}
 					name="inject"
-					value={2}
+					value="inject"
 				>
 					<div class="flex items-center gap-2">
 						<SendIcon size={16} />
@@ -294,9 +287,9 @@
 					</div>
 				</Tab>
 				<Tab
-					bind:group={tabSet}
+					bind:group={openTab}
 					name="connection"
-					value={3}
+					value="connection"
 				>
 					<div class="flex items-center gap-2">
 						<Info size={16} />
@@ -307,7 +300,7 @@
 		</div>
 
 		<div class="mt-2 flex min-h-0 w-full flex-1 flex-col">
-			{#if tabSet === 0}
+			{#if openTab === "stream"}
 				<div
 					class="h-[70vh] w-full min-w-0 overflow-hidden"
 				>
@@ -316,7 +309,7 @@
 							bind:this={messagesTable}
 							{requestId}
 							onOpenInject={() => {
-								tabSet = 2;
+								openTab = "inject";
 							}}
 						/>
 					{:else}
@@ -327,7 +320,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else if tabSet === 1}
+			{:else if openTab === "checkpoint"}
 				<div
 					class="h-[70vh] w-full min-w-0 overflow-hidden"
 				>
@@ -344,7 +337,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else if tabSet === 2}
+			{:else if openTab === "inject"}
 				<div
 					class="h-[70vh] w-full min-w-0 overflow-hidden"
 				>
@@ -361,7 +354,7 @@
 						</div>
 					{/if}
 				</div>
-			{:else if tabSet === 3}
+			{:else if openTab === "connection"}
 				<div
 					class="h-[70vh] w-full min-w-0 overflow-hidden"
 				>
@@ -369,7 +362,7 @@
 						{requestId}
 						{request}
 						url="{transport}://{host}{path}"
-						state={wsState}
+						state={upgrade.state}
 						tone={upgrade.tone}
 					/>
 				</div>

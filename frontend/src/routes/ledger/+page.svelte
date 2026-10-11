@@ -66,7 +66,7 @@
 	import { appendToQuery } from "../../lib/ledgerQueryFields";
 	import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions } from "../../lib/keybindings/app.js";
-	import { upgradeFromDrawerMeta, upgradePresentation } from "../../lib/websocket/presentation.js";
+	import { canOpenDrawerStream } from "../../lib/websocket/presentation.js";
 	import IDCell from "../../lib/components/IDCell.svelte";
 	import {
 		CreateLaunchpadEntry,
@@ -120,14 +120,11 @@
 	let contextMenu;
 	let selectedPairID;
 
-	const canOpenStream = (meta) =>
-		upgradePresentation(upgradeFromDrawerMeta(meta)).canOpen;
-
 	function openWebSocketStream() {
 		const meta = $drawerStore?.meta;
 		if (
 			!drawerOpened ||
-			!canOpenStream(meta) ||
+			!canOpenDrawerStream(meta) ||
 			$modalStore[0]
 		)
 			return;
@@ -1149,7 +1146,7 @@
 	// The menu lists the actions of the drawer's current state.
 	$: menuOptions = !$drawerStore.open
 		? ledgerMenu
-		: canOpenStream($drawerStore.meta)
+		: canOpenDrawerStream($drawerStore.meta)
 			? [websocketDrawerMenuItem, ...drawerMenu]
 			: drawerMenu;
 

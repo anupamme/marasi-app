@@ -8,7 +8,13 @@
 	$: upgrade = upgradePresentation(upgradeFromLedgerRow(row));
 
 	$: activeIcons = [
-		{ show: upgrade.isUpgrade, component: Radio, className: upgrade.iconClass },
+		{
+			show: upgrade.isUpgrade,
+			component: Radio,
+			className: upgrade.iconClass,
+			slashed: upgrade.slashed,
+			tooltip: upgrade.tooltip,
+		},
 		{ show: row.Metadata?.launchpad, component: SendIcon },
 		{ show: row.Metadata?.armory_run_id, component: Swords },
 		{ show: row.Metadata?.intercepted, component: FlagIcon },
@@ -33,7 +39,32 @@
 	{#if activeIcons.length > 0}
 		<div class="flex flex-row gap-1">
 			{#each activeIcons as icon}
-				<svelte:component this={icon.component} size="14" class={icon.className || ""} />
+				{#if icon.slashed}
+					<!-- The slash is drawn over the icon inside its own 14px box, so
+					     the icon's size and the row's spacing don't change. -->
+					<span
+						class="relative inline-flex h-[14px] w-[14px] shrink-0 {icon.className || ''}"
+						title={icon.tooltip}
+						aria-label={icon.tooltip}
+					>
+						<svelte:component this={icon.component} size="14" />
+						<svg
+							class="pointer-events-none absolute inset-0"
+							width="14"
+							height="14"
+							viewBox="0 0 24 24"
+							fill="none"
+							stroke="currentColor"
+							stroke-width="2"
+							stroke-linecap="round"
+							aria-hidden="true"
+						>
+							<line x1="3" y1="3" x2="21" y2="21" />
+						</svg>
+					</span>
+				{:else}
+					<svelte:component this={icon.component} size="14" class={icon.className || ""} />
+				{/if}
 			{/each}
 		</div>
 	{:else}

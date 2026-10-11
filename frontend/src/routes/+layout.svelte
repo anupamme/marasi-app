@@ -263,7 +263,7 @@
 						? "client to server"
 						: "server to client";
 				toastStore.trigger({
-					message: `WebSocket frame intercepted (${direction})`,
+					message: `WebSocket message intercepted (${direction})`,
 				});
 			});
 			EventsOn("ws-open", (conn) => {

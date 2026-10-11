@@ -74,6 +74,15 @@ test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer",
   );
 });
 
+test("⌘⇧O does not open a stream for a failed or dropped upgrade", () => {
+  const dispatcher = mac();
+  const press = () => cmdShift("O", "KeyO");
+  for (const state of ["failed", "dropped"]) {
+    const meta = { metadata: { protocol: "websocket", "websocket.state": state } };
+    assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer(meta))), null, state);
+  }
+});
+
 test("⌘⇧] steps Armory runs on the page and the run's requests in its request drawer", () => {
   const dispatcher = mac();
   const press = () => cmdShift("]", "BracketRight");

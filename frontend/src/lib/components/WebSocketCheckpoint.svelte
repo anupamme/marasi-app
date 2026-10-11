@@ -102,9 +102,9 @@
 	>
 		<span class="chip variant-soft-surface text-xs">
 			{queue.length === 1
-				? "1 frame queued"
+				? "1 message queued"
 				: queue.length > 1
-					? `${queue.length} frames queued`
+					? `${queue.length} messages queued`
 					: "Queue empty"}
 		</span>
 
@@ -182,7 +182,7 @@
 		</div>
 	{:else}
 		<div class="flex min-h-0 flex-1 items-center justify-center text-sm opacity-60">
-			No WebSocket frames in the interception queue
+			No WebSocket messages in the interception queue
 		</div>
 	{/if}
 </div>

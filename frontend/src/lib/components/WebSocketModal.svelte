@@ -30,6 +30,7 @@
 	import WebSocketMessagesTable from "./WebSocketMessagesTable.svelte";
 	import { connectionStore } from "../../stores/connectionStore";
 	import { CloseWebSocket } from "../wailsjs/go/main/App";
+	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
@@ -145,22 +146,14 @@
 		request?.Request?.ID ||
 		request?.ID ||
 		$modalStore[0]?.meta?.requestId;
-	$: isWebSocket =
-		request?.Metadata?.protocol === "websocket" ||
-		request?.Response?.StatusCode === 101 ||
-		request?.Response?.ContentType === "websocket";
-	$: wsState =
-		$connectionStore.connectionsByRequestId[requestId]?.State ||
-		request?.Metadata?.["websocket.state"] ||
-		"";
-	$: wsColor =
-		wsState === "open"
-			? "text-success-500"
-			: wsState === "pending"
-				? "text-warning-500"
-				: isWebSocket
-					? "text-error-500"
-					: "";
+	$: upgrade = upgradePresentation(
+		upgradeFromRequest(
+			request,
+			$connectionStore.connectionsByRequestId[requestId]?.State,
+		),
+	);
+	$: wsState = upgrade.state;
+	$: wsColor = upgrade.iconClass;
 	$: frameCount = ($connectionStore.messagesByRequestId[requestId] || [])
 		.length;
 	$: transport =

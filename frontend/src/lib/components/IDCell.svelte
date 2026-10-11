@@ -1,15 +1,14 @@
 <script>
 	import { SendIcon, FlagIcon, EditIcon, Replace, Radio, Edit2Icon, Swords } from "lucide-svelte";
+	import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presentation.js";
 
 	export let index;
 	export let row;
 
-	$: isWebSocket = row.Metadata?.protocol === "websocket" || row.StatusCode === 101 || row.ContentType === "websocket";
-	$: wsState = row.Metadata?.["websocket.state"] || "";
-	$: wsColor = wsState === "open" ? "text-success-500" : wsState === "pending" ? "text-warning-500" : isWebSocket ? "text-error-500" : "";
+	$: upgrade = upgradePresentation(upgradeFromLedgerRow(row));
 
 	$: activeIcons = [
-		{ show: isWebSocket, component: Radio, className: wsColor },
+		{ show: upgrade.isUpgrade, component: Radio, className: upgrade.iconClass },
 		{ show: row.Metadata?.launchpad, component: SendIcon },
 		{ show: row.Metadata?.armory_run_id, component: Swords },
 		{ show: row.Metadata?.intercepted, component: FlagIcon },

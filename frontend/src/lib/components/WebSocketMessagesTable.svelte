@@ -25,6 +25,8 @@
 		wsInjectDraft,
 	} from "../../stores/connectionStore";
 	import { marasiConfig, lineWrap } from "../../stores";
+	import { messageRow } from "../websocket/presentation.js";
+	import WebSocketMessageProperties from "./WebSocketMessageProperties.svelte";
 
 	export let requestId;
 	export let onOpenInject = () => {};
@@ -111,14 +113,9 @@
 		const dropped = msg.Metadata?.dropped
 			? "line-through decoration-error-500/70"
 			: "";
-		return `${closeFrame} ${dropped}`;
+		return `${closeFrame} ${dropped} ${messageRow(msg).edgeClass}`;
 	}
 
-	function frameStateTitle(msg) {
-		if (msg.Metadata?.dropped) return "Dropped intercepted message";
-		if (msg.Metadata?.intercepted) return "Forwarded intercepted message";
-		return "";
-	}
 
 	function selectFrame(msg) {
 		if (!msg) {
@@ -378,7 +375,7 @@
 								row.original.ID
 									? 'bg-surface-500/20 outline outline-1 outline-offset-[-1px] outline-primary-500'
 									: ''} {frameStateClasses(row.original)}"
-								title={frameStateTitle(row.original)}
+								title={messageRow(row.original).tooltip}
 								on:click={() =>
 									selectFrame(
 										row.original,
@@ -475,16 +472,6 @@
 							<span class="opacity-60"
 								>{selected.Direction}</span
 							>
-							{#if selected.Metadata?.dropped}
-								<span class="chip variant-soft-error text-xs">
-									Dropped
-								</span>
-							{/if}
-							{#if selected.Metadata?.injected}
-								<span class="chip variant-soft-tertiary text-xs">
-									Injected
-								</span>
-							{/if}
 						{:else}
 							<span class="opacity-60"
 								>No message
@@ -525,6 +512,10 @@
 						</button>
 					</div>
 				</div>
+
+				{#if selected}
+					<WebSocketMessageProperties message={selected} />
+				{/if}
 
 				<div class="min-h-0 flex-1 overflow-auto">
 					{#if selected}

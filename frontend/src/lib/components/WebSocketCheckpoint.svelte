@@ -15,6 +15,7 @@
 	} from "lucide-svelte";
 	import { marasiConfig, lineWrap } from "../../stores";
 	import { connectionStore } from "../../stores/connectionStore";
+	import WebSocketMessageProperties from "./WebSocketMessageProperties.svelte";
 
 	export let requestId;
 
@@ -166,6 +167,8 @@
 			</span>
 			<span class="opacity-60">{formatTime(intercepted.CreatedAt)}</span>
 		</div>
+
+		<WebSocketMessageProperties message={intercepted} />
 
 		<div class="min-h-0 flex-1 overflow-auto">
 			<CodeMirror

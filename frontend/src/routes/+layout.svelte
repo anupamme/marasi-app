@@ -280,6 +280,11 @@
 			EventsOn("ws-progress", (progress) =>
 				connectionStore.upsertProgress(progress),
 			);
+			// An upgrade whose handshake failed or was dropped opens no
+			// connection, so only its Ledger row changes.
+			EventsOn("ws-state", ({ RequestID, State }) =>
+				patchWebSocketMetadata({ RequestID, State }),
+			);
 			EventsOn("log", (newLog) => {
 				if (typeof newLog?.Level !== "string") {
 					return;
@@ -404,6 +409,7 @@
 			EventsOff("ws-open");
 			EventsOff("ws-close");
 			EventsOff("ws-progress");
+			EventsOff("ws-state");
 			EventsOff("intercepted");
 			EventsOff("log");
 			EventsOff("extension_gui_render");

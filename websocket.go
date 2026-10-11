@@ -1,8 +1,14 @@
 package main
 
 import (
+	"errors"
+	"net/http"
+
+	"github.com/google/martian"
+	"github.com/google/martian/fifo"
 	"github.com/google/uuid"
 	marasi "github.com/tfkr-ae/marasi"
+	"github.com/tfkr-ae/marasi/core"
 	"github.com/tfkr-ae/marasi/domain"
 	marasiws "github.com/tfkr-ae/marasi/websocket"
 )
@@ -30,6 +36,54 @@ func (a *App) configureWebSocketHandlers() {
 		}),
 		marasi.WithWebSocketProgressHandler(a.progressRelay()),
 	)
+	a.watchDroppedUpgrades()
+}
+
+// webSocketUpgradeState is the ws-state event: an upgrade request whose
+// handshake ended without a connection, as "failed" or "dropped".
+type webSocketUpgradeState struct {
+	RequestID uuid.UUID
+	State     string
+}
+
+// watchDroppedUpgrades wraps Marasi's modifier pipeline so an upgrade
+// response the pipeline drops emits ws-state. Marasi records websocket.state
+// failed or dropped for it in the database only, so without this the Ledger
+// row would stay pending until it is read again. The pipeline drops the
+// response when the handshake fails, an extension calls res:drop(), or
+// Checkpoint drops it.
+func (a *App) watchDroppedUpgrades() {
+	inner := a.Proxy.Modifiers
+	outer := fifo.NewGroup()
+	outer.AddRequestModifier(inner)
+	outer.AddResponseModifier(martian.ResponseModifierFunc(func(res *http.Response) error {
+		err := inner.ModifyResponse(res)
+		if errors.Is(err, marasi.ErrDropped) {
+			a.emitDroppedUpgrade(res.Request)
+		}
+		return err
+	}))
+	a.Proxy.Modifiers = outer
+}
+
+// emitDroppedUpgrade emits ws-state for req when it is an upgrade request.
+// Marasi has already stored "failed" for a handshake it could not complete;
+// any other drop is stored as "dropped" once the pipeline returns.
+func (a *App) emitDroppedUpgrade(req *http.Request) {
+	if req == nil || !marasiws.IsUpgradeRequest(req) {
+		return
+	}
+	requestID, ok := core.RequestIDFromContext(req.Context())
+	if !ok {
+		return
+	}
+	state := "dropped"
+	if a.Proxy.TrafficRepo != nil {
+		if metadata, err := a.Proxy.TrafficRepo.GetMetadata(requestID); err == nil && metadata["websocket.state"] == "failed" {
+			state = "failed"
+		}
+	}
+	a.emitEvent("ws-state", webSocketUpgradeState{RequestID: requestID, State: state})
 }
 
 // progressQueueSize bounds the progress records waiting to be emitted. Marasi

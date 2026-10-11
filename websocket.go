@@ -28,7 +28,32 @@ func (a *App) configureWebSocketHandlers() {
 			a.emitEvent("ws-intercepted", msg)
 			return nil
 		}),
+		marasi.WithWebSocketProgressHandler(a.progressRelay()),
 	)
+}
+
+// progressQueueSize bounds the progress records waiting to be emitted. Marasi
+// throttles progress per message, so a full queue means the frontend is far
+// behind and dropping a record only skips an intermediate count.
+const progressQueueSize = 64
+
+// progressRelay returns a progress handler that never blocks Marasi's relay.
+// Records go to one goroutine that emits ws-progress in arrival order; a
+// record that finds the queue full is dropped.
+func (a *App) progressRelay() func(domain.WebSocketMessageProgress) error {
+	queue := make(chan domain.WebSocketMessageProgress, progressQueueSize)
+	go func() {
+		for progress := range queue {
+			a.emitEvent("ws-progress", progress)
+		}
+	}()
+	return func(progress domain.WebSocketMessageProgress) error {
+		select {
+		case queue <- progress:
+		default:
+		}
+		return nil
+	}
 }
 
 func (a *App) GetWebSocketMessages(id uuid.UUID) ([]*domain.WebSocketMessage, error) {

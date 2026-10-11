@@ -31,6 +31,8 @@
 	import { connectionStore } from "../../stores/connectionStore";
 	import { CloseWebSocket } from "../wailsjs/go/main/App";
 	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
+	import { progressChip } from "../websocket/progress.js";
+	import { Loader } from "lucide-svelte";
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
@@ -168,6 +170,8 @@
 		request?.Request?.Path ||
 		$connectionStore.connectionsByRequestId[requestId]?.Path ||
 		"";
+	$: progress = $connectionStore.progressByRequestId[requestId];
+	$: chip = progress ? progressChip(progress) : null;
 
 	async function closeConnection() {
 		if (!requestId || wsState !== "open" || closing) return;
@@ -211,6 +215,16 @@
 				<span class="shrink-0 text-sm opacity-70"
 					>{frameCount} messages</span
 				>
+				{#if chip}
+					<span
+						class="chip variant-soft-primary shrink-0 text-xs"
+						title="A message is still arriving; it appears in Stream once its last frame is in"
+					>
+						<Loader size={12} class="animate-spin" />
+						{chip.arrow}
+						{chip.label}
+					</span>
+				{/if}
 			</div>
 
 			<div class="flex items-center gap-2">

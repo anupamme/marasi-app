@@ -209,7 +209,7 @@
 					{transport}://{host}{path}
 				</h2>
 				<span class="shrink-0 text-sm opacity-70"
-					>{frameCount} frames</span
+					>{frameCount} messages</span
 				>
 			</div>
 

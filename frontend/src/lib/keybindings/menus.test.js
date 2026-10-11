@@ -253,6 +253,55 @@ test("the WebSocket modal keeps global actions but not the drawer or page beneat
   assert.equal(dispatcher.resolve(cmdShift("[", "BracketLeft"), armory), null);
 });
 
+// Marasi stores whole WebSocket messages, so menu text says "message" while
+// action ids keep "frame" (ADR 0003).
+const websocketMessageActions = [
+  "websocket.stream.previous-frame",
+  "websocket.stream.next-frame",
+  "websocket.stream.toggle-frame-metadata",
+  "websocket.stream.copy-frame-to-inject",
+  "websocket.checkpoint.forward-frame",
+  "websocket.checkpoint.drop-frame",
+  "websocket.inject.inject-frame",
+];
+
+test("WebSocket menu actions say message, never frame, and keep their ids", () => {
+  const catalog = buildCatalog();
+  const websocketActions = catalog.actions.filter(
+    (a) => a.context.startsWith("websocket") || a.id === "ledger.drawer-open.websocket.open-stream",
+  );
+  for (const a of websocketActions) {
+    assert.doesNotMatch(`${a.label} | ${a.description} | ${a.keywords}`, /frame/i, a.id);
+  }
+  for (const id of websocketMessageActions) {
+    const a = catalog.get(id);
+    assert.ok(a, id);
+    assert.match(a.label, /message/i, id);
+    assert.match(a.keywords, /message/i, id);
+  }
+  assert.equal(catalog.get("websocket.stream.previous-frame").label, "Previous WebSocket Message");
+  assert.equal(catalog.get("websocket.inject.inject-frame").label, "Inject WebSocket Message");
+});
+
+test("a saved profile that rebinds a relabelled WebSocket action still runs it", () => {
+  const profile = {
+    id: "work",
+    name: "Work",
+    overrides: {
+      [MACOS]: [{ action: "websocket.stream.next-frame", keys: ["meta+shift+j"] }],
+      [WINDOWS_LINUX]: [],
+    },
+    knownActions: buildCatalog().actions.map((a) => a.id),
+  };
+  const dispatcher = createDispatcher({
+    catalog: buildCatalog(),
+    platform: MACOS,
+    keybindings: { config: { version: 1, activeProfile: "work", profiles: [profile] }, problem: "" },
+  });
+  assert.equal(dispatcher.resolve(cmdShift("J", "KeyJ"), websocketModal("stream")), "websocket.stream.next-frame");
+  assert.equal(dispatcher.resolve(cmdShift("}", "BracketRight"), websocketModal("stream")), null);
+});
+
 test("a modal closes on its opening action's binding for the current platform", () => {
   const dispatcher = mac();
   const finding = { ...on("/ledger", requestDrawer()), modal: "Finding" };

@@ -1,0 +1,3 @@
+# WebSocket menu action ids keep "frame"
+
+Marasi now stores a whole WebSocket message, not each WebSocket frame, so every user-visible label in the WebSocket modal says "message". The ids of its menu actions keep "frame", for example `websocket.stream.previous-frame`, `websocket.checkpoint.forward-frame` and `websocket.inject.inject-frame`. Keybinding profiles store bindings by action id, so renaming the ids would silently drop every researcher's customization of these actions, or need a migration that maps old ids to new ones. Ids are never shown to the researcher, so the mismatch costs only a reader of the catalog. Rename them only alongside such a migration.

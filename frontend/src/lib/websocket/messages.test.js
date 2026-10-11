@@ -170,3 +170,12 @@ test("a too-large message shows the size seen, not the bytes kept", () => {
   );
   assert.equal(fragmented.size, "> 12 B");
 });
+
+// A message Marasi could not decompress is stored as the compressed bytes
+// received, so its size is not the message's size.
+test("a corrupt message's size is marked as the compressed size", () => {
+  const props = messageProperties(
+    message({ Opcode: 2, Payload: toBase64("abcdefghij"), Compressed: true, Metadata: { inflate_error: "flate: corrupt input" } }),
+  );
+  assert.equal(props.size, "10 B compressed");
+});

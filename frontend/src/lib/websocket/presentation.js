@@ -256,16 +256,20 @@ const DIRECTIONS = {
 
 // The properties grid's values, as display strings. A close Marasi sent is
 // stored with the direction of the peer it imitates, so the direction says
-// who really sent it.
+// who really sent it. A message Marasi could not decompress keeps the
+// compressed bytes, so its size says so.
 export function messageProperties(message) {
   const metadata = message?.Metadata || {};
   const direction = DIRECTIONS[message?.Direction] ?? String(message?.Direction ?? "");
+  const kept = formatSize(payloadBytes(message).length);
   return {
     type: MESSAGE_TYPES[message?.Opcode] ?? String(message?.Opcode ?? ""),
     direction: metadata.generated ? `${direction} (sent by Marasi)` : direction,
     size: metadata.too_large
       ? `> ${formatSize(metadata.size_seen)}`
-      : formatSize(payloadBytes(message).length),
+      : metadata.inflate_error
+        ? `${kept} compressed`
+        : kept,
     frames: String(message?.FrameCount ?? ""),
     compressed: message?.Compressed ? "yes" : "no",
   };

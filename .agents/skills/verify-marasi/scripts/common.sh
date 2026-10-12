@@ -3,6 +3,12 @@
 set -eu
 
 SCRIPT_DIR=$(CDPATH= cd -- "$(dirname -- "$0")" && pwd)
+# Node 20 needs --experimental-websocket for the global WebSocket used by cdp.mjs.
+# Node 22+ exposes it by default; the flag remains harmless there.
+case ${NODE_OPTIONS-} in
+	*--experimental-websocket*) ;;
+	*) export NODE_OPTIONS="${NODE_OPTIONS:+$NODE_OPTIONS }--experimental-websocket" ;;
+esac
 REPO_ROOT=$(CDPATH= cd -- "$SCRIPT_DIR/../../../.." && pwd)
 STATE_DIR=${MARASI_VERIFY_STATE_DIR:-${TMPDIR:-/tmp}/verify-marasi}
 EVIDENCE_ROOT=${MARASI_VERIFY_EVIDENCE_ROOT:-$REPO_ROOT/.artifacts/verify-marasi}
@@ -15,7 +21,12 @@ CDP_PORT_FILE=$STATE_DIR/cdp-port
 CHROME_PID_FILE=$STATE_DIR/chrome.pid
 EVIDENCE_FILE=$STATE_DIR/evidence-dir
 HOME_DIR=$STATE_DIR/home
-APP_CONFIG_DIR="$HOME_DIR/Library/Application Support/Marasi"
+# Match os.UserConfigDir() under the isolated HOME: macOS Application Support,
+# Linux/Windows .config. Doctor and launch seed the same path the app reads.
+case $(uname -s) in
+	Darwin) APP_CONFIG_DIR="$HOME_DIR/Library/Application Support/Marasi" ;;
+	*) APP_CONFIG_DIR="$HOME_DIR/.config/Marasi" ;;
+esac
 APP_BIN=$REPO_ROOT/build/bin/marasi-app.app/Contents/MacOS/marasi-app
 
 recorded_pid() {

@@ -8,6 +8,12 @@ import {
 	GetWSIntercepted,
 	ToggleWSIntercept,
 } from "../lib/wailsjs/go/main/App";
+import {
+	applyProgress,
+	clearProgress,
+	finishMessage,
+	holdMessage,
+} from "../lib/websocket/progress.js";
 
 // Draft payload for the Inject tab (set via "Copy to Inject").
 export const wsInjectDraft = writable(null);
@@ -21,6 +27,7 @@ function createConnectionStore() {
 		interceptionProcessingByRequestId: {},
 		interceptionErrorsByRequestId: {},
 		wsInterceptEnabled: false,
+		progressByRequestId: {},
 	});
 	const { subscribe, set, update } = store;
 
@@ -59,6 +66,10 @@ function createConnectionStore() {
 					...state.interceptionsByRequestId,
 					[msg.RequestID]: next,
 				},
+				progressByRequestId: holdMessage(
+					state.progressByRequestId,
+					msg,
+				),
 			};
 		});
 	}
@@ -136,6 +147,7 @@ function createConnectionStore() {
 				interceptionProcessingByRequestId: {},
 				interceptionErrorsByRequestId: {},
 				wsInterceptEnabled: false,
+				progressByRequestId: {},
 			}),
 
 		upsertInterception,
@@ -196,6 +208,10 @@ function createConnectionStore() {
 						...state.messagesByRequestId,
 						[msg.RequestID]: next,
 					},
+					progressByRequestId: finishMessage(
+						state.progressByRequestId,
+						msg,
+					),
 				};
 			});
 		},
@@ -208,6 +224,30 @@ function createConnectionStore() {
 					...state.connectionsByRequestId,
 					[conn.RequestID]: conn,
 				},
+				progressByRequestId:
+					conn.State === "open"
+						? state.progressByRequestId
+						: clearProgress(
+								state.progressByRequestId,
+								conn.RequestID,
+							),
+			}));
+		},
+
+		upsertProgress: (record) => {
+			if (!record?.RequestID) return;
+			update((state) => ({
+				...state,
+				progressByRequestId: applyProgress(
+					state.progressByRequestId,
+					record,
+					{
+						messages: state.messagesByRequestId[record.RequestID],
+						held: state.interceptionsByRequestId[record.RequestID],
+						connection:
+							state.connectionsByRequestId[record.RequestID],
+					},
+				),
 			}));
 		},
 

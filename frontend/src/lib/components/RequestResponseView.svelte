@@ -40,6 +40,7 @@
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
 	import { armoryStore } from "../../stores/armoryStore";
+	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
 
 	const modalStore = getModalStore();
 	const drawerStore = getDrawerStore();
@@ -318,11 +319,7 @@
 		selectedRow = selectedRow;
 	}
 
-	$: isWebSocket =
-		selectedRow?.Metadata?.protocol === "websocket" ||
-		selectedRow?.Response?.StatusCode === 101 ||
-		selectedRow?.Response?.ContentType === "websocket" ||
-		selectedRow?.Metadata?.["websocket.state"];
+	$: canOpenStream = upgradePresentation(upgradeFromRequest(selectedRow)).canOpen;
 </script>
 
 {#if loading}
@@ -400,7 +397,7 @@
 							</span>
 						{/if}
 					</h5>
-					{#if isWebSocket}
+					{#if canOpenStream}
 						<button
 							type="button"
 							class="mt-0.5 w-fit justify-center inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-xs font-medium variant-soft-primary"

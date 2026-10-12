@@ -263,7 +263,7 @@
 						? "client to server"
 						: "server to client";
 				toastStore.trigger({
-					message: `WebSocket frame intercepted (${direction})`,
+					message: `WebSocket message intercepted (${direction})`,
 				});
 			});
 			EventsOn("ws-open", (conn) => {
@@ -277,6 +277,14 @@
 				);
 				patchWebSocketMetadata(conn);
 			});
+			EventsOn("ws-progress", (progress) =>
+				connectionStore.upsertProgress(progress),
+			);
+			// An upgrade whose handshake failed or was dropped opens no
+			// connection, so only its Ledger row changes.
+			EventsOn("ws-state", ({ RequestID, State }) =>
+				patchWebSocketMetadata({ RequestID, State }),
+			);
 			EventsOn("log", (newLog) => {
 				if (typeof newLog?.Level !== "string") {
 					return;
@@ -400,6 +408,8 @@
 			EventsOff("ws-intercepted");
 			EventsOff("ws-open");
 			EventsOff("ws-close");
+			EventsOff("ws-progress");
+			EventsOff("ws-state");
 			EventsOff("intercepted");
 			EventsOff("log");
 			EventsOff("extension_gui_render");

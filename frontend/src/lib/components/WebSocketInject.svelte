@@ -11,6 +11,12 @@
 		connectionStore,
 		wsInjectDraft,
 	} from "../../stores/connectionStore";
+	import {
+		INJECT_OPCODES,
+		draftOpcode,
+		nextInjectOpcode,
+		offersSendUncompressed,
+	} from "../websocket/inject.js";
 
 	export let requestId;
 
@@ -22,10 +28,11 @@
 	let appliedDraft = null;
 	let injecting = false;
 	let error = "";
-	const opcodes = [0, 1, 2, 8, 9, 10];
+	let neverCompress = false;
 
 	$: connection = $connectionStore.connectionsByRequestId[requestId];
 	$: connectionOpen = connection?.State === "open";
+	$: showSendUncompressed = offersSendUncompressed(connection, opcode);
 
 	$: if (
 		$wsInjectDraft &&
@@ -34,7 +41,7 @@
 	) {
 		appliedDraft = $wsInjectDraft;
 		direction = $wsInjectDraft.direction || "client";
-		opcode = $wsInjectDraft.opcode ?? 1;
+		opcode = draftOpcode($wsInjectDraft.opcode);
 		payloadText = $wsInjectDraft.payload || "";
 	}
 
@@ -43,8 +50,7 @@
 	}
 
 	export function cycleOpcode() {
-		const index = opcodes.indexOf(Number(opcode));
-		opcode = opcodes[(index + 1) % opcodes.length];
+		opcode = nextInjectOpcode(opcode);
 	}
 
 	export async function inject() {
@@ -57,15 +63,16 @@
 				direction,
 				Number(opcode),
 				payloadText,
+				showSendUncompressed && neverCompress,
 			);
 			toastStore.trigger({
-				message: "WebSocket frame injected",
+				message: "WebSocket message injected",
 				background: "variant-filled-success",
 			});
 		} catch (err) {
 			error = String(err);
 			toastStore.trigger({
-				message: "Unable to inject WebSocket frame",
+				message: "Unable to inject WebSocket message",
 				background: "variant-filled-error",
 			});
 		} finally {
@@ -100,12 +107,9 @@
 					class="select select-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					bind:value={opcode}
 				>
-					<option value={0}>Continuation</option>
-					<option value={1}>Text</option>
-					<option value={2}>Binary</option>
-					<option value={8}>Close</option>
-					<option value={9}>Ping</option>
-					<option value={10}>Pong</option>
+					{#each INJECT_OPCODES as { value, label }}
+						<option {value}>{label}</option>
+					{/each}
 				</select>
 			</label>
 		</div>
@@ -130,6 +134,23 @@
 			</button>
 		</div>
 	</div>
+
+	{#if showSendUncompressed}
+		<label
+			class="flex shrink-0 items-center gap-2 border-b border-surface-500/30 px-3 py-1.5 text-xs"
+		>
+			<input
+				type="checkbox"
+				class="checkbox"
+				bind:checked={neverCompress}
+			/>
+			Send uncompressed
+			<span class="opacity-60"
+				>— this connection uses permessage-deflate; by default
+				Marasi compresses injected messages like the peer would.</span
+			>
+		</label>
+	{/if}
 
 	{#if error}
 		<div

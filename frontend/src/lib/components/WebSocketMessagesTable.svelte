@@ -25,6 +25,8 @@
 		wsInjectDraft,
 	} from "../../stores/connectionStore";
 	import { marasiConfig, lineWrap } from "../../stores";
+	import { messageRow } from "../websocket/presentation.js";
+	import WebSocketMessageProperties from "./WebSocketMessageProperties.svelte";
 
 	export let requestId;
 	export let onOpenInject = () => {};
@@ -106,19 +108,15 @@
 		});
 	}
 
-	function frameStateClasses(msg) {
-		const closeFrame = msg.Opcode === 8 ? "!bg-primary-500/10" : "";
+	// presented is messageRow(msg), computed once per row by the caller.
+	function messageStateClasses(msg, presented) {
+		const closeMessage = msg.Opcode === 8 ? "!bg-primary-500/10" : "";
 		const dropped = msg.Metadata?.dropped
 			? "line-through decoration-error-500/70"
 			: "";
-		return `${closeFrame} ${dropped}`;
+		return `${closeMessage} ${dropped} ${presented.edgeClass}`;
 	}
 
-	function frameStateTitle(msg) {
-		if (msg.Metadata?.dropped) return "Dropped intercepted frame";
-		if (msg.Metadata?.intercepted) return "Forwarded intercepted frame";
-		return "";
-	}
 
 	function selectFrame(msg) {
 		if (!msg) {
@@ -373,12 +371,13 @@
 					</thead>
 					<tbody>
 						{#each $table.getRowModel().rows as row, i (row.original.ID)}
+							{@const presented = messageRow(row.original)}
 							<tr
 								class="cursor-pointer {selected?.ID ===
 								row.original.ID
 									? 'bg-surface-500/20 outline outline-1 outline-offset-[-1px] outline-primary-500'
-									: ''} {frameStateClasses(row.original)}"
-								title={frameStateTitle(row.original)}
+									: ''} {messageStateClasses(row.original, presented)}"
+								title={presented.tooltip}
 								on:click={() =>
 									selectFrame(
 										row.original,
@@ -429,7 +428,7 @@
 									class="p-4 text-center opacity-60"
 								>
 									No
-									frames
+									messages
 									yet
 								</td>
 							</tr>
@@ -475,19 +474,9 @@
 							<span class="opacity-60"
 								>{selected.Direction}</span
 							>
-							{#if selected.Metadata?.dropped}
-								<span class="chip variant-soft-error text-xs">
-									Dropped
-								</span>
-							{/if}
-							{#if selected.Metadata?.injected}
-								<span class="chip variant-soft-tertiary text-xs">
-									Injected
-								</span>
-							{/if}
 						{:else}
 							<span class="opacity-60"
-								>No frame
+								>No message
 								selected</span
 							>
 						{/if}
@@ -510,7 +499,7 @@
 								class="mr-1"
 							/>
 							{view === "metadata"
-								? "View Frame"
+								? "View Message"
 								: "Metadata"}
 						</button>
 						<button
@@ -525,6 +514,10 @@
 						</button>
 					</div>
 				</div>
+
+				{#if selected}
+					<WebSocketMessageProperties message={selected} />
+				{/if}
 
 				<div class="min-h-0 flex-1 overflow-auto">
 					{#if selected}

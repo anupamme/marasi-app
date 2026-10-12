@@ -48,6 +48,7 @@
 		marasiConfig,
 	} from "../../../stores.js";
 	import {
+		chromeError,
 		copyCertificate,
 		downloadCertificate,
 		listenerModal,
@@ -91,7 +92,7 @@
 		"global.go-workshop": () => closeAndGoto("/workshop"),
 		"global.go-settings": () => closeAndGoto("/settings"),
 		"global.start-chrome": () =>
-			StartBrowser("").then(() => console.log("Chrome started")),
+			StartBrowser("").catch(chromeError(toastStore, "Error starting Chrome")),
 		"global.download-certificate": () => downloadCertificate(toastStore),
 		"global.copy-certificate": () => copyCertificate(toastStore),
 		"global.jump-to-toast": () => {

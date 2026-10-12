@@ -1,19 +1,9 @@
 // Menu contexts: Marasi-defined pages and interface states that decide which
 // menu actions are eligible. Each context has a tier; when several eligible
 // contexts bind the same key, the most specific tier wins.
-export const TIERS = ["overlay", "drawer", "page", "global"];
+import { canOpenDrawerStream } from "../websocket/presentation.js";
 
-// Whether the request in a drawer's meta is a WebSocket upgrade, so its
-// stream can be opened.
-export function isWebSocketUpgrade(meta) {
-  const response = meta?.incomingResponse || meta?.response;
-  return (
-    meta?.metadata?.protocol === "websocket" ||
-    response?.StatusCode === 101 ||
-    response?.ContentType === "websocket" ||
-    Boolean(meta?.metadata?.["websocket.state"])
-  );
-}
+export const TIERS = ["overlay", "drawer", "page", "global"];
 
 // A page (and its drawers) is eligible on its route while no modal covers
 // it. Only the WebSocket modal lets menu actions through the gate; under it,
@@ -27,7 +17,14 @@ const requestDrawerOpen = (state) =>
 export const WEBSOCKET_MODAL = "WebsocketStream";
 // The WebSocket modal's tabs, in tab order. The modal publishes the open one
 // as `state.websocketTab`.
-export const WEBSOCKET_TABS = ["stream", "checkpoint", "inject"];
+export const WEBSOCKET_TABS = ["stream", "checkpoint", "inject", "connection"];
+// The tab `step` places after `tab` (negative steps go back), wrapping
+// around: what the previous-tab and next-tab actions move to.
+export function stepWebSocketTab(tab, step) {
+  const count = WEBSOCKET_TABS.length;
+  const index = Math.max(WEBSOCKET_TABS.indexOf(tab), 0);
+  return WEBSOCKET_TABS[(((index + step) % count) + count) % count];
+}
 const websocketModalOpen = (state) => state.modal === WEBSOCKET_MODAL;
 
 // `page` and `state` name the context for people (the keybinding settings
@@ -69,6 +66,7 @@ export const CONTEXTS = [
     ["stream", "Stream"],
     ["checkpoint", "Checkpoint"],
     ["inject", "Inject"],
+    ["connection", "Connection"],
   ].map(([tab, name]) => ({
     id: `websocket.${tab}`,
     tier: "overlay",
@@ -98,7 +96,7 @@ export const CONTEXTS = [
     isEligible: (state) =>
       onRoute("/ledger")(state) &&
       drawerOpen(state) &&
-      isWebSocketUpgrade(state.drawer.meta),
+      canOpenDrawerStream(state.drawer.meta),
   },
   {
     id: "ledger.drawer-open",

@@ -377,12 +377,27 @@ func waitForExtensionLog(t *testing.T, app *App, name, text string) {
 type recordedEvents struct {
 	mu    sync.Mutex
 	names []string
+	data  [][]any
 }
 
-func (events *recordedEvents) emit(name string, _ ...any) {
+func (events *recordedEvents) emit(name string, data ...any) {
 	events.mu.Lock()
 	defer events.mu.Unlock()
 	events.names = append(events.names, name)
+	events.data = append(events.data, data)
+}
+
+// first returns the data of the first event called name, or false when none
+// has been emitted.
+func (events *recordedEvents) first(name string) ([]any, bool) {
+	events.mu.Lock()
+	defer events.mu.Unlock()
+	for i, recorded := range events.names {
+		if recorded == name {
+			return events.data[i], true
+		}
+	}
+	return nil, false
 }
 
 func (events *recordedEvents) has(name string) bool {

@@ -191,8 +191,8 @@ func TestAppCheckpoint(t *testing.T) {
 		if err := receiveAppHoldResult(t, done); err != nil {
 			t.Fatalf("wanted: nil\ngot: %v", err)
 		}
-		if string(message.Frame.Payload) != "edited" {
-			t.Fatalf("wanted payload %q\ngot: %q", "edited", message.Frame.Payload)
+		if string(message.Payload) != "edited" {
+			t.Fatalf("wanted payload %q\ngot: %q", "edited", message.Payload)
 		}
 	})
 
@@ -256,7 +256,9 @@ func startAppWebSocketHold(t *testing.T, app *App) (*marasiws.Message, <-chan er
 		ID:           id,
 		ConnectionID: uuid.New(),
 		RequestID:    uuid.New(),
-		Frame:        marasiws.Frame{Opcode: marasiws.OpText, Payload: []byte("held")},
+		Opcode:       marasiws.OpText,
+		Payload:      []byte("held"),
+		FrameCount:   1,
 	}
 	done := make(chan error, 1)
 	go func() {

@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { buildCatalog, createCatalog } from "./catalog.js";
-import { CONTEXTS, contextsConflict } from "./contexts.js";
+import { CONTEXTS, contextsConflict, stepWebSocketTab } from "./contexts.js";
 import { createDispatcher } from "./dispatcher.js";
 import { MACOS, WINDOWS_LINUX } from "./platform.js";
 import { factoryKeybindings } from "./profiles.js";
@@ -72,6 +72,15 @@ test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer",
     dispatcher.resolve(press(), on("/ledger", requestDrawer({ incomingResponse: { StatusCode: 101 } }))),
     "ledger.drawer-open.websocket.open-stream",
   );
+});
+
+test("⌘⇧O does not open a stream for a failed or dropped upgrade", () => {
+  const dispatcher = mac();
+  const press = () => cmdShift("O", "KeyO");
+  for (const state of ["failed", "dropped"]) {
+    const meta = { metadata: { protocol: "websocket", "websocket.state": state } };
+    assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer(meta))), null, state);
+  }
 });
 
 test("⌘⇧] steps Armory runs on the page and the run's requests in its request drawer", () => {
@@ -253,6 +262,55 @@ test("the WebSocket modal keeps global actions but not the drawer or page beneat
   assert.equal(dispatcher.resolve(cmdShift("[", "BracketLeft"), armory), null);
 });
 
+// Marasi stores whole WebSocket messages, so menu text says "message" while
+// action ids keep "frame" (ADR 0003).
+const websocketMessageActions = [
+  "websocket.stream.previous-frame",
+  "websocket.stream.next-frame",
+  "websocket.stream.toggle-frame-metadata",
+  "websocket.stream.copy-frame-to-inject",
+  "websocket.checkpoint.forward-frame",
+  "websocket.checkpoint.drop-frame",
+  "websocket.inject.inject-frame",
+];
+
+test("WebSocket menu actions say message, never frame, and keep their ids", () => {
+  const catalog = buildCatalog();
+  const websocketActions = catalog.actions.filter(
+    (a) => a.context.startsWith("websocket") || a.id === "ledger.drawer-open.websocket.open-stream",
+  );
+  for (const a of websocketActions) {
+    assert.doesNotMatch(`${a.label} | ${a.description} | ${a.keywords}`, /frame/i, a.id);
+  }
+  for (const id of websocketMessageActions) {
+    const a = catalog.get(id);
+    assert.ok(a, id);
+    assert.match(a.label, /message/i, id);
+    assert.match(a.keywords, /message/i, id);
+  }
+  assert.equal(catalog.get("websocket.stream.previous-frame").label, "Previous WebSocket Message");
+  assert.equal(catalog.get("websocket.inject.inject-frame").label, "Inject WebSocket Message");
+});
+
+test("a saved profile that rebinds a relabelled WebSocket action still runs it", () => {
+  const profile = {
+    id: "work",
+    name: "Work",
+    overrides: {
+      [MACOS]: [{ action: "websocket.stream.next-frame", keys: ["meta+shift+j"] }],
+      [WINDOWS_LINUX]: [],
+    },
+    knownActions: buildCatalog().actions.map((a) => a.id),
+  };
+  const dispatcher = createDispatcher({
+    catalog: buildCatalog(),
+    platform: MACOS,
+    keybindings: { config: { version: 1, activeProfile: "work", profiles: [profile] }, problem: "" },
+  });
+  assert.equal(dispatcher.resolve(cmdShift("J", "KeyJ"), websocketModal("stream")), "websocket.stream.next-frame");
+  assert.equal(dispatcher.resolve(cmdShift("}", "BracketRight"), websocketModal("stream")), null);
+});
+
 test("a modal closes on its opening action's binding for the current platform", () => {
   const dispatcher = mac();
   const finding = { ...on("/ledger", requestDrawer()), modal: "Finding" };
@@ -303,4 +361,35 @@ test("WebSocket tab actions are inert while the modal is closed", () => {
   const dispatcher = mac();
   const state = { ...on("/ledger", requestDrawer(websocketUpgrade)), websocketTab: "inject" };
   assert.equal(dispatcher.resolve(cmdShift("D", "KeyD"), state), "ledger.drawer-open.unlink-test-case");
+});
+
+test("the WebSocket Connection tab offers only the modal's shared actions", () => {
+  const conflict = (a, b) => contextsConflict(CONTEXTS, a, b);
+  assert.ok(conflict("websocket.connection", "websocket"));
+  assert.ok(!conflict("websocket.connection", "websocket.stream"));
+  assert.ok(!conflict("websocket.connection", "websocket.inject"));
+  const catalog = buildCatalog();
+  assert.ok(catalog.contexts.some((c) => c.id === "websocket.connection"));
+  assert.deepEqual(catalog.actions.filter((a) => a.context === "websocket.connection"), []);
+
+  const dispatcher = mac();
+  const state = websocketModal("connection");
+  assert.equal(dispatcher.resolve(cmd("[", "BracketLeft"), state), "websocket.previous-tab");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), state), "websocket.next-tab");
+  assert.equal(dispatcher.resolve(cmdShift("X", "KeyX"), state), "websocket.close-connection");
+  for (const [key, code] of [["D", "KeyD"], ["I", "KeyI"], ["F", "KeyF"], ["Enter", "Enter"], ["}", "BracketRight"]]) {
+    assert.equal(dispatcher.resolve(cmdShift(key, code), state), null, key);
+  }
+});
+
+test("the previous-tab and next-tab keys cycle through all four WebSocket tabs", () => {
+  const forward = [];
+  let tab = "stream";
+  for (let i = 0; i < 4; i++) {
+    tab = stepWebSocketTab(tab, 1);
+    forward.push(tab);
+  }
+  assert.deepEqual(forward, ["checkpoint", "inject", "connection", "stream"]);
+  assert.equal(stepWebSocketTab("stream", -1), "connection");
+  assert.equal(stepWebSocketTab("connection", -1), "inject");
 });

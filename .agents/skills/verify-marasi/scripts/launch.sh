@@ -6,7 +6,18 @@ set -eu
 PORT=${MARASI_VERIFY_PROXY_PORT:-18080}
 DEV_PORT=${MARASI_VERIFY_DEV_PORT:-34115}
 CDP_PORT=${MARASI_VERIFY_CDP_PORT:-0}
-CHROME_BIN=${MARASI_VERIFY_CHROME_BIN:-/Applications/Google Chrome.app/Contents/MacOS/Google Chrome}
+CHROME_BIN=${MARASI_VERIFY_CHROME_BIN:-}
+if [ -z "$CHROME_BIN" ]; then
+	if [ -x "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" ]; then
+		CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+	elif command -v google-chrome >/dev/null 2>&1; then
+		CHROME_BIN=$(command -v google-chrome)
+	elif command -v chromium >/dev/null 2>&1; then
+		CHROME_BIN=$(command -v chromium)
+	else
+		CHROME_BIN="/Applications/Google Chrome.app/Contents/MacOS/Google Chrome"
+	fi
+fi
 
 if [ -f "$PID_FILE" ]; then
 	OLD_PID=$(cat "$PID_FILE")
@@ -72,7 +83,20 @@ cd "$REPO_ROOT"
 
 GOCACHE_VALUE=$(go env GOCACHE)
 GOMODCACHE_VALUE=$(go env GOMODCACHE)
-HOME="$HOME_DIR" GOCACHE="$GOCACHE_VALUE" GOMODCACHE="$GOMODCACHE_VALUE" GOWORK=off wails dev -m -nosyncgomod -nocolour -devserver "localhost:$DEV_PORT" > "$EVIDENCE_DIR/app.log" 2>&1 &
+# Debian/Ubuntu ship webkit2gtk-4.1; Wails needs the webkit2_41 build tag there.
+WAILS_TAGS=${MARASI_VERIFY_WAILS_TAGS:-}
+case $(uname -s) in
+	Linux)
+		if [ -z "$WAILS_TAGS" ] && pkg-config --exists webkit2gtk-4.1 2>/dev/null; then
+			WAILS_TAGS=webkit2_41
+		fi
+		;;
+esac
+WAILS_DEV_ARGS="-m -nosyncgomod -nocolour -devserver localhost:$DEV_PORT"
+if [ -n "$WAILS_TAGS" ]; then
+	WAILS_DEV_ARGS="$WAILS_DEV_ARGS -tags $WAILS_TAGS"
+fi
+HOME="$HOME_DIR" GOCACHE="$GOCACHE_VALUE" GOMODCACHE="$GOMODCACHE_VALUE" GOWORK=off wails dev $WAILS_DEV_ARGS > "$EVIDENCE_DIR/app.log" 2>&1 &
 PID=$!
 printf '%s\n' "$PID" > "$PID_FILE"
 printf 'pid=%s\n' "$PID" >> "$EVIDENCE_DIR/launch.txt"

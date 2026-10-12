@@ -9,7 +9,7 @@ Marasi is a Wails desktop app backed by a local proxy and SQLite project. The Vi
 
 ## Launch
 
-Run from the repository root on macOS:
+Run from the repository root on macOS or Linux:
 
 ```bash
 .agents/skills/verify-marasi/scripts/launch.sh
@@ -97,7 +97,7 @@ Most in-app actions have that painted control plus a MarasiKeys binding. Global 
 .agents/skills/verify-marasi/scripts/drive.sh dashboard compare "Open Project" "cmd+o"
 ```
 
-The compare action requires the feature route to already be visible. It clicks the actionable label, waits for the overlay or route change, and then waits until that text stops changing for 500 ms before capturing. Overlays fill in after they paint; the Project modal shows `No recent projects` until `GetRecentProjects` resolves. It restores the starting page, then sends the shortcut through `Input.dispatchKeyEvent` (`MetaLeft` down, key, key up, `MetaLeft` up). It fails unless both paths paint the same overlay text or land on the same route. Pass or fail, it dismisses its overlay with Escape so the next drive is not blocked.
+The compare action requires the feature route to already be visible. It clicks the actionable label, waits for the overlay or route change, and then waits until that text stops changing for 500 ms before capturing. Overlays fill in after they paint; the Project modal shows `No recent projects` until `GetRecentProjects` resolves. It restores the starting page, then sends the shortcut through `Input.dispatchKeyEvent` (primary modifier down, key, key up, primary modifier up; Meta on macOS, Control on Linux/Windows). It fails unless both paths paint the same overlay text or land on the same route. Pass or fail, it dismisses its overlay with Escape so the next drive is not blocked.
 
 The dashboard `theme` action leaves Home for Settings, sends `Command+U` twice, and fails unless the global appearance changes and returns to its original mode. This proves the global shortcut still reads live state after Home is destroyed.
 
@@ -126,7 +126,7 @@ To replace text, click the editor or input, send `cmd+a`, then `insert`. This wo
 
 Wait for specific resulting content: the unique marker you inserted, a count, or a toast. An existing label or text still in the editor is not a result. Inspect screenshots and persisted side effects even when the sequence passes. A sequence is an input driver, not an automatic proof of the feature's full behavior. End each sequence with its modal or drawer closed. Doctor runs before every drive and refuses residue. After a failure, run `reset.sh`, or clean up and relaunch.
 
-The shipped CDP helper uses Node's built-in `WebSocket`, so it adds no npm package. Chrome defaults to `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`; override `MARASI_VERIFY_CHROME_BIN` when needed.
+The shipped CDP helper uses Node's built-in `WebSocket` (scripts export `NODE_OPTIONS=--experimental-websocket` for Node 20), so it adds no npm package. Chrome defaults to `/Applications/Google Chrome.app/Contents/MacOS/Google Chrome`, then `google-chrome` or `chromium` on PATH; override `MARASI_VERIFY_CHROME_BIN` when needed. On Linux, launch passes `-tags webkit2_41` when `webkit2gtk-4.1` is present (override with `MARASI_VERIFY_WAILS_TAGS`), seeds config under the isolated `~/.config/Marasi`, and maps recipe `cmd`/`⌘` shortcuts to Ctrl so they match Windows/Linux factory bindings.
 
 ## Evidence
 

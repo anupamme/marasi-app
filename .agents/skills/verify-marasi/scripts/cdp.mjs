@@ -200,6 +200,10 @@ async function clickTarget(spec, options = {}) {
 	return point;
 }
 
+// Recipes write cmd+/⌘ for the primary modifier. On macOS that is Meta; on
+// Linux/Windows the app's factory defaults bind Ctrl (DesktopOS !== darwin).
+const PRIMARY_IS_CTRL = process.platform !== "darwin";
+
 function parseShortcut(text) {
 	const parts = String(text)
 		.toLowerCase()
@@ -210,10 +214,13 @@ function parseShortcut(text) {
 		.filter(Boolean);
 	const key = parts.pop();
 	if (!key) throw new Error(`invalid shortcut: ${text}`);
+	const primary = parts.includes("cmd") || parts.includes("command");
+	const explicitMeta = parts.includes("meta");
+	const explicitCtrl = parts.includes("ctrl") || parts.includes("control");
 	return {
-		meta: parts.includes("cmd") || parts.includes("command") || parts.includes("meta"),
+		meta: explicitMeta || (primary && !PRIMARY_IS_CTRL),
 		shift: parts.includes("shift"),
-		ctrl: parts.includes("ctrl") || parts.includes("control"),
+		ctrl: explicitCtrl || (primary && PRIMARY_IS_CTRL),
 		alt: parts.includes("alt"),
 		key,
 	};
@@ -265,7 +272,7 @@ async function pressShortcut(text) {
 		await pressKey("keyDown", typed, event.code, event.keyCode, modifiers, { text: typed, unmodifiedText: event.key });
 	} else await pressKey("rawKeyDown", event.key, event.code, event.keyCode, modifiers, {
 		text: "", unmodifiedText: "",
-		...(parsed.meta && parsed.key === "a" ? {commands: ["selectAll"]} : {}),
+		...((parsed.meta || parsed.ctrl) && parsed.key === "a" ? {commands: ["selectAll"]} : {}),
 	});
 	await pressKey("keyUp", event.key, event.code, event.keyCode, modifiers);
 	if (parsed.alt) await pressKey("keyUp", "Alt", "AltLeft", 18, modifiers & ~1);
@@ -415,6 +422,10 @@ async function compareClickAndShortcut(route) {
 }
 
 async function driveTheme(route) {
+	// Theme may run after another drive left a different route; return to Home first.
+	if (!(await evaluate(onRoute(route)))) {
+		await clickTarget({ selector: route.selector });
+	}
 	await waitFor(onRoute(route), "dashboard route");
 	await clickTarget({ selector: routes.settings.selector });
 	await waitFor(onRoute(routes.settings), "settings route");

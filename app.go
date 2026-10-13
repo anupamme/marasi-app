@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tfkr-ae/marasi/chrome"
@@ -45,6 +46,12 @@ type App struct {
 	// attachFrontendLog sends the project lifecycle's log to the frontend
 	// once startup has the Wails context. Nil in tests.
 	attachFrontendLog func(slog.Handler)
+	// messageDialog shows a native message dialog and returns the pressed
+	// button. Tests replace it.
+	messageDialog func(runtime.MessageDialogOptions) (string, error)
+	// unsavedDrafts is the number of launchpads with a dirty Launchpad
+	// draft, reported by the frontend, which holds drafts in memory only.
+	unsavedDrafts atomic.Int64
 }
 
 // NewApp creates a new App application struct
@@ -88,6 +95,9 @@ func NewApp() *App {
 func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, logWriter io.Writer, logger *slog.Logger) *App {
 	app := &App{Proxy: proxy}
 	app.emitEvent = app.emit
+	app.messageDialog = func(options runtime.MessageDialogOptions) (string, error) {
+		return runtime.MessageDialog(app.ctx, options)
+	}
 	listener := service.NewListenerLifecycle(proxy, logWriter)
 	app.projects = service.NewProjectLifecycle(proxy, configDir, wordlists, logger, app.attachExtensionHooks)
 	listener.BindProject(app.projects)
@@ -258,6 +268,9 @@ func (a *App) OpenProject(name string) (string, error) {
 		filePath = filePath + ".marasi"
 	}
 
+	if !a.confirmDiscardDrafts("Switch Project") {
+		return "", errors.New("project switch cancelled")
+	}
 	confirmed, err := a.confirmCancelArmoryRuns("Switch Project")
 	if err != nil {
 		return "", err
@@ -268,6 +281,8 @@ func (a *App) OpenProject(name string) (string, error) {
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
 		return "", err
 	}
+	// The drafts belonged to the old project and are gone with it.
+	a.unsavedDrafts.Store(0)
 	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
 		log.Printf("recovering interrupted armory runs: %v", err)
 	}
@@ -295,6 +310,9 @@ func (a *App) close(ctx context.Context) {
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
+	if !a.confirmDiscardDrafts("Close Marasi") {
+		return true
+	}
 	confirmed, err := a.confirmCancelArmoryRuns("Close Marasi")
 	if err != nil {
 		log.Printf("cancelling active Armory runs: %v", err)
@@ -302,12 +320,45 @@ func (a *App) beforeClose(ctx context.Context) bool {
 	return err != nil || !confirmed
 }
 
+// SetUnsavedDraftCount records how many launchpads have a dirty Launchpad
+// draft. The frontend calls it whenever that number changes, so quitting or
+// switching the project can warn before the drafts are lost.
+func (a *App) SetUnsavedDraftCount(count int) {
+	a.unsavedDrafts.Store(int64(count))
+}
+
+// confirmDiscardDrafts asks before action discards unsaved Launchpad drafts.
+// It returns true when there are none or the user goes ahead.
+func (a *App) confirmDiscardDrafts(action string) bool {
+	count := a.unsavedDrafts.Load()
+	if count <= 0 {
+		return true
+	}
+	message := fmt.Sprintf("%d launchpads have unsaved drafts.", count)
+	if count == 1 {
+		message = "1 launchpad has an unsaved draft."
+	}
+	result, err := a.messageDialog(runtime.MessageDialogOptions{
+		Type:          runtime.WarningDialog,
+		Title:         action,
+		Message:       message + " " + action + " will discard them. Continue?",
+		Buttons:       []string{"Cancel", action},
+		DefaultButton: "Cancel",
+		CancelButton:  "Cancel",
+	})
+	if err != nil {
+		log.Printf("confirming unsaved launchpad drafts: %v", err)
+		return false
+	}
+	return result == action
+}
+
 func (a *App) confirmCancelArmoryRuns(action string) (bool, error) {
 	if a.Proxy.Armory == nil || len(a.Proxy.Armory.ActiveRunIDs()) == 0 {
 		return true, nil
 	}
 
-	result, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+	result, err := a.messageDialog(runtime.MessageDialogOptions{
 		Type:          runtime.WarningDialog,
 		Title:         action,
 		Message:       action + " will cancel all active Armory runs. Continue?",

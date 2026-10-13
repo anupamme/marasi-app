@@ -408,6 +408,19 @@ test("Launchpad page shortcuts run only on the Launchpad page", () => {
   assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), null);
 });
 
+test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {
+  const dispatcher = mac();
+  const codeMirror = { tagName: "DIV", isContentEditable: true, closest: (s) => (s.includes(".cm-editor") ? {} : null) };
+  const field = { tagName: "INPUT", closest: () => null };
+  for (const target of [codeMirror, field]) {
+    const event = keydown("ArrowDown", "ArrowDown", { metaKey: true, shiftKey: true }, target);
+    assert.equal(dispatcher.resolve(event, on("/launchpad")), null, target.tagName);
+  }
+  // Other Launchpad shortcuts still run from the request editor.
+  const compare = keydown("C", "KeyC", { metaKey: true, shiftKey: true }, codeMirror);
+  assert.equal(dispatcher.resolve(compare, on("/launchpad")), "launchpad.toggle-compare");
+});
+
 test("no Launchpad default hides a global shortcut", () => {
   const catalog = buildCatalog();
   for (const platform of [MACOS, WINDOWS_LINUX]) {

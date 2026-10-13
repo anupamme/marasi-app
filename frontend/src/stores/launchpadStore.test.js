@@ -426,3 +426,74 @@ test("dirty launchpads are listed for the close and quit prompts", async () => {
   store.updateDraft("lp2", "edited");
   assert.deepEqual(dirtyLaunchpadIds(get(store)), ["lp2"]);
 });
+
+test("re-selecting the entry a dirty draft came from keeps the draft", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  store.updateDraft("lp1", "edited");
+  assert.deepEqual(await store.selectEntry("lp1", "b"), { needsConfirm: false });
+  assert.equal(get(store).selectedEntryByLaunchpad.lp1, "b");
+  assert.equal(get(store).draftsByLaunchpad.lp1.raw, "edited");
+});
+
+test("selecting an entry in another launchpad clears its unseen count", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  await store.loadAllEntries();
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\nHost: x\r\n\r\n"));
+  assert.equal(get(store).unseenByLaunchpad.lp2, 1);
+  await store.selectEntry("lp2", "d");
+  assert.equal(get(store).selectedLaunchpadId, "lp2");
+  assert.equal(get(store).unseenByLaunchpad.lp2, 0);
+});
+
+// Timers the test fires by hand.
+function manualTimers() {
+  const pending = new Map();
+  let next = 1;
+  return {
+    setTimer: (fn, ms) => {
+      const id = next++;
+      pending.set(id, { fn, ms });
+      return id;
+    },
+    clearTimer: (id) => pending.delete(id),
+    fireAll: () => {
+      const due = [...pending.values()];
+      pending.clear();
+      due.forEach(({ fn }) => fn());
+    },
+    pending,
+  };
+}
+
+test("a launch whose entry never arrives stops being pending after the timeout", async () => {
+  const timers = manualTimers();
+  const store = createLaunchpadStore(twoLaunchpads(), timers);
+  await store.populate();
+  await store.launch("lp1");
+  assert.ok(get(store).pendingLaunchByLaunchpad.lp1);
+  assert.equal([...timers.pending.values()][0].ms, 15000);
+  timers.fireAll();
+  assert.deepEqual(get(store).pendingLaunchByLaunchpad, {});
+});
+
+test("an arrived launch cancels its timeout", async () => {
+  const timers = manualTimers();
+  const store = createLaunchpadStore(twoLaunchpads(), timers);
+  await store.populate();
+  await store.launch("lp1");
+  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+  assert.equal(timers.pending.size, 0);
+});
+
+test("a timeout from an earlier launch does not clear a newer one", async () => {
+  const timers = manualTimers();
+  const store = createLaunchpadStore(twoLaunchpads(), timers);
+  await store.populate();
+  await store.launch("lp1");
+  const [first] = [...timers.pending.values()];
+  await store.launch("lp1");
+  first.fn();
+  assert.ok(get(store).pendingLaunchByLaunchpad.lp1);
+});

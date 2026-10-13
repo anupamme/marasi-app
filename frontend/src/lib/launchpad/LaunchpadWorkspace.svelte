@@ -50,7 +50,7 @@
 		store.startCompare(selectedId ?? entries[entries.length - 1].ID);
 	}
 	/** Flips the diff between Request and Response while comparing. */
-	export function toggleCompareTab() {
+	export function toggleCompareView() {
 		comparePane?.toggleTab();
 	}
 
@@ -123,7 +123,7 @@
 							aria-label="Launchpad description"
 							on:keydown={onEditKey}
 						/>
-						<button class="btn btn-sm variant-soft-primary px-2" aria-label="Save" title="Save" on:click={saveEdit}>
+						<button class="btn btn-sm {primary} px-2" aria-label="Save" title="Save" on:click={saveEdit}>
 							<Check size={16} />
 						</button>
 						<button class="btn btn-sm variant-soft px-2" aria-label="Cancel" title="Cancel" on:click={() => (editing = false)}>
@@ -164,7 +164,7 @@
 				</button>
 			{/if}
 			<button
-				class="lp-compare-toggle btn btn-sm {compare ? primary : 'variant-soft-primary'}"
+				class="lp-compare-toggle btn btn-sm {compare ? primary : 'variant-soft'}"
 				disabled={!compare && entries.length < 2}
 				title={entries.length < 2 ? "Compare needs at least two entries" : compare ? "Close compare (Esc)" : "Compare the selected entry with another"}
 				on:click={toggleCompare}
@@ -190,7 +190,7 @@
 				{/if}
 			</button>
 			<button
-				class="btn btn-sm variant-soft-primary px-2"
+				class="btn btn-sm variant-soft px-2"
 				aria-label="Delete launchpad"
 				title="Delete launchpad"
 				on:click={onDelete}

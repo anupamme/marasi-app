@@ -1,5 +1,5 @@
 import { eligibleContextIds } from "./contexts.js";
-import { isInEditor, shortcutGate } from "./gate.js";
+import { isEditable, isInEditor, shortcutGate } from "./gate.js";
 import { bindingFromEvent } from "./keys.js";
 import { createKeymap, OPEN_MENU } from "./keymap.js";
 import { liveKeybindings } from "./profiles.js";
@@ -56,7 +56,11 @@ export function createDispatcher({ catalog, platform, overrides = {}, keybinding
     if (gate === "blocked") return null;
     const binding = bindingFromEvent(event);
     if (!binding) return null;
-    const bound = keymap.actionsFor(binding);
+    // Actions that yield to editors leave their keys to a focused field.
+    const editing = isEditable(event.target);
+    const bound = keymap
+      .actionsFor(binding)
+      .filter((id) => !(editing && keymap.catalog.get(id)?.yieldsToEditors));
     if (!bound.length) return null;
     if (gate === "menu-only") return bound.includes(OPEN_MENU) ? OPEN_MENU : null;
     for (const contextId of eligibleContextIds(state, keymap.catalog.contexts)) {

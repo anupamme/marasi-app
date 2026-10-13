@@ -36,7 +36,7 @@ export function isInEditor(target) {
 }
 
 // Inputs, textareas, selects, contenteditable hosts and editor surfaces.
-function isEditable(target) {
+export function isEditable(target) {
   if (!target) return false;
   if (FORM_FIELD_TAGS.has(target.tagName) || target.isContentEditable) return true;
   return isInEditor(target);

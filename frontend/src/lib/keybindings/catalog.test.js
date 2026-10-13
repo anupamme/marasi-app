@@ -234,7 +234,7 @@ test("the Launchpad page offers search, create, sidebar, grouping, compare and j
     ["launchpad.toggle-sidebar", "Toggle Launchpad Sidebar", "meta+\\", "ctrl+\\"],
     ["launchpad.toggle-group-by-status", "Group by Status", "meta+shift+g", "ctrl+shift+g"],
     ["launchpad.toggle-compare", "Compare Entries", "meta+shift+c", "ctrl+shift+c"],
-    ["launchpad.toggle-compare-tab", "Switch Compare Request/Response", "meta+shift+r", "ctrl+shift+r"],
+    ["launchpad.toggle-compare-view", "Switch Compare Request/Response", "meta+shift+r", "ctrl+shift+r"],
     ["launchpad.swap-compare", "Swap Compared Entries", "meta+shift+w", "ctrl+shift+w"],
     ["launchpad.jump-to-latest", "Jump to Latest Entry", "meta+shift+arrowdown", "ctrl+shift+arrowdown"],
   ];

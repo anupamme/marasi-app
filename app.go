@@ -268,10 +268,7 @@ func (a *App) OpenProject(name string) (string, error) {
 		filePath = filePath + ".marasi"
 	}
 
-	if !a.confirmDiscardDrafts("Switch Project") {
-		return "", errors.New("project switch cancelled")
-	}
-	confirmed, err := a.confirmCancelArmoryRuns("Switch Project")
+	confirmed, err := a.confirmLosingWork("Switch Project")
 	if err != nil {
 		return "", err
 	}
@@ -310,10 +307,7 @@ func (a *App) close(ctx context.Context) {
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
-	if !a.confirmDiscardDrafts("Close Marasi") {
-		return true
-	}
-	confirmed, err := a.confirmCancelArmoryRuns("Close Marasi")
+	confirmed, err := a.confirmLosingWork("Close Marasi")
 	if err != nil {
 		log.Printf("cancelling active Armory runs: %v", err)
 	}
@@ -327,49 +321,64 @@ func (a *App) SetUnsavedDraftCount(count int) {
 	a.unsavedDrafts.Store(int64(count))
 }
 
-// confirmDiscardDrafts asks before action discards unsaved Launchpad drafts.
-// It returns true when there are none or the user goes ahead.
-func (a *App) confirmDiscardDrafts(action string) bool {
+// confirmLosingWork asks once before action discards unsaved Launchpad
+// drafts or cancels active Armory runs, naming whichever applies. It returns
+// true when there is nothing to lose, or the user goes ahead and any active
+// Armory runs were cancelled.
+func (a *App) confirmLosingWork(action string) (bool, error) {
+	var losses []string
+	if drafts := a.draftsMessage(); drafts != "" {
+		losses = append(losses, drafts+" "+action+" will discard them.")
+	}
+	hasRuns := a.Proxy != nil && a.Proxy.Armory != nil && len(a.Proxy.Armory.ActiveRunIDs()) > 0
+	if hasRuns {
+		losses = append(losses, action+" will cancel all active Armory runs.")
+	}
+	if len(losses) == 0 {
+		return true, nil
+	}
+	if !a.confirm(action, strings.Join(losses, " ")+" Continue?") {
+		return false, nil
+	}
+	if !hasRuns {
+		return true, nil
+	}
+	return a.cancelArmoryRuns()
+}
+
+// draftsMessage describes the unsaved Launchpad drafts, or is empty.
+func (a *App) draftsMessage() string {
 	count := a.unsavedDrafts.Load()
-	if count <= 0 {
-		return true
+	switch {
+	case count <= 0:
+		return ""
+	case count == 1:
+		return "1 launchpad has an unsaved draft."
+	default:
+		return fmt.Sprintf("%d launchpads have unsaved drafts.", count)
 	}
-	message := fmt.Sprintf("%d launchpads have unsaved drafts.", count)
-	if count == 1 {
-		message = "1 launchpad has an unsaved draft."
-	}
+}
+
+// confirm shows a warning dialog with Cancel and action buttons and reports
+// whether the user pressed action.
+func (a *App) confirm(action, message string) bool {
 	result, err := a.messageDialog(runtime.MessageDialogOptions{
 		Type:          runtime.WarningDialog,
 		Title:         action,
-		Message:       message + " " + action + " will discard them. Continue?",
+		Message:       message,
 		Buttons:       []string{"Cancel", action},
 		DefaultButton: "Cancel",
 		CancelButton:  "Cancel",
 	})
 	if err != nil {
-		log.Printf("confirming unsaved launchpad drafts: %v", err)
+		log.Printf("confirming %s: %v", action, err)
 		return false
 	}
 	return result == action
 }
 
-func (a *App) confirmCancelArmoryRuns(action string) (bool, error) {
-	if a.Proxy.Armory == nil || len(a.Proxy.Armory.ActiveRunIDs()) == 0 {
-		return true, nil
-	}
-
-	result, err := a.messageDialog(runtime.MessageDialogOptions{
-		Type:          runtime.WarningDialog,
-		Title:         action,
-		Message:       action + " will cancel all active Armory runs. Continue?",
-		Buttons:       []string{"Cancel", action},
-		DefaultButton: "Cancel",
-		CancelButton:  "Cancel",
-	})
-	if err != nil || result != action {
-		return false, err
-	}
-
+// cancelArmoryRuns cancels every active Armory run and waits for them to stop.
+func (a *App) cancelArmoryRuns() (bool, error) {
 	activeRunIDs := a.Proxy.Armory.ActiveRunIDs()
 	for _, id := range activeRunIDs {
 		if err := a.Proxy.Armory.CancelRun(id); err != nil {
@@ -562,11 +571,14 @@ func (a *App) ForwardCheckpoint(id uuid.UUID, body string, interceptResponse boo
 func (a *App) DropCheckpoint(id uuid.UUID) error {
 	return a.Proxy.DropCheckpoint(id)
 }
-func (a *App) Repeat(raw string, repeaterId string, useHttps bool) {
-	err := a.Proxy.Launch(raw, repeaterId, useHttps)
-	if err != nil {
+// Repeat launches raw from the launchpad. The error reaches the frontend, so
+// a failed launch is not left pending there.
+func (a *App) Repeat(raw string, repeaterId string, useHttps bool) error {
+	if err := a.Proxy.Launch(raw, repeaterId, useHttps); err != nil {
 		log.Println(err)
+		return err
 	}
+	return nil
 }
 func (a *App) CheckHTTPParse(body string, itemType string) string {
 	switch itemType {

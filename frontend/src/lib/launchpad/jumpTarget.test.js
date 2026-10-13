@@ -27,6 +27,12 @@ test("a last entry cut off by the fold still needs the button", () => {
   assert.deepEqual(jumpTarget(rows, view), { list: "a", label: "L a" });
 });
 
+test("a collapsed header at the top shows no target, not a list further down", () => {
+  const header = (top) => ({ list: null, label: null, top, bottom: top + 20, last: false });
+  const rows = [header(40), row("b", 60), row("b", 200, true)];
+  assert.equal(jumpTarget(rows, view), null);
+});
+
 test("no target when nothing is in view", () => {
   assert.equal(jumpTarget([], view), null);
   assert.equal(jumpTarget([row("a", -100, true)], view), null);

@@ -1,25 +1,49 @@
 // The Launchpad store: launchpads, their entries, and one Launchpad draft per
 // launchpad. Every backend call goes through the injected `api` (see
-// launchpadApi.js for the Wails one), so this module loads under node --test.
+// launchpadStore.js for the Wails one), so this module loads under node --test.
 import { writable } from "svelte/store";
+import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 
 // The draft an empty launchpad starts from.
 export const BLANK_REQUEST = "GET / HTTP/1.1\nHost: \n\n";
+
+// How long a Launch waits for its entry to arrive before it stops being
+// pending. Arrival is asynchronous (Marasi ADR-0011) and some launches, such
+// as WebSocket upgrades, never produce a normal request/response pair.
+export const LAUNCH_TIMEOUT_MS = 15000;
+
+// The state maps keyed by launchpad id. A deleted launchpad leaves all of them.
+const PER_LAUNCHPAD_KEYS = [
+  "entriesByLaunchpad",
+  "selectedEntryByLaunchpad",
+  "draftsByLaunchpad",
+  "pendingLaunchByLaunchpad",
+  "unseenByLaunchpad",
+];
 
 function initialState(projectStateVersion = 0) {
   return {
     projectStateVersion,
     launchpads: [],
-    entriesByLaunchpad: {},
+    ...Object.fromEntries(PER_LAUNCHPAD_KEYS.map((key) => [key, {}])),
     detailsById: {},
     selectedLaunchpadId: null,
-    selectedEntryByLaunchpad: {},
-    draftsByLaunchpad: {},
-    pendingLaunchByLaunchpad: {},
-    unseenByLaunchpad: {},
     search: "",
     compare: null,
   };
+}
+
+// Applies `fn` to every per-launchpad map in state.
+function mapPerLaunchpad(state, fn) {
+  return Object.fromEntries(
+    PER_LAUNCHPAD_KEYS.map((key) => [key, fn(state[key])]),
+  );
+}
+
+// A Launchpad draft: the raw request, the entry it was seeded from (null for
+// a blank one), and whether it launches over HTTPS.
+function makeDraft(raw, seededFrom, previous) {
+  return { raw, seededFrom, useHttps: previous?.useHttps ?? true };
 }
 
 // CodeMirror rewrites \r\n to \n, so drafts compare without them.
@@ -117,11 +141,11 @@ function arriveRequest(state, request) {
     },
     draftsByLaunchpad: {
       ...state.draftsByLaunchpad,
-      [launchpadId]: {
-        raw: draft?.raw === pending.raw ? request.Raw : draft?.raw,
-        seededFrom: request.ID,
-        useHttps: draft?.useHttps ?? true,
-      },
+      [launchpadId]: makeDraft(
+        draft?.raw === pending.raw ? request.Raw : draft?.raw,
+        request.ID,
+        draft,
+      ),
     },
   };
 }
@@ -158,8 +182,29 @@ function arriveResponse(state, response) {
   };
 }
 
-export function createLaunchpadStore(api) {
+export function createLaunchpadStore(
+  api,
+  { setTimer = setTimeout, clearTimer = clearTimeout } = {},
+) {
   let projectStateVersion = 0;
+  // The fallback timer of each pending Launch, by launchpad id.
+  const launchTimers = new Map();
+
+  function stopLaunchTimer(launchpadId) {
+    if (!launchTimers.has(launchpadId)) return;
+    clearTimer(launchTimers.get(launchpadId));
+    launchTimers.delete(launchpadId);
+  }
+
+  // Ends this Launch's pending state, unless a newer Launch replaced it.
+  function clearPending(launchpadId, pending) {
+    if (current.pendingLaunchByLaunchpad[launchpadId] !== pending) return;
+    stopLaunchTimer(launchpadId);
+    update((state) => ({
+      ...state,
+      pendingLaunchByLaunchpad: without(state.pendingLaunchByLaunchpad, launchpadId),
+    }));
+  }
   let current = initialState();
   const { subscribe, set: setStore } = writable(current);
 
@@ -207,16 +252,17 @@ export function createLaunchpadStore(api) {
       },
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: {
-          raw: row?.Request?.Raw ?? "",
-          seededFrom: entryId,
-          useHttps: state.draftsByLaunchpad[launchpadId]?.useHttps ?? true,
-        },
+        [launchpadId]: makeDraft(
+          row?.Request?.Raw ?? "",
+          entryId,
+          state.draftsByLaunchpad[launchpadId],
+        ),
       },
     }));
   }
 
-  async function selectLaunchpad(launchpadId) {
+  // Opens the launchpad without seeding: its unseen arrivals count as seen.
+  function openLaunchpad(launchpadId) {
     update((state) => ({
       ...state,
       selectedLaunchpadId: launchpadId,
@@ -225,6 +271,10 @@ export function createLaunchpadStore(api) {
         ? { ...state.unseenByLaunchpad, [launchpadId]: 0 }
         : state.unseenByLaunchpad,
     }));
+  }
+
+  async function selectLaunchpad(launchpadId) {
+    openLaunchpad(launchpadId);
     if (!launchpadId) return;
     const version = projectStateVersion;
     const entries =
@@ -240,24 +290,33 @@ export function createLaunchpadStore(api) {
       ...state,
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: { raw: BLANK_REQUEST, seededFrom: null, useHttps: true },
+        [launchpadId]: makeDraft(BLANK_REQUEST, null),
       },
     }));
   }
 
   // Returns { needsConfirm: true } instead of replacing a dirty draft.
+  // Re-selecting the entry a dirty draft came from keeps the draft.
   async function selectEntry(launchpadId, entryId, { force = false } = {}) {
     const draft = current.draftsByLaunchpad[launchpadId];
-    if (
-      !force &&
-      draft?.seededFrom !== entryId &&
-      isDraftDirty(current, launchpadId)
-    ) {
+    const dirty = isDraftDirty(current, launchpadId);
+    const sameEntry = draft?.seededFrom === entryId;
+    if (!force && !sameEntry && dirty) {
       return { needsConfirm: true };
     }
     if (current.selectedLaunchpadId !== launchpadId) {
-      update((state) => ({ ...state, selectedLaunchpadId: launchpadId, compare: null }));
+      openLaunchpad(launchpadId);
       if (!current.entriesByLaunchpad[launchpadId]) await loadEntries(launchpadId);
+    }
+    if (sameEntry && dirty) {
+      update((state) => ({
+        ...state,
+        selectedEntryByLaunchpad: {
+          ...state.selectedEntryByLaunchpad,
+          [launchpadId]: entryId,
+        },
+      }));
+      return { needsConfirm: false };
     }
     await seedDraft(launchpadId, entryId);
     return { needsConfirm: false };
@@ -298,11 +357,7 @@ export function createLaunchpadStore(api) {
       return {
         ...state,
         launchpads,
-        entriesByLaunchpad: keep(state.entriesByLaunchpad),
-        selectedEntryByLaunchpad: keep(state.selectedEntryByLaunchpad),
-        draftsByLaunchpad: keep(state.draftsByLaunchpad),
-        pendingLaunchByLaunchpad: keep(state.pendingLaunchByLaunchpad),
-        unseenByLaunchpad: keep(state.unseenByLaunchpad),
+        ...mapPerLaunchpad(state, keep),
         compare: ids.has(state.compare?.launchpadId) ? state.compare : null,
       };
     });
@@ -316,7 +371,10 @@ export function createLaunchpadStore(api) {
 
   return {
     subscribe,
-    clear: () => set(initialState(++projectStateVersion)),
+    clear: () => {
+      [...launchTimers.keys()].forEach(stopLaunchTimer);
+      set(initialState(++projectStateVersion));
+    },
     populate,
     loadEntries,
     // The tree's counts and last statuses need every entry list; the
@@ -341,24 +399,28 @@ export function createLaunchpadStore(api) {
       updateDraftFields(launchpadId, { useHttps }),
 
     // Launch is fire-and-forget (Marasi ADR-0011): the new entry arrives
-    // later through onRequest, tagged with Metadata.launchpad_id.
+    // later through onRequest, tagged with Metadata.launchpad_id. A launch
+    // that fails, or whose entry does not arrive in time, stops pending.
     launch: async (launchpadId) => {
       const draft = current.draftsByLaunchpad[launchpadId];
       if (!draft) return;
+      const pending = { raw: draft.raw };
+      stopLaunchTimer(launchpadId);
       update((state) => ({
         ...state,
         pendingLaunchByLaunchpad: {
           ...state.pendingLaunchByLaunchpad,
-          [launchpadId]: { raw: draft.raw },
+          [launchpadId]: pending,
         },
       }));
+      launchTimers.set(
+        launchpadId,
+        setTimer(() => clearPending(launchpadId, pending), LAUNCH_TIMEOUT_MS),
+      );
       try {
         await api.launch(draft.raw, launchpadId, draft.useHttps);
       } catch (error) {
-        update((state) => ({
-          ...state,
-          pendingLaunchByLaunchpad: without(state.pendingLaunchByLaunchpad, launchpadId),
-        }));
+        clearPending(launchpadId, pending);
         throw error;
       }
     },
@@ -392,14 +454,11 @@ export function createLaunchpadStore(api) {
     deleteLaunchpad: async (id) => {
       await api.deleteLaunchpad(id);
       const index = current.launchpads.findIndex((launchpad) => launchpad.ID === id);
+      stopLaunchTimer(id);
       update((state) => ({
         ...state,
         launchpads: state.launchpads.filter((launchpad) => launchpad.ID !== id),
-        entriesByLaunchpad: without(state.entriesByLaunchpad, id),
-        selectedEntryByLaunchpad: without(state.selectedEntryByLaunchpad, id),
-        draftsByLaunchpad: without(state.draftsByLaunchpad, id),
-        pendingLaunchByLaunchpad: without(state.pendingLaunchByLaunchpad, id),
-        unseenByLaunchpad: without(state.unseenByLaunchpad, id),
+        ...mapPerLaunchpad(state, (map) => without(map, id)),
         compare: state.compare?.launchpadId === id ? null : state.compare,
       }));
       if (current.selectedLaunchpadId !== id) return;
@@ -408,7 +467,13 @@ export function createLaunchpadStore(api) {
       await selectLaunchpad(neighbour?.ID ?? null);
     },
 
-    onRequest: (request) => update((state) => arriveRequest(state, request)),
+    onRequest: (request) => {
+      update((state) => arriveRequest(state, request));
+      const launchpadId = request?.Metadata?.launchpad_id;
+      if (launchpadId && !current.pendingLaunchByLaunchpad[launchpadId]) {
+        stopLaunchTimer(launchpadId);
+      }
+    },
     onResponse: (response) => update((state) => arriveResponse(state, response)),
 
     // Compare starts from an entry of the open launchpad as A. `picking`
@@ -426,7 +491,7 @@ export function createLaunchpadStore(api) {
     setCompareSide: async (side, entryId) => {
       await ensureDetails(entryId);
       updateCompare({
-        [side === "left" ? "leftId" : "rightId"]: entryId,
+        [COMPARE_SIDES[side].key]: entryId,
         picking: null,
       });
     },

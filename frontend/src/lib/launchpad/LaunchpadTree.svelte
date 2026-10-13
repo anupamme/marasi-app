@@ -13,6 +13,7 @@
 	import { isDraftDirty } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { jumpTarget } from "./jumpTarget.js";
+	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
 	import { primaryVariant, shortTime, statusClass } from "./format.js";
 	import OriginIcon from "./OriginIcon.svelte";
 
@@ -73,10 +74,12 @@
 	function updateJump() {
 		if (!scroller) return;
 		const box = scroller.getBoundingClientRect();
-		const rows = [...scroller.querySelectorAll("[data-list]")].map((node) => {
+		// Every row except open (sticky) launchpad headers; rows outside a
+		// list carry no data-list.
+		const rows = [...scroller.querySelectorAll("[data-tree-row]")].map((node) => {
 			const rect = node.getBoundingClientRect();
 			return {
-				list: node.dataset.list,
+				list: node.dataset.list ?? null,
 				label: node.dataset.label,
 				last: node.dataset.last === "true",
 				top: rect.top,
@@ -156,6 +159,7 @@
 					: []}
 				<div data-launchpad={launchpad.ID}>
 					<div
+						data-tree-row={open ? undefined : ""}
 						class="lp-row flex items-center gap-1.5 border-l-4 pr-3 text-sm {open ? 'sticky top-0 z-10' : ''} {isSelected
 							? 'border-primary-500 bg-surface-200 dark:bg-surface-700'
 							: 'border-transparent bg-surface-50 hover:bg-surface-100 dark:bg-surface-900 dark:hover:bg-surface-800'}"
@@ -204,14 +208,16 @@
 
 					{#if open}
 						{#if state.entriesByLaunchpad[launchpad.ID] === undefined}
-							<p class="py-1 pl-10 text-xs opacity-50">Loading…</p>
+							<p data-tree-row class="py-1 pl-10 text-xs opacity-50">Loading…</p>
 						{:else if entries.length === 0}
-							<p class="py-1 pl-10 text-xs opacity-50">Empty launchpad</p>
+							<p data-tree-row class="py-1 pl-10 text-xs opacity-50">Empty launchpad</p>
 						{/if}
 						{#each rows as row (rowKey(row))}
 							{#if row.kind === "more"}
 								<!-- Same columns as an entry row: ⋯ under the numbers, text under the path. -->
 								<div
+									data-tree-row
+									data-list={row.list}
 									class="lp-more relative flex items-center gap-2 border-y border-dashed border-surface-500/30 py-[3px] pr-3 text-[11px] {row.depth === 2
 										? 'pl-14'
 										: 'pl-10'}"
@@ -233,6 +239,8 @@
 								</div>
 							{:else if row.kind === "group"}
 								<button
+									data-tree-row
+									data-list={row.open ? row.id : undefined}
 									class="lp-group relative flex w-full items-center gap-1.5 py-1 pl-8 pr-3 text-left text-xs hover:bg-surface-100 dark:hover:bg-surface-800"
 									aria-expanded={row.open}
 									on:click={() => (openGroups = { ...openGroups, [row.id]: !row.open })}
@@ -247,8 +255,7 @@
 								{@const entry = row.entry}
 								{@const inCompare = compare?.launchpadId === launchpad.ID}
 								{@const active = isSelected && selectedEntryId === entry.ID && !inCompare}
-								{@const isA = inCompare && compare.leftId === entry.ID}
-								{@const isB = inCompare && compare.rightId === entry.ID}
+								{@const side = inCompare ? compareSideOf(compare, entry.ID) : null}
 								<button
 									class="lp-entry group relative flex w-full items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
 									2
@@ -258,10 +265,11 @@
 										: inCompare && compare.picking
 											? 'hover:bg-primary-500/15'
 											: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
-									data-compare={isA ? "A" : isB ? "B" : undefined}
+									data-compare={side ? COMPARE_SIDES[side].label : undefined}
 									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}"
 									aria-current={active ? "true" : undefined}
 									data-entry={entry.ID}
+									data-tree-row
 									data-list={row.list ?? undefined}
 									data-last={row.last ? "true" : undefined}
 									data-label={row.label}
@@ -276,11 +284,14 @@
 									</span>
 									<span class="w-11 flex-none opacity-60">{entry.Method}</span>
 									<span class="min-w-0 flex-1 truncate">{entry.Path}</span>
-									{#if isA}<span class="variant-filled-tertiary flex-none px-1.5 text-[10px] font-bold">A</span>{/if}
-									{#if isB}<span class="{primary} flex-none px-1.5 text-[10px] font-bold">B</span>{/if}
-									{#if inCompare && compare.picking && !isA && !isB}
+									{#if side}
+										<span class="{side === 'left' ? 'variant-filled-tertiary' : primary} flex-none px-1.5 text-[10px] font-bold"
+											>{COMPARE_SIDES[side].label}</span
+										>
+									{/if}
+									{#if inCompare && compare.picking && !side}
 										<span class="hidden flex-none text-[10px] text-primary-500 group-hover:inline">
-											as {compare.picking === "left" ? "A" : "B"}
+											as {COMPARE_SIDES[compare.picking].label}
 										</span>
 									{/if}
 									<span class="w-7 flex-none text-right {statusClass(entry.StatusCode)}">{entry.StatusCode || "…"}</span>

@@ -210,9 +210,9 @@
         { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: () => tree?.jumpToLatest() },
         { actionId: "launchpad.toggle-compare", icon: GitCompareIcon, handler: () => workspace?.toggleCompare() },
         {
-            actionId: "launchpad.toggle-compare-tab",
+            actionId: "launchpad.toggle-compare-view",
             icon: Columns2Icon,
-            handler: () => workspace?.toggleCompareTab(),
+            handler: () => workspace?.toggleCompareView(),
         },
         { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },

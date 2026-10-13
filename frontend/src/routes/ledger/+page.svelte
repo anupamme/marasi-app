@@ -1569,7 +1569,7 @@
 									toastId,
 								);
 								goto(
-									"/launchpad?lastTab=1",
+									"/launchpad?id=" + id,
 								);
 							},
 						},

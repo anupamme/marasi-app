@@ -497,3 +497,77 @@ test("a timeout from an earlier launch does not clear a newer one", async () => 
   first.fn();
   assert.ok(get(store).pendingLaunchByLaunchpad.lp1);
 });
+
+// Jump to Launchpad, from the Ledger's toast, opens /launchpad?id=<id>.
+
+// Like the Ledger's Send to Launchpad: a new launchpad holding one request.
+async function sendFromLedger(api, entries, entryId) {
+  const id = await api.createLaunchpad(`Request ${entryId}`, "");
+  entries[id] = [entry(entryId)];
+  return id;
+}
+
+test("jumpTo opens a launchpad created since the last visit on its newest entry", async () => {
+  const entries = { lp1: [entry("a"), entry("b")], lp2: [entry("c")] };
+  const api = fakeApi({ launchpads: [{ ID: "lp1", Name: "Login" }, { ID: "lp2", Name: "Search" }], entries });
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.selectLaunchpad("lp2");
+  const id = await sendFromLedger(api, entries, "r7");
+
+  const result = await store.jumpTo(id);
+
+  const state = get(store);
+  assert.deepEqual(result, { found: true, entryId: "r7", needsConfirm: false });
+  assert.equal(state.selectedLaunchpadId, id);
+  assert.equal(state.selectedEntryByLaunchpad[id], "r7");
+  assert.equal(state.launchpads.at(-1).ID, id);
+});
+
+test("jumpTo on a fresh visit opens only the target, not the previous selection", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  assert.deepEqual(await store.jumpTo("lp2"), { found: true, entryId: "c", needsConfirm: false });
+  const state = get(store);
+  assert.equal(state.selectedLaunchpadId, "lp2");
+  assert.equal(state.draftsByLaunchpad.lp1, undefined);
+});
+
+test("jumpTo selects an entry linked after the launchpad's entries loaded", async () => {
+  const entries = { lp1: [entry("a")], lp2: [entry("c")] };
+  const api = fakeApi({ launchpads: [{ ID: "lp1", Name: "Login" }, { ID: "lp2", Name: "Search" }], entries });
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.selectLaunchpad("lp2");
+  entries.lp1 = [entry("a"), entry("z")];
+  assert.deepEqual(await store.jumpTo("lp1"), { found: true, entryId: "z", needsConfirm: false });
+  assert.equal(get(store).selectedEntryByLaunchpad.lp1, "z");
+});
+
+test("jumpTo an unknown launchpad reports it missing and keeps the selection", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  await store.selectLaunchpad("lp2");
+  assert.deepEqual(await store.jumpTo("gone"), { found: false, entryId: null, needsConfirm: false });
+  assert.equal(get(store).selectedLaunchpadId, "lp2");
+});
+
+test("jumpTo asks before replacing a dirty draft with the newest entry", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  await store.selectEntry("lp1", "a");
+  store.updateDraft("lp1", "edited");
+  await store.selectLaunchpad("lp2");
+  assert.deepEqual(await store.jumpTo("lp1"), { found: true, entryId: "b", needsConfirm: true });
+  const state = get(store);
+  assert.equal(state.selectedLaunchpadId, "lp1");
+  assert.equal(state.draftsByLaunchpad.lp1.raw, "edited");
+});
+
+test("jumpTo an empty launchpad opens it with no entry to select", async () => {
+  const api = twoLaunchpads();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  const id = await api.createLaunchpad("Empty", "");
+  assert.deepEqual(await store.jumpTo(id), { found: true, entryId: null, needsConfirm: false });
+  assert.equal(get(store).selectedLaunchpadId, id);
+});

@@ -346,7 +346,8 @@ export function createLaunchpadStore(
 
   // Loads the launchpad list. Drafts, entries and selection of launchpads
   // that still exist are kept, so the page can call this on every visit.
-  async function populate() {
+  // `prefer` opens that launchpad instead of the current one, if it exists.
+  async function populate(prefer = null) {
     const version = projectStateVersion;
     const launchpads = (await api.getLaunchpads()) || [];
     if (version !== projectStateVersion) return;
@@ -361,12 +362,24 @@ export function createLaunchpadStore(
         compare: ids.has(state.compare?.launchpadId) ? state.compare : null,
       };
     });
-    const selected = launchpads.some(
-      (launchpad) => launchpad.ID === current.selectedLaunchpadId,
-    )
-      ? current.selectedLaunchpadId
-      : launchpads[0]?.ID ?? null;
+    const exists = (id) => launchpads.some((launchpad) => launchpad.ID === id);
+    const selected = [prefer, current.selectedLaunchpadId].find(exists) ?? launchpads[0]?.ID ?? null;
     await selectLaunchpad(selected);
+  }
+
+  // Jump to Launchpad: refreshes the list, opens `launchpadId` and selects
+  // its newest entry, which may have been linked since its entries loaded.
+  // `found` is false for an unknown id; the selection is then as populate
+  // left it. `needsConfirm` is selectEntry's dirty-draft guard.
+  async function jumpTo(launchpadId) {
+    await populate(launchpadId);
+    if (!launchpadId || current.selectedLaunchpadId !== launchpadId) {
+      return { found: false, entryId: null, needsConfirm: false };
+    }
+    const entryId = (await loadEntries(launchpadId)).at(-1)?.ID ?? null;
+    if (!entryId) return { found: true, entryId, needsConfirm: false };
+    const { needsConfirm } = await selectEntry(launchpadId, entryId);
+    return { found: true, entryId, needsConfirm };
   }
 
   return {
@@ -376,6 +389,7 @@ export function createLaunchpadStore(
       set(initialState(++projectStateVersion));
     },
     populate,
+    jumpTo,
     loadEntries,
     // The tree's counts and last statuses need every entry list; the
     // backend has no summary field, so this loads the missing ones.

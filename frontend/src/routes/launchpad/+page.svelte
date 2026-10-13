@@ -96,9 +96,7 @@
         if (!launchpad) return;
         confirm(
             `Delete ${launchpad.Name}?`,
-            isDraftDirty(state, launchpad.ID)
-                ? "This launchpad has an unsaved draft. Deleting it discards the draft too. Its entries stay in the ledger."
-                : "Its entries stay in the ledger.",
+            isDraftDirty(state, launchpad.ID) ? "Its unsaved draft will be discarded." : undefined,
             () => launchpadStore.deleteLaunchpad(launchpad.ID),
         );
     }

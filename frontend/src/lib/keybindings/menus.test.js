@@ -99,7 +99,6 @@ test("⌘⇧] steps Armory runs on the page and the run's requests in its reques
 test("each page's shared shortcuts run that page's action", () => {
   const dispatcher = mac();
   const expected = [
-    ["/launchpad", "launchpad.toggle-settings", "launchpad.launch"],
     ["/checkpoint", "checkpoint.toggle-settings", "checkpoint.show-logs"],
     ["/logbook", "logbook.toggle-settings", null],
     ["/compass", "compass.toggle-settings", "compass.show-logs"],
@@ -109,6 +108,15 @@ test("each page's shared shortcuts run that page's action", () => {
     assert.equal(dispatcher.resolve(cmd("p", "KeyP"), on(route)), settings, route);
     assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), on(route)), shiftL, route);
   }
+});
+
+test("the Launchpad renames on ⌘R and swaps compared entries on ⌘⇧X", () => {
+  const dispatcher = mac();
+  assert.equal(dispatcher.resolve(cmd("r", "KeyR"), on("/launchpad")), "launchpad.toggle-settings");
+  assert.equal(dispatcher.resolve(cmd("p", "KeyP"), on("/launchpad")), null);
+  assert.equal(dispatcher.resolve(cmdShift("X", "KeyX"), on("/launchpad")), "launchpad.swap-compare");
+  assert.equal(dispatcher.resolve(cmdShift("W", "KeyW"), on("/launchpad")), null);
+  assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), on("/launchpad")), "launchpad.launch");
 });
 
 test("a logs or report drawer keeps its page's menu", () => {
@@ -392,4 +400,45 @@ test("the previous-tab and next-tab keys cycle through all four WebSocket tabs",
   assert.deepEqual(forward, ["checkpoint", "inject", "connection", "stream"]);
   assert.equal(stepWebSocketTab("stream", -1), "connection");
   assert.equal(stepWebSocketTab("connection", -1), "inject");
+});
+
+test("Launchpad page shortcuts run only on the Launchpad page", () => {
+  const dispatcher = mac();
+  const expected = [
+    [cmd("\\", "Backslash"), "launchpad.toggle-sidebar"],
+    [cmdShift("C", "KeyC"), "launchpad.toggle-compare"],
+    [cmdShift("S", "KeyS"), "launchpad.focus-search"],
+    [cmdShift("ArrowDown", "ArrowDown"), "launchpad.jump-to-latest"],
+  ];
+  for (const [event, actionId] of expected) {
+    assert.equal(dispatcher.resolve(event, on("/launchpad")), actionId, event.key);
+  }
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), null);
+});
+
+test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {
+  const dispatcher = mac();
+  const codeMirror = { tagName: "DIV", isContentEditable: true, closest: (s) => (s.includes(".cm-editor") ? {} : null) };
+  const field = { tagName: "INPUT", closest: () => null };
+  for (const target of [codeMirror, field]) {
+    const event = keydown("ArrowDown", "ArrowDown", { metaKey: true, shiftKey: true }, target);
+    assert.equal(dispatcher.resolve(event, on("/launchpad")), null, target.tagName);
+  }
+  // Other Launchpad shortcuts still run from the request editor.
+  const compare = keydown("C", "KeyC", { metaKey: true, shiftKey: true }, codeMirror);
+  assert.equal(dispatcher.resolve(compare, on("/launchpad")), "launchpad.toggle-compare");
+});
+
+test("no Launchpad default hides a global shortcut", () => {
+  const catalog = buildCatalog();
+  for (const platform of [MACOS, WINDOWS_LINUX]) {
+    const global = new Map(
+      catalog.inContext("global").flatMap((a) => a.defaults[platform].map((binding) => [binding, a.id])),
+    );
+    for (const action of catalog.inContext("launchpad")) {
+      for (const binding of action.defaults[platform]) {
+        assert.equal(global.get(binding), undefined, `${platform} ${binding}: ${action.id} hides ${global.get(binding)}`);
+      }
+    }
+  }
 });

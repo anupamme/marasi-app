@@ -52,6 +52,7 @@
 		projectOpenMessage,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
+	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -205,6 +206,7 @@
 	}
 	let removeMenuShortcuts = () => {};
 	onMount(() => {
+		const stopReportingDrafts = reportUnsavedDrafts();
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
 			if (message) {
@@ -235,11 +237,19 @@
 			function handleNewLog(newLog) {
 				$logItems = [...$logItems, newLog];
 			}
-			EventsOn("request", (newRequest) =>
-				addRequest(newRequest),
+			EventsOn("request", (newRequest) => {
+				addRequest(newRequest);
+				launchpadStore.onRequest(newRequest);
+			});
+			EventsOn("launch-started", (launch) =>
+				launchpadStore.onLaunchStarted(launch),
+			);
+			EventsOn("launch-finished", (launch) =>
+				launchpadStore.onLaunchFinished(launch),
 			);
 			EventsOn("response", (newResponse) => {
 				addResponse(newResponse);
+				launchpadStore.onResponse(newResponse);
 				if (
 					$drawerStore.id ===
 						"request-response" &&
@@ -401,6 +411,7 @@
 			);
 		});
 		return () => {
+			stopReportingDrafts();
 			removeMenuShortcuts();
 			EventsOff("request");
 			EventsOff("response");

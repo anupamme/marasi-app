@@ -26,10 +26,14 @@ function action(id, label, description, keywords, defaults, context = "global") 
 
 // One page or drawer menu: each action's id is `<context>.<slug>`, so ids
 // stay unique when a key or label is reused in a mutually exclusive state.
+// A row's optional sixth element adds flags, such as `yieldsToEditors`: the
+// action never runs while focus is in an editor or text field, which keeps
+// its keys there (⌘⇧↓ selects to the end in CodeMirror).
 function pageActions(context, rows) {
-  return rows.map(([slug, label, description, keywords, defaults]) =>
-    action(`${context}.${slug}`, label, description, keywords, defaults, context),
-  );
+  return rows.map(([slug, label, description, keywords, defaults, flags = {}]) => ({
+    ...action(`${context}.${slug}`, label, description, keywords, defaults, context),
+    ...flags,
+  }));
 }
 
 export const FACTORY_ACTIONS = [
@@ -100,18 +104,29 @@ export const FACTORY_ACTIONS = [
     ["next-request", "Next Request", "Open the next request in this run", "next request", primary("shift+]")],
     ["previous-request", "Previous Request", "Open the previous request in this run", "previous request", primary("shift+[")],
   ]),
+  // Ids predate the redesigned page (tabs, a settings accordion) and stay
+  // put so saved profiles keep their overrides (ADR 0001).
   ...pageActions("launchpad", [
-    ["toggle-settings", "Toggle Launchpad Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],
-    ["next-tab", "Next Tab", "Go to next Launchpad tab", "next, tab", primary("]")],
-    ["previous-tab", "Previous Tab", "Go to previous Launchpad tab", "previous, tab", primary("[")],
-    ["next-entry", "Next Entry", "Go to next Launchpad entry", "next, entry, tab", primary("shift+]")],
-    ["previous-entry", "Previous Entry", "Go to previous Launchpad entry", "previous, entry, tab", primary("shift+[")],
-    ["delete-tab", "Delete Tab", "Delete Current Launchpad Tab", "delete, tab", primary("shift+d")],
+    ["toggle-settings", "Rename Launchpad", "Edit the launchpad's name and description", "rename, name, description, edit", primary("r")],
+    ["next-tab", "Next Launchpad", "Open the next launchpad in the sidebar", "next, launchpad", primary("]")],
+    ["previous-tab", "Previous Launchpad", "Open the previous launchpad in the sidebar", "previous, launchpad", primary("[")],
+    ["next-entry", "Next Entry", "Go to next Launchpad entry", "next, entry", primary("shift+]")],
+    ["previous-entry", "Previous Entry", "Go to previous Launchpad entry", "previous, entry", primary("shift+[")],
+    ["delete-tab", "Delete Launchpad", "Delete the open launchpad", "delete, launchpad", primary("shift+d")],
     ["edit-request", "Edit Request", "Edit Current Entry Request", "edit, entry, request", primary("shift+e")],
     ["toggle-tls", "Toggle TLS", "Toggle TLS Flag", "toggle, tls, https", primary("shift+t")],
     ["launch", "Launch", "Send request through proxy", "send, launchpad, repeat", primary("shift+l")],
+    ["cancel-launch", "Cancel Launch", "Cancel the open launchpad's pending launch", "cancel, stop, abort, launch", primary("shift+.")],
     ["view-notes", "View Notes", "View or edit request notes", "notes", primary("shift+n")],
     ["view-metadata", "View Metadata", "View request Metadata", "metadata", primary("shift+m")],
+    ["focus-search", "Search Launchpads", "Jump to the sidebar search", "search, find, filter", primary("shift+s")],
+    ["create", "New Launchpad", "Create an empty launchpad", "new, create, add, launchpad", primary("shift+a")],
+    ["toggle-sidebar", "Toggle Launchpad Sidebar", "Collapse or expand the launchpad sidebar", "sidebar, dock, collapse, expand", primary("\\")],
+    ["toggle-group-by-status", "Group by Status", "Group entries into status-code folders", "group, status, folders", primary("shift+g")],
+    ["toggle-compare", "Compare Entries", "Compare two entries of the open launchpad, or stop comparing", "compare, diff", primary("shift+c")],
+    ["toggle-compare-view", "Switch Compare Request/Response", "Show the request or the response diff while comparing", "compare, diff, request, response", primary("shift+r")],
+    ["swap-compare", "Swap Compared Entries", "Swap the A and B entries while comparing", "compare, swap", primary("shift+x")],
+    ["jump-to-latest", "Jump to Latest Entry", "Select the newest entry and scroll the sidebar to it", "latest, newest, bottom, jump, scroll, select", primary("shift+down"), { yieldsToEditors: true }],
   ]),
   ...pageActions("checkpoint", [
     ["toggle-settings", "Toggle Checkpoint Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],

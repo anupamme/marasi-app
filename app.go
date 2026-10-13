@@ -19,6 +19,7 @@ import (
 	"path/filepath"
 	"strconv"
 	"strings"
+	"sync/atomic"
 	"time"
 
 	"github.com/tfkr-ae/marasi/chrome"
@@ -45,6 +46,12 @@ type App struct {
 	// attachFrontendLog sends the project lifecycle's log to the frontend
 	// once startup has the Wails context. Nil in tests.
 	attachFrontendLog func(slog.Handler)
+	// messageDialog shows a native message dialog and returns the pressed
+	// button. Tests replace it.
+	messageDialog func(runtime.MessageDialogOptions) (string, error)
+	// unsavedDrafts is the number of launchpads with a dirty Launchpad
+	// draft, reported by the frontend, which holds drafts in memory only.
+	unsavedDrafts atomic.Int64
 }
 
 // NewApp creates a new App application struct
@@ -88,12 +95,16 @@ func NewApp() *App {
 func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, logWriter io.Writer, logger *slog.Logger) *App {
 	app := &App{Proxy: proxy}
 	app.emitEvent = app.emit
+	app.messageDialog = func(options runtime.MessageDialogOptions) (string, error) {
+		return runtime.MessageDialog(app.ctx, options)
+	}
 	listener := service.NewListenerLifecycle(proxy, logWriter)
 	app.projects = service.NewProjectLifecycle(proxy, configDir, wordlists, logger, app.attachExtensionHooks)
 	listener.BindProject(app.projects)
 	app.listener = listener
 	app.chrome = service.NewChrome(proxy, listener, logWriter)
 	app.configureWebSocketHandlers()
+	app.configureLaunchHandlers()
 	return app
 }
 
@@ -258,16 +269,20 @@ func (a *App) OpenProject(name string) (string, error) {
 		filePath = filePath + ".marasi"
 	}
 
-	confirmed, err := a.confirmCancelArmoryRuns("Switch Project")
+	confirmed, err := a.confirmLosingWork("Switch Project")
 	if err != nil {
 		return "", err
 	}
 	if !confirmed {
 		return "", errors.New("project switch cancelled")
 	}
+	// The project lifecycle interrupts pending launches before it switches
+	// (Marasi ADR-0031), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
 		return "", err
 	}
+	// The drafts belonged to the old project and are gone with it.
+	a.unsavedDrafts.Store(0)
 	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
 		log.Printf("recovering interrupted armory runs: %v", err)
 	}
@@ -286,6 +301,9 @@ func (a *App) SetupScratchpad() error {
 	return nil
 }
 func (a *App) close(ctx context.Context) {
+	// Like the service's shutdown: end pending launches first, so their
+	// outcomes are written to the open project before the listener goes.
+	a.Proxy.InterruptLaunches()
 	_ = a.listener.Shutdown()
 	if a.projects != nil {
 		if err := a.projects.Shutdown(); err != nil {
@@ -295,30 +313,78 @@ func (a *App) close(ctx context.Context) {
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
-	confirmed, err := a.confirmCancelArmoryRuns("Close Marasi")
+	confirmed, err := a.confirmLosingWork("Close Marasi")
 	if err != nil {
 		log.Printf("cancelling active Armory runs: %v", err)
 	}
 	return err != nil || !confirmed
 }
 
-func (a *App) confirmCancelArmoryRuns(action string) (bool, error) {
-	if a.Proxy.Armory == nil || len(a.Proxy.Armory.ActiveRunIDs()) == 0 {
+// SetUnsavedDraftCount records how many launchpads have a dirty Launchpad
+// draft. The frontend calls it whenever that number changes, so quitting or
+// switching the project can warn before the drafts are lost.
+func (a *App) SetUnsavedDraftCount(count int) {
+	a.unsavedDrafts.Store(int64(count))
+}
+
+// confirmLosingWork asks once before action discards unsaved Launchpad
+// drafts or cancels active Armory runs, naming whichever applies. It returns
+// true when there is nothing to lose, or the user goes ahead and any active
+// Armory runs were cancelled.
+func (a *App) confirmLosingWork(action string) (bool, error) {
+	var losses []string
+	if drafts := a.draftsMessage(); drafts != "" {
+		losses = append(losses, drafts+" "+action+" will discard them.")
+	}
+	hasRuns := a.Proxy != nil && a.Proxy.Armory != nil && len(a.Proxy.Armory.ActiveRunIDs()) > 0
+	if hasRuns {
+		losses = append(losses, action+" will cancel all active Armory runs.")
+	}
+	if len(losses) == 0 {
 		return true, nil
 	}
+	if !a.confirm(action, strings.Join(losses, " ")+" Continue?") {
+		return false, nil
+	}
+	if !hasRuns {
+		return true, nil
+	}
+	return a.cancelArmoryRuns()
+}
 
-	result, err := runtime.MessageDialog(a.ctx, runtime.MessageDialogOptions{
+// draftsMessage describes the unsaved Launchpad drafts, or is empty.
+func (a *App) draftsMessage() string {
+	count := a.unsavedDrafts.Load()
+	switch {
+	case count <= 0:
+		return ""
+	case count == 1:
+		return "1 launchpad has an unsaved draft."
+	default:
+		return fmt.Sprintf("%d launchpads have unsaved drafts.", count)
+	}
+}
+
+// confirm shows a warning dialog with Cancel and action buttons and reports
+// whether the user pressed action.
+func (a *App) confirm(action, message string) bool {
+	result, err := a.messageDialog(runtime.MessageDialogOptions{
 		Type:          runtime.WarningDialog,
 		Title:         action,
-		Message:       action + " will cancel all active Armory runs. Continue?",
+		Message:       message,
 		Buttons:       []string{"Cancel", action},
 		DefaultButton: "Cancel",
 		CancelButton:  "Cancel",
 	})
-	if err != nil || result != action {
-		return false, err
+	if err != nil {
+		log.Printf("confirming %s: %v", action, err)
+		return false
 	}
+	return result == action
+}
 
+// cancelArmoryRuns cancels every active Armory run and waits for them to stop.
+func (a *App) cancelArmoryRuns() (bool, error) {
 	activeRunIDs := a.Proxy.Armory.ActiveRunIDs()
 	for _, id := range activeRunIDs {
 		if err := a.Proxy.Armory.CancelRun(id); err != nil {
@@ -511,11 +577,50 @@ func (a *App) ForwardCheckpoint(id uuid.UUID, body string, interceptResponse boo
 func (a *App) DropCheckpoint(id uuid.UUID) error {
 	return a.Proxy.DropCheckpoint(id)
 }
-func (a *App) Repeat(raw string, repeaterId string, useHttps bool) {
-	err := a.Proxy.Launch(raw, repeaterId, useHttps)
+// Launch sends raw from the launchpad and returns the launch id, which is
+// also the UUID of the entry it creates. A malformed request or a missing
+// Host fails at once; how the launch ends arrives as a launch-finished event.
+func (a *App) Launch(raw string, launchpadID string, useHttps bool) (uuid.UUID, error) {
+	id, err := a.Proxy.Launch(raw, launchpadID, useHttps)
 	if err != nil {
 		log.Println(err)
+		return uuid.Nil, err
 	}
+	return id, nil
+}
+
+// CancelLaunch cancels a pending launch and returns it as it will end. A
+// launch that finished before the cancel reached it is returned with its
+// final state and no error, so that race stays quiet in the UI.
+func (a *App) CancelLaunch(id uuid.UUID) (domain.Launch, error) {
+	launch, err := a.Proxy.CancelLaunch(id)
+	if errors.Is(err, domain.ErrLaunchFinished) {
+		return launch, nil
+	}
+	return launch, err
+}
+
+// GetLaunch returns a launch by id, pending or finished.
+func (a *App) GetLaunch(id uuid.UUID) (domain.Launch, error) {
+	return a.Proxy.GetLaunch(id)
+}
+
+// PendingLaunches returns the launches that have not ended, oldest first.
+func (a *App) PendingLaunches() []domain.Launch {
+	return a.Proxy.Launches()
+}
+
+// configureLaunchHandlers sends launch lifecycle events to the frontend
+// through the app's emitter, read when they fire so tests can swap it.
+func (a *App) configureLaunchHandlers() {
+	a.Proxy.WithOptions(
+		marasi.WithLaunchStartedHandler(func(launch domain.Launch) {
+			a.emitEvent("launch-started", launch)
+		}),
+		marasi.WithLaunchFinishedHandler(func(launch domain.Launch) {
+			a.emitEvent("launch-finished", launch)
+		}),
+	)
 }
 func (a *App) CheckHTTPParse(body string, itemType string) string {
 	switch itemType {
@@ -676,7 +781,7 @@ func (a *App) GetLaunchpads() []*domain.Launchpad {
 }
 
 func (a *App) GetLaunchpadRequests(id uuid.UUID) []*domain.RequestResponseSummary {
-	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id)
+	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "")
 	if err != nil {
 		return nil
 	}

@@ -137,3 +137,28 @@ test("a reserved binding's problem names its keys the way the keyboard does", ()
   assert.equal(reservedBindingProblem("shift+enter"), "Shift+Enter is reserved for dialogs and focus");
   assert.equal(reservedBindingProblem("escape"), "Escape is reserved for dialogs and focus");
 });
+
+test("on the Launchpad, the Marasi menu opens from its search, rename and create fields like on the Ledger", () => {
+  const dispatcher = createDispatcher({ catalog: buildCatalog(), platform: MACOS });
+  const launchpad = { ...home, route: "/launchpad" };
+  const openMenu = (target) => keydown("k", "KeyK", { metaKey: true, target });
+  for (const target of [element("INPUT"), element("TEXTAREA")]) {
+    assert.equal(dispatcher.resolve(openMenu(target), launchpad), "global.open-menu", target.tagName);
+  }
+  // With the menu open, focus is in its search field and the same key closes it.
+  const menuOpen = { ...launchpad, dialogOpen: true };
+  assert.equal(dispatcher.resolve(openMenu(element("INPUT", { id: "commandmenu" })), menuOpen), "global.open-menu");
+});
+
+test("on the Launchpad, a field keeps Escape, Enter and the jump-to-latest key", () => {
+  const dispatcher = createDispatcher({ catalog: buildCatalog(), platform: MACOS });
+  const launchpad = { ...home, route: "/launchpad" };
+  const field = element("INPUT");
+  for (const [key, code] of [["Escape", "Escape"], ["Enter", "Enter"]]) {
+    assert.equal(dispatcher.resolve(keydown(key, code, { target: field }), launchpad), null, key);
+  }
+  const jump = (target) => keydown("ArrowDown", "ArrowDown", { metaKey: true, shiftKey: true, target });
+  assert.equal(dispatcher.resolve(jump(field), launchpad), null);
+  assert.equal(dispatcher.resolve(jump(codeMirror), launchpad), null);
+  assert.equal(dispatcher.resolve(jump(element("BODY")), launchpad), "launchpad.jump-to-latest");
+});

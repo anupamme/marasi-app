@@ -52,7 +52,7 @@
 		projectOpenMessage,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
-	import { launchpadStore } from "../stores/launchpadStore";
+	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -206,6 +206,7 @@
 	}
 	let removeMenuShortcuts = () => {};
 	onMount(() => {
+		const stopReportingDrafts = reportUnsavedDrafts();
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
 			if (message) {
@@ -404,6 +405,7 @@
 			);
 		});
 		return () => {
+			stopReportingDrafts();
 			removeMenuShortcuts();
 			EventsOff("request");
 			EventsOff("response");

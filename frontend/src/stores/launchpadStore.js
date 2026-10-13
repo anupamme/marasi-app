@@ -7,9 +7,11 @@ import {
   GetLaunchpads,
   GetRawDetails,
   Repeat,
+  SetUnsavedDraftCount,
   UpdateLaunchpadEntry,
 } from "../lib/wailsjs/go/main/App";
 import { createLaunchpadStore } from "./createLaunchpadStore.js";
+import { reportUnsavedDraftCount } from "./draftGuards.js";
 
 export {
   BLANK_REQUEST,
@@ -29,3 +31,13 @@ export const launchpadStore = createLaunchpadStore({
   deleteLaunchpad: (id) => DeleteLaunchpad(id),
   launch: (raw, id, useHttps) => Repeat(raw, id, useHttps),
 });
+
+// Keeps the Go side told how many launchpads have unsaved drafts, so quitting
+// or switching the project can ask first. Returns the unsubscribe function.
+export function reportUnsavedDrafts() {
+  return reportUnsavedDraftCount(launchpadStore, (count) =>
+    SetUnsavedDraftCount(count).catch((err) =>
+      console.error("reporting unsaved launchpad drafts:", err),
+    ),
+  );
+}

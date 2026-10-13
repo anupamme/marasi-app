@@ -9,10 +9,11 @@
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate } from "svelte";
-	import { ArrowDown, ChevronDown, ChevronRight, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
+	import { ArrowDown, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
 	import { isDraftDirty } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { jumpTarget } from "./jumpTarget.js";
+	import { autoExpand, collapseAll, expandAll } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
 	import { primaryVariant, shortTime, statusClass } from "./format.js";
 	import OriginIcon from "./OriginIcon.svelte";
@@ -38,9 +39,16 @@
 	$: searching = state.search.trim().length > 0;
 	$: selectedLaunchpadId = state.selectedLaunchpadId;
 	$: compare = state.compare;
-	$: if (selectedLaunchpadId && expanded[selectedLaunchpadId] === undefined) {
-		expanded = { ...expanded, [selectedLaunchpadId]: true };
+	$: {
+		const next = autoExpand(expanded, selectedLaunchpadId);
+		if (next !== expanded) expanded = next;
 	}
+	function setAll(result) {
+		expanded = result.expanded;
+		openGroups = result.openGroups;
+	}
+	const openAll = () => setAll(expandAll({ ...state, groupByStatus, openGroups }));
+	const closeAll = () => setAll(collapseAll(state));
 
 	export function startCreate() {
 		creating = true;
@@ -104,9 +112,22 @@
 			<h2 class="font-bold">
 				Launchpads <span class="text-xs font-normal opacity-50">{state.launchpads.length}</span>
 			</h2>
-			<button class="btn btn-sm {primary} px-2" aria-label="New launchpad" title="New launchpad" on:click={startCreate}>
-				<Plus size={16} />
-			</button>
+			<div class="flex gap-1">
+				<button class="lp-expand-all btn btn-sm variant-soft px-2" aria-label="Expand all" title="Expand all" on:click={openAll}>
+					<ChevronsUpDown size={16} />
+				</button>
+				<button
+					class="lp-collapse-all btn btn-sm variant-soft px-2"
+					aria-label="Collapse all"
+					title="Collapse all"
+					on:click={closeAll}
+				>
+					<ChevronsDownUp size={16} />
+				</button>
+				<button class="btn btn-sm {primary} px-2" aria-label="New launchpad" title="New launchpad" on:click={startCreate}>
+					<Plus size={16} />
+				</button>
+			</div>
 		</div>
 		<div class="input-group input-group-divider grid-cols-[auto_1fr]">
 			<div class="input-group-shim"><Search size={14} /></div>

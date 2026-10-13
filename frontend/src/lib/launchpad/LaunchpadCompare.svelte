@@ -1,12 +1,19 @@
 <script>
 	// Compare mode for the open launchpad: the picking banner, the A/B chip
-	// strip with swap and length summary, and the side-by-side line diff.
-	// Rules live in compare.js and lineDiff.js; this only renders them.
+	// strip with swap and length summary, and a read-only CodeMirror
+	// MergeView of A against B. Rules live in compare.js; this only renders.
 	import { modeCurrent } from "@skeletonlabs/skeleton";
+	import { MergeView } from "@codemirror/merge";
+	import { StreamLanguage } from "@codemirror/language";
+	import { http } from "@codemirror/legacy-modes/mode/http";
+	import { EditorState } from "@codemirror/state";
+	import { EditorView } from "@codemirror/view";
+	import { oneDark } from "@codemirror/theme-one-dark";
+	import { githubLight } from "@uiw/codemirror-theme-github";
 	import { ArrowLeftRight, GitCompare } from "lucide-svelte";
-	import { COMPARE_SIDES, compareView, lengthSummary } from "./compare.js";
+	import { lineWrap } from "../../stores";
+	import { changedLineCount, COMPARE_SIDES, compareView, lengthSummary } from "./compare.js";
 	import { primaryVariant, statusClass } from "./format.js";
-	import { foldRows, lineDiff } from "./lineDiff.js";
 
 	export let store;
 
@@ -24,9 +31,6 @@
 	$: leftDetails = view?.left && state.detailsById[view.left.entry.ID];
 	$: rightDetails = view?.right && state.detailsById[view.right.entry.ID];
 	$: part = tab === "response" ? "Response" : "Request";
-	$: diff = view?.comparing
-		? lineDiff(leftDetails?.[part]?.Raw, rightDetails?.[part]?.Raw)
-		: { rows: [], approximate: false };
 	$: lengths = lengthSummary(leftDetails, rightDetails, tab);
 	$: note =
 		!leftDetails || !rightDetails
@@ -34,20 +38,56 @@
 			: tab === "response" && (!leftDetails.Response || !rightDetails.Response)
 				? "One side has no response yet."
 				: "";
-
-	// Opened folds reset whenever the diff itself changes.
-	let expanded = new Set();
-	$: diff, (expanded = new Set());
-	$: items = foldRows(diff.rows, expanded);
-	$: changes = diff.rows.filter((row) => row.kind !== "same").length;
-	const expand = (start) => (expanded = new Set([...expanded, start]));
-
-	const cell = {
-		same: ["", ""],
-		changed: ["bg-error-500/15", "bg-success-500/15"],
-		removed: ["bg-error-500/20", "bg-surface-500/10"],
-		added: ["bg-surface-500/10", "bg-success-500/20"],
+	$: merge = {
+		leftId: view?.left?.entry.ID,
+		rightId: view?.right?.entry.ID,
+		part,
+		a: leftDetails?.[part]?.Raw ?? "",
+		b: rightDetails?.[part]?.Raw ?? "",
+		light: $modeCurrent,
+		wrap: $lineWrap,
 	};
+
+	let changes = 0;
+	let approximate = false;
+
+	// Builds the MergeView into `node`, and rebuilds it whenever A, B, the
+	// view, their texts, the theme or wrapping change; destroyed with the node.
+	const MERGE_KEYS = ["leftId", "rightId", "part", "a", "b", "light", "wrap"];
+	function mergeView(node, config) {
+		let current;
+		let editor;
+		const build = (next) => {
+			editor?.destroy();
+			current = next;
+			const side = (doc) => ({
+				doc,
+				extensions: [
+					EditorState.readOnly.of(true),
+					EditorView.editable.of(false),
+					next.light ? githubLight : oneDark,
+					StreamLanguage.define(http),
+					next.wrap ? EditorView.lineWrapping : [],
+				],
+			});
+			editor = new MergeView({
+				parent: node,
+				a: side(next.a),
+				b: side(next.b),
+				collapseUnchanged: { margin: 3, minSize: 4 },
+			});
+			changes = changedLineCount(editor.chunks, next.a, next.b);
+			approximate = editor.chunks.some((chunk) => !chunk.precise);
+		};
+		build(config);
+		return {
+			update(next) {
+				if (MERGE_KEYS.some((key) => next[key] !== current[key])) build(next);
+			},
+			destroy: () => editor?.destroy(),
+		};
+	}
+
 	const chips = (v) => [
 		["left", COMPARE_SIDES.left.label, v.left, "variant-filled-tertiary"],
 		["right", COMPARE_SIDES.right.label, v.right, primary],
@@ -125,46 +165,14 @@
 				{/each}
 			</div>
 		</div>
-		{#if diff.approximate}
+		{#if approximate}
 			<p class="border-b border-surface-500/30 bg-warning-500/10 px-3 py-1 text-xs">
 				These bodies differ too much to align line by line; the differing middle is shown as one block.
 			</p>
 		{/if}
-		<div class="lp-diff lp-scroll min-h-0 flex-1 overflow-auto font-mono text-xs">
+		<div class="lp-diff lp-scroll min-h-0 flex-1 overflow-auto text-xs dark:bg-[#282c34]">
 			{#if note}<p class="p-4 font-sans text-sm opacity-60">{note}</p>{/if}
-			<table class="w-full table-fixed border-collapse">
-				<colgroup>
-					<col class="w-10" />
-					<col />
-					<col class="w-10" />
-					<col />
-				</colgroup>
-				{#each items as item}
-					{#if item.fold}
-						<tr>
-							<td colspan="4" class="p-0">
-								<button
-									class="lp-fold w-full bg-surface-500/10 px-2 py-0.5 text-left font-sans opacity-70 hover:bg-primary-500/10 hover:opacity-100"
-									on:click={() => expand(item.start)}
-								>
-									⋯ {item.count} unchanged lines
-								</button>
-							</td>
-						</tr>
-					{:else}
-						{@const row = item.row}
-						<tr data-kind={row.kind}>
-							<td class="select-none px-1 text-right align-top opacity-40 {cell[row.kind][0]}">{row.leftNo ?? ""}</td>
-							<td
-								class="whitespace-pre-wrap break-all border-r border-surface-500/30 px-2 align-top {cell[row.kind][0]}"
-								>{row.left ?? ""}</td
-							>
-							<td class="select-none px-1 text-right align-top opacity-40 {cell[row.kind][1]}">{row.rightNo ?? ""}</td>
-							<td class="whitespace-pre-wrap break-all px-2 align-top {cell[row.kind][1]}">{row.right ?? ""}</td>
-						</tr>
-					{/if}
-				{/each}
-			</table>
+			<div use:mergeView={merge} />
 		</div>
 	{/if}
 {/if}

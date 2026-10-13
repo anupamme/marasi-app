@@ -104,7 +104,7 @@
 	</div>
 {:else}
 	<div class="flex h-full min-h-0 flex-col">
-		<header class="lp-topbar flex items-center gap-3 border-b border-surface-500/30 bg-surface-200 px-3 py-2 dark:bg-surface-800">
+		<header class="lp-topbar flex items-center gap-3 border-b border-surface-500/30 bg-surface-50 px-3 py-2 dark:bg-surface-900">
 			<div class="min-w-0 flex-1">
 				{#if editing}
 					<div class="flex items-center gap-2">
@@ -203,11 +203,10 @@
 		<div class="grid min-h-0 flex-1 grid-cols-2" class:hidden={comparing}>
 			<section class="flex min-h-0 min-w-0 flex-col border-r border-surface-500/30">
 				<div class="flex items-center justify-between bg-surface-100 px-3 py-1 text-xs dark:bg-surface-800">
-					<span class="font-bold">
-						Request draft
+					<span class="lp-request-title font-bold">
+						{dirty ? "Request draft" : "Request"}
 						{#if dirty}<span class="ml-1 text-warning-500" title="Unsaved draft">●</span>{/if}
 					</span>
-					<span class="opacity-60">in memory only</span>
 				</div>
 				<!-- svelte-ignore a11y-no-static-element-interactions -->
 				<div class="lp-editor lp-scroll min-h-0 flex-1 overflow-auto dark:bg-[#282c34]" on:focusin={onEditorFocus}>
@@ -234,7 +233,6 @@
 							· {details.Response.Length} B
 						{/if}
 					</span>
-					{#if entryIndex >= 0}<span class="opacity-60">entry #{entryIndex + 1}</span>{/if}
 				</div>
 				<div class="lp-response lp-scroll min-h-0 flex-1 overflow-auto dark:bg-[#282c34]">
 					{#if pending || (details && !details.Response)}

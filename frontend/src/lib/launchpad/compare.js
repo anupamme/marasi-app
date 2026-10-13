@@ -86,3 +86,22 @@ export function lengthSummary(leftDetails, rightDetails, tab) {
   const right = lengthOf(rightDetails, tab);
   return { left, right, delta: left === null || right === null ? null : right - left };
 }
+
+// Lines in [from, to) of `text`. A range ending at the last line runs one
+// past the end of the text, as MergeView chunks do.
+function linesIn(text, from, to) {
+  if (from >= to) return 0;
+  const breaks = text.slice(from, Math.min(to, text.length)).split("\n").length - 1;
+  return breaks + (to > text.length ? 1 : 0);
+}
+
+/**
+ * Changed lines in a MergeView diff of `a` and `b`: each chunk counts its
+ * longer side, so an edited line counts once.
+ */
+export function changedLineCount(chunks, a = "", b = "") {
+  return chunks.reduce(
+    (sum, chunk) => sum + Math.max(linesIn(a, chunk.fromA, chunk.toA), linesIn(b, chunk.fromB, chunk.toB)),
+    0,
+  );
+}

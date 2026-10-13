@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { compareClick, compareEscape, compareView, lengthSummary } from "./compare.js";
+import { Chunk } from "@codemirror/merge";
+import { Text } from "@codemirror/state";
+import { changedLineCount, compareClick, compareEscape, compareView, lengthSummary } from "./compare.js";
 
 const entry = (id) => ({ ID: id, Method: "GET", Path: `/${id}` });
 const state = (compare) => ({
@@ -89,4 +91,25 @@ test("length summary falls back to the raw length, and is unknown while a side i
   assert.deepEqual(lengthSummary(left, left, "response"), { left: 4, right: 4, delta: 0 });
   assert.deepEqual(lengthSummary(left, pending, "response"), { left: 4, right: null, delta: null });
   assert.deepEqual(lengthSummary(undefined, left, "response"), { left: null, right: 4, delta: null });
+});
+
+const changed = (a, b) =>
+  changedLineCount(Chunk.build(Text.of(a.split("\n")), Text.of(b.split("\n"))), a, b);
+
+test("changed lines: identical texts have none", () => {
+  assert.equal(changed("GET / HTTP/1.1\nHost: a", "GET / HTTP/1.1\nHost: a"), 0);
+});
+
+test("changed lines: an edited line counts once, not once per side", () => {
+  assert.equal(changed("a\nb\nc", "a\nx\nc"), 1);
+});
+
+test("changed lines: added and removed lines count, including the last line", () => {
+  assert.equal(changed("a\nd", "a\nb\nc\nd"), 2);
+  assert.equal(changed("a\nb\nc", "a\nc"), 1);
+  assert.equal(changed("a\nb", "a\nc"), 1);
+});
+
+test("changed lines: a replaced run counts its longer side", () => {
+  assert.equal(changed("a\nx1\nx2\nx3\nz", "a\ny1\nz"), 3);
 });

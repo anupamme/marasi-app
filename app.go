@@ -781,7 +781,7 @@ func (a *App) GetLaunchpads() []*domain.Launchpad {
 }
 
 func (a *App) GetLaunchpadRequests(id uuid.UUID) []*domain.RequestResponseSummary {
-	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id)
+	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "")
 	if err != nil {
 		return nil
 	}

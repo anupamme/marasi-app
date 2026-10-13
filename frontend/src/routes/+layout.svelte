@@ -52,6 +52,7 @@
 		projectOpenMessage,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
+	import { launchpadStore } from "../stores/launchpadStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -235,11 +236,13 @@
 			function handleNewLog(newLog) {
 				$logItems = [...$logItems, newLog];
 			}
-			EventsOn("request", (newRequest) =>
-				addRequest(newRequest),
-			);
+			EventsOn("request", (newRequest) => {
+				addRequest(newRequest);
+				launchpadStore.onRequest(newRequest);
+			});
 			EventsOn("response", (newResponse) => {
 				addResponse(newResponse);
+				launchpadStore.onResponse(newResponse);
 				if (
 					$drawerStore.id ===
 						"request-response" &&

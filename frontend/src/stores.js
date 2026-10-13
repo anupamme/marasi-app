@@ -10,14 +10,13 @@ import {
   GetInterceptFlag,
   GetExtensions,
   LoadExtensions,
-  GetLaunchpads,
-  GetLaunchpadRequests,
   GetUserName,
 } from "./lib/wailsjs/go/main/App";
 import { testCaseStore } from "./stores/testCaseStore";
 import { findingStore } from "./stores/findingStore";
 import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
+import { launchpadStore } from "./stores/launchpadStore";
 import { webSocketMetadataPatch } from "./lib/websocket/metadataPatch.js";
 import {
   clearQuery,
@@ -183,11 +182,6 @@ export async function readKeybindings() {
   }
 }
 
-// Launchpad navigation state persistence
-export const currentEntryIndex = writable(0);
-export const activeLaunchpadID = writable("");
-export const launchpads = writable([]);
-
 export let listener = writable({
   status: false,
   address: "127.0.0.1",
@@ -250,14 +244,13 @@ export async function openProject() {
   workshopCode.set("");
   waypoints.set({});
   proxyItems.set([]);
-  currentEntryIndex.set(0);
-  activeLaunchpadID.set("");
   extensions.set([]);
   extensions_ui.set({});
   testCaseStore.clear();
   findingStore.clear();
   connectionStore.clear();
   armoryStore.clear();
+  launchpadStore.clear();
   try {
     await LoadExtensions();
   } catch (err) {
@@ -273,11 +266,11 @@ export async function openProject() {
   await populateWorkshop();
   await populateWaypoints();
   await populateExtensions();
-  await populateLaunchpads();
   await testCaseStore.populate();
   await findingStore.populate();
   await connectionStore.populateInterceptFlag();
   await armoryStore.populate();
+  await launchpadStore.populate();
 }
 
 export async function populateWaypoints() {
@@ -352,29 +345,5 @@ export async function populateExtensions() {
   GetExtensions().then((exts) => {
     console.log(exts);
     extensions.set(exts ? exts : []);
-  });
-}
-export async function populateLaunchpads() {
-  const items = await GetLaunchpads();
-
-  const initalisedItems = (items || []).map((item) => ({
-    ...item,
-    Entries: [],
-  }));
-
-  launchpads.set(initalisedItems);
-}
-
-export async function populateLaunchpadEntries(id) {
-  if (!id) return;
-
-  const reqs = await GetLaunchpadRequests(id);
-  launchpads.update((tabs) => {
-    return tabs.map((t) => {
-      if (t.ID == id) {
-        return { ...t, Entries: reqs || [] };
-      }
-      return t;
-    });
   });
 }

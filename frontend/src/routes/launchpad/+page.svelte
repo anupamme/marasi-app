@@ -27,69 +27,65 @@
     } from "lucide-svelte";
     import { page } from "$app/stores";
     import { beforeNavigate, goto } from "$app/navigation";
-    import {
-        activeLaunchpadID,
-        currentEntryIndex,
-        launchpads,
-        populateLaunchpadEntries,
-        populateLaunchpads,
-        listener,
-    } from "../../stores";
+    import { listener } from "../../stores";
+    import { isDraftDirty, launchpadStore } from "../../stores/launchpadStore";
     import { onMount } from "svelte";
+    import { get } from "svelte/store";
     import RequestResponseView from "../../lib/components/RequestResponseView.svelte";
-    import {
-        DeleteLaunchpad,
-        GetMetadata,
-        GetNote,
-        Repeat,
-    } from "../../lib/wailsjs/go/main/App";
+    import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     const modalStore = getModalStore();
     const toastStore = getToastStore();
     let accOpened = false;
-    let useHttps = true;
     let isSending = false;
-    let userEdited = false;
 
-    $: if ($launchpads.length > 0) {
-        const isValid = $launchpads.some((l) => l.ID == $activeLaunchpadID);
-        if (!$activeLaunchpadID || !isValid) {
-            $activeLaunchpadID = $launchpads[0].ID;
-            $currentEntryIndex = 0;
-        }
-    }
-
-    $: activeLaunchpad = $launchpads.find(
-        (launchpad) => launchpad.ID == $activeLaunchpadID,
+    // Everything below reads launchpadStore; this page keeps only the
+    // editor binding. Ticket 02 replaces this page with the tree sidebar.
+    $: launchpads = $launchpadStore.launchpads;
+    $: activeLaunchpadId = $launchpadStore.selectedLaunchpadId;
+    $: activeLaunchpad = launchpads.find(
+        (launchpad) => launchpad.ID === activeLaunchpadId,
     );
-
-    $: activeEntries = (activeLaunchpad && activeLaunchpad.Entries) || [];
-
-    $: currentLaunchpadIndex = $launchpads.findIndex(
-        (launchpad) => launchpad.ID == $activeLaunchpadID,
+    $: currentLaunchpadIndex = launchpads.findIndex(
+        (launchpad) => launchpad.ID === activeLaunchpadId,
     );
+    $: activeEntries = $launchpadStore.entriesByLaunchpad[activeLaunchpadId] || [];
+    $: selectedEntryId = $launchpadStore.selectedEntryByLaunchpad[activeLaunchpadId];
+    $: currentEntryIndex = activeEntries.findIndex(
+        (entry) => entry.ID === selectedEntryId,
+    );
+    $: currentEntry = activeEntries[currentEntryIndex] || {};
+    $: draft = $launchpadStore.draftsByLaunchpad[activeLaunchpadId];
 
-    $: if (
-        activeEntries.length > 0 &&
-        $currentEntryIndex >= activeEntries.length
-    ) {
-        $currentEntryIndex = activeEntries.length - 1;
+    // Read the store directly: syncDraft writes it from inside a reactive
+    // statement, and Svelte 4 does not re-run this component's reactive
+    // statements for that write, so a `$:` dirty flag would go stale.
+    function isDirty() {
+        return isDraftDirty(get(launchpadStore), activeLaunchpadId);
     }
 
-    $: currentEntry =
-        activeEntries.length > 0 && $currentEntryIndex < activeEntries.length
-            ? activeEntries[$currentEntryIndex]
-            : {};
-
-    $: if (
-        $activeLaunchpadID &&
-        activeLaunchpad &&
-        activeEntries.length === 0
-    ) {
-        populateLaunchpadEntries($activeLaunchpadID);
+    // The editor remounts per entry and reports edits back here; they flow
+    // into the launchpad's draft. A dirty draft is handed to the new editor
+    // as already edited, so the editor does not overwrite it.
+    let editorBody = "";
+    let editorEdited = false;
+    $: editorKey = `${activeLaunchpadId}:${currentEntry.ID}`;
+    $: resetEditor(editorKey);
+    function resetEditor() {
+        const dirty = isDirty();
+        editorEdited = dirty;
+        editorBody = dirty
+            ? get(launchpadStore).draftsByLaunchpad[activeLaunchpadId].raw
+            : "";
+    }
+    $: syncDraft(editorBody, editorEdited);
+    function syncDraft(body, edited) {
+        if (!activeLaunchpadId || !draft) return;
+        if (edited) launchpadStore.updateDraft(activeLaunchpadId, body);
+        else if (isDirty()) launchpadStore.revertDraft(activeLaunchpadId);
     }
 
-    function confirmLeave(onConfirm) {
-        if (!userEdited) {
+    function confirmDiscard(onConfirm) {
+        if (!isDirty()) {
             onConfirm();
             return;
         }
@@ -99,7 +95,7 @@
             body: "You have made changes to the text. Navigating away will clear your changes. Continue?",
             response: (result) => {
                 if (result) {
-                    userEdited = false;
+                    launchpadStore.revertDraft(activeLaunchpadId);
                     onConfirm();
                 }
             },
@@ -107,34 +103,32 @@
     }
 
     function navLaunchpad(dir) {
-        const nextIdx = currentLaunchpadIndex + dir;
-        if (nextIdx >= 0 && nextIdx < $launchpads.length) {
-            confirmLeave(() => {
-                $activeLaunchpadID = $launchpads[nextIdx].ID;
-                $currentEntryIndex = 0;
-            });
-        }
+        const next = launchpads[currentLaunchpadIndex + dir];
+        if (next) confirmDiscard(() => launchpadStore.selectLaunchpad(next.ID));
     }
 
     function navEntry(dir) {
-        const nextIdx = $currentEntryIndex + dir;
-        if (nextIdx >= 0 && nextIdx < activeEntries.length) {
-            confirmLeave(() => {
-                $currentEntryIndex = nextIdx;
-            });
-        }
+        const next = activeEntries[currentEntryIndex + dir];
+        if (!next) return;
+        const launchpadId = activeLaunchpadId;
+        launchpadStore.selectEntry(launchpadId, next.ID).then(({ needsConfirm }) => {
+            if (!needsConfirm) return;
+            confirmDiscard(() =>
+                launchpadStore.selectEntry(launchpadId, next.ID, { force: true }),
+            );
+        });
     }
 
     beforeNavigate(({ to, cancel }) => {
-        if (!userEdited) return;
+        if (!isDirty()) return;
         cancel();
-        confirmLeave(() => {
+        confirmDiscard(() => {
             if (to) goto(to.url.pathname + to.url.search);
         });
     });
 
     async function sendRequest() {
-        if (!currentEntry?.ID || !$activeLaunchpadID) return;
+        if (!draft || !activeLaunchpadId) return;
 
         if (!$listener.status) {
             toastStore.trigger({
@@ -148,17 +142,13 @@
 
         try {
             isSending = true;
-
-            await Repeat(currentEntry.Body, $activeLaunchpadID, useHttps);
-
-            userEdited = false;
-            await populateLaunchpadEntries($activeLaunchpadID);
-
+            // The launched entry arrives through the layout's request event
+            // and the store selects it.
+            await launchpadStore.launch(activeLaunchpadId);
             toastStore.trigger({
                 message: "Request launched",
                 background: "variant-filled-success",
             });
-            $currentEntryIndex = activeEntries.length - 1;
         } catch (err) {
             console.error("Launchpad error:", err);
             toastStore.trigger({
@@ -169,14 +159,17 @@
             isSending = false;
         }
     }
+
+    function setUseHttps(useHttps) {
+        if (activeLaunchpadId) launchpadStore.setUseHttps(activeLaunchpadId, useHttps);
+    }
+
     onMount(async () => {
-        await populateLaunchpads();
+        await launchpadStore.populate();
 
         const urlID = $page.url.searchParams.get("id");
-        const exists = $launchpads.some((l) => l.ID == urlID);
-
-        if (urlID && exists) {
-            $activeLaunchpadID = urlID;
+        if (urlID && $launchpadStore.launchpads.some((l) => l.ID === urlID)) {
+            await launchpadStore.selectLaunchpad(urlID);
         }
     });
 
@@ -217,9 +210,7 @@
                     body: "Are you sure you wish to proceed?",
                     response: (r) => {
                         if (r) {
-                            DeleteLaunchpad($activeLaunchpadID).then(() => {
-                                populateLaunchpads();
-                            });
+                            launchpadStore.deleteLaunchpad(activeLaunchpad.ID);
                         }
                     },
                 });
@@ -238,7 +229,7 @@
         {
             actionId: "launchpad.toggle-tls",
             icon: LockIcon,
-            handler: () => (useHttps = !useHttps),
+            handler: () => setUseHttps(!(draft?.useHttps ?? true)),
         },
         {
             actionId: "launchpad.launch",
@@ -255,7 +246,7 @@
                         type: "component",
                         component: "Notes",
                         toggleAction: "launchpad.view-notes",
-                        title: `Request ${$currentEntryIndex + 1} Notes`,
+                        title: `Request ${currentEntryIndex + 1} Notes`,
                         content: note,
                         requestID: currentEntry.ID,
                     };
@@ -277,7 +268,7 @@
                         type: "component",
                         component: "Metadata",
                         toggleAction: "launchpad.view-metadata",
-                        title: `Request ${$currentEntryIndex + 1} Metadata`,
+                        title: `Request ${currentEntryIndex + 1} Metadata`,
                         content: metadata,
                         requestID: currentEntry.ID,
                     };
@@ -307,7 +298,7 @@
     </AccordionItem>
 </Accordion>
 <div>
-    {#if $launchpads.length === 0}
+    {#if launchpads.length === 0}
         <div class="flex flex-col items-center justify-center mt-12 opacity-50">
             <h3 class="text-xl font-bold">No Launchpads</h3>
             <p>Create one from ledger.</p>
@@ -327,14 +318,14 @@
             <div class="text-center">
                 <h2 class="font-bold text-xl">{activeLaunchpad.Name}</h2>
                 <small class="opacity-70"
-                    >{currentLaunchpadIndex + 1} of {$launchpads.length}</small
+                    >{currentLaunchpadIndex + 1} of {launchpads.length}</small
                 >
             </div>
 
             <button
                 class="btn {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary hover:bg-primary-800 disabled:bg-surface-500'}"
                 on:click={() => navLaunchpad(1)}
-                disabled={currentLaunchpadIndex >= $launchpads.length - 1}
+                disabled={currentLaunchpadIndex >= launchpads.length - 1}
             >
                 <ChevronRightIcon size={24} />
             </button>
@@ -350,17 +341,17 @@
                 <button
                     class="btn {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary hover:bg-primary-800 disabled:bg-surface-500'}"
                     on:click={() => navEntry(-1)}
-                    disabled={$currentEntryIndex === 0}
+                    disabled={currentEntryIndex === 0}
                 >
                     <ArrowLeftIcon size={18} />
                 </button>
                 <span class="text-sm font-bold"
-                    >Request {$currentEntryIndex + 1} of {activeEntries.length}</span
+                    >Request {currentEntryIndex + 1} of {activeEntries.length}</span
                 >
                 <button
                     class="btn {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary hover:bg-primary-800 disabled:bg-surface-500'}"
                     on:click={() => navEntry(1)}
-                    disabled={$currentEntryIndex >= activeEntries.length - 1}
+                    disabled={currentEntryIndex >= activeEntries.length - 1}
                 >
                     <ArrowRightIcon size={18} />
                 </button>
@@ -374,7 +365,8 @@
                         <span class="text-sm font-bold">HTTPS</span>
                         <SlideToggle
                             name="TLS Toggle"
-                            bind:checked={useHttps}
+                            checked={draft?.useHttps ?? true}
+                            on:change={(event) => setUseHttps(event.target.checked)}
                             size="sm"
                         />
                     </div>
@@ -398,12 +390,12 @@
                 </div>
 
                 {#if currentEntry?.ID}
-                    {#key currentEntry.ID}
+                    {#key editorKey}
                         <RequestResponseView
                             request_id={currentEntry.ID}
-                            titleText={"Request " + ($currentEntryIndex + 1)}
-                            bind:requestBody={currentEntry.Body}
-                            bind:userEdited
+                            titleText={"Request " + (currentEntryIndex + 1)}
+                            bind:requestBody={editorBody}
+                            bind:userEdited={editorEdited}
                             requestReadOnly={false}
                         />
                     {/key}

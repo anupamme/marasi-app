@@ -15,7 +15,6 @@ import { reportUnsavedDraftCount } from "./draftGuards.js";
 
 export {
   BLANK_REQUEST,
-  compareQuickPick,
   dirtyLaunchpadIds,
   isDraftDirty,
   seededRaw,

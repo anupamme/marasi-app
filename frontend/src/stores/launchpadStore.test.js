@@ -2,7 +2,6 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
 import {
-  compareQuickPick,
   createLaunchpadStore,
   dirtyLaunchpadIds,
   isDraftDirty,
@@ -345,16 +344,23 @@ test("a compare chip re-picks its side and swap exchanges A and B", async () => 
   );
 });
 
-test("quick picks name the previous, next and original entry relative to A", async () => {
+test("selecting an entry in another launchpad ends the comparison", async () => {
   const store = createLaunchpadStore(threeEntries());
   await store.populate();
-  await store.startCompare("b");
-  const state = get(store);
-  assert.equal(compareQuickPick(state, "previous"), "a");
-  assert.equal(compareQuickPick(state, "next"), "c");
-  assert.equal(compareQuickPick(state, "original"), "a");
-  await store.startCompare("a");
-  assert.equal(compareQuickPick(get(store), "previous"), null);
+  await store.startCompare("c");
+  await store.selectEntry("lp2", "z");
+  assert.equal(get(store).selectedLaunchpadId, "lp2");
+  assert.equal(get(store).compare, null);
+});
+
+test("a side picked after compare closed does not reopen it", async () => {
+  const store = createLaunchpadStore(threeEntries());
+  await store.populate();
+  await store.startCompare("c");
+  const picked = store.setCompareSide("right", "a");
+  store.closeCompare();
+  await picked;
+  assert.equal(get(store).compare, null);
 });
 
 test("closing compare or switching launchpads ends the comparison", async () => {

@@ -6,6 +6,7 @@
 - Launchpad file tree: Launchpad entries windowed to the original plus the last 10, Group by status, Latest-in button
 - Search, create empty launchpad, rename and description
 - Launchpad draft editor, HTTPS toggle, Launch, response display, unsaved-draft prompts
+- Compare two entries: A/B picking, quick picks, line diff with Request/Response tabs, chip re-pick, swap, Esc
 
 ## How to get to it (user POV)
 
@@ -40,6 +41,21 @@ Then, on Launchpad, edit the draft and Launch:
  {"waitText":"entry 2 of 2","timeoutMs":15000},
  {"waitText":"verification-response /launchpad-replay","within":".lp-response"},
  {"waitNoText":"Revert draft"}]}
+```
+
+Compare, with three entries and entry 3 selected (`Compare` stays disabled below two entries). Entry rows carry `data-compare="A"`/`"B"`; chips are `.lp-chip[data-side=left|right]`. Stored request lines use absolute URLs (`GET http://127.0.0.1:18099/… HTTP/1.1`), so wait on `/path HTTP/1.1`, not `GET /path`. The tab buttons render `capitalize`d lowercase text; match them with `hasText:"equest"`.
+
+```json
+{"name":"compare","steps":[
+ {"text":"Compare"},{"waitText":"click any entry in the sidebar"},{"waitSelector":".lp-entry[data-compare=\"A\"]"},
+ {"text":"Previous (#2)"},{"waitSelector":".lp-diff"},{"waitSelector":".lp-entry[data-compare=\"B\"]"},
+ {"click":".lp-fold"},{"waitNoSelector":".lp-fold"},
+ {"click":".lp-compare-strip button","hasText":"equest"},
+ {"click":".lp-chip[data-side=\"left\"]"},{"waitText":"to use as the new A"},
+ {"click":".lp-entry","hasText":"/cmp-one"},{"waitText":"#1","within":".lp-chip[data-side=\"left\"]"},
+ {"text":"Swap A and B"},{"waitText":"#1","within":".lp-chip[data-side=\"right\"]"},
+ {"click":".lp-chip[data-side=\"right\"]"},{"key":"escape"},{"waitNoText":"to use as the new B"},
+ {"key":"escape"},{"waitNoSelector":".lp-compare-strip"},{"waitNoSelector":"[data-compare]"}]}
 ```
 
 Tree, prompts and dock:

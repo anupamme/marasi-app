@@ -9,10 +9,12 @@
 	import { githubLight } from "@uiw/codemirror-theme-github";
 	import { vim } from "@replit/codemirror-vim";
 	import { modeCurrent, ProgressRadial, SlideToggle } from "@skeletonlabs/skeleton";
-	import { Check, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
+	import { Check, GitCompare, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
 	import { lineWrap, marasiConfig } from "../../stores";
 	import { isDraftDirty } from "../../stores/launchpadStore";
+	import { compareView } from "./compare.js";
 	import { primaryVariant, statusClass } from "./format.js";
+	import LaunchpadCompare from "./LaunchpadCompare.svelte";
 	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
@@ -34,6 +36,23 @@
 	$: primary = primaryVariant($modeCurrent);
 	$: theme = $modeCurrent ? githubLight : oneDark;
 	$: vimExtensions = $marasiConfig.VimEnabled ? [vim()] : [];
+	$: compare = compareView(state);
+	$: comparing = !!compare?.comparing;
+
+	let comparePane;
+	/**
+	 * Starts compare from the selected entry (or the latest) as A, or closes
+	 * it. Needs at least two entries.
+	 */
+	export function toggleCompare() {
+		if (compare) return store.closeCompare();
+		if (entries.length < 2) return;
+		store.startCompare(selectedId ?? entries[entries.length - 1].ID);
+	}
+	/** Flips the diff between Request and Response while comparing. */
+	export function toggleCompareTab() {
+		comparePane?.toggleTab();
+	}
 
 	// Mirrors RequestResponseView: the Syntax setting, with "auto" skipping
 	// highlighting on very large bodies.
@@ -135,7 +154,7 @@
 				{/if}
 			</div>
 
-			{#if dirty}
+			{#if dirty && !comparing}
 				<button
 					class="btn btn-sm variant-soft-warning"
 					title="Revert the draft to the entry it was seeded from"
@@ -144,6 +163,15 @@
 					<RotateCcw size={14} class="mr-1" /> Revert draft
 				</button>
 			{/if}
+			<button
+				class="lp-compare-toggle btn btn-sm {compare ? primary : 'variant-soft-primary'}"
+				disabled={!compare && entries.length < 2}
+				title={entries.length < 2 ? "Compare needs at least two entries" : compare ? "Close compare (Esc)" : "Compare the selected entry with another"}
+				on:click={toggleCompare}
+			>
+				<GitCompare size={14} class="mr-1" />
+				{compare ? "Close compare" : "Compare"}
+			</button>
 			<div class="flex items-center gap-2">
 				<span class="text-sm font-bold">HTTPS</span>
 				<SlideToggle
@@ -171,7 +199,8 @@
 			</button>
 		</header>
 
-		<div class="grid min-h-0 flex-1 grid-cols-2">
+		<LaunchpadCompare bind:this={comparePane} {store} />
+		<div class="grid min-h-0 flex-1 grid-cols-2" class:hidden={comparing}>
 			<section class="flex min-h-0 min-w-0 flex-col border-r border-surface-500/30">
 				<div class="flex items-center justify-between bg-surface-100 px-3 py-1 text-xs dark:bg-surface-800">
 					<span class="font-bold">

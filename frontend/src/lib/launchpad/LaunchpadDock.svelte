@@ -7,7 +7,8 @@
 <script>
 	// The Launchpad dock: drag the edge to resize, drag below the snap point
 	// to collapse to a strip. With auto-hide on, focusing the editor
-	// collapses it and hovering the strip peeks the tree. ⌘\ toggles.
+	// collapses it and hovering the strip peeks the tree. The page binds
+	// launchpad.toggle-sidebar to toggle().
 	import { tick } from "svelte";
 	import { Eye, EyeOff, PanelLeftClose, PanelLeftOpen, Search } from "lucide-svelte";
 	import { dirtyLaunchpadIds } from "../../stores/launchpadStore";
@@ -74,16 +75,7 @@
 		window.addEventListener("pointermove", move);
 		window.addEventListener("pointerup", up);
 	}
-
-	function onKey(event) {
-		if ((event.metaKey || event.ctrlKey) && event.key === "\\") {
-			event.preventDefault();
-			toggle();
-		}
-	}
 </script>
-
-<svelte:window on:keydown={onKey} />
 
 {#if collapsed && !dragging}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
@@ -94,7 +86,7 @@
 	>
 		<button
 			class="btn btn-sm variant-soft px-2"
-			title="Show launchpads (⌘\)"
+			title="Show launchpads"
 			aria-label="Show launchpads"
 			on:click={() => expand()}
 		>
@@ -151,7 +143,7 @@
 				{#if !collapsed}
 					<button
 						class="opacity-70 hover:opacity-100"
-						title="Collapse (⌘\)"
+						title="Collapse"
 						aria-label="Collapse sidebar"
 						on:click={() => (collapsed = true)}
 					>

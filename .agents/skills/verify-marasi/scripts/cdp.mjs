@@ -235,6 +235,8 @@ function keyEvent(key) {
 		"`": { key: "`", code: "Backquote", keyCode: 192 },
 		"[": { key: "[", code: "BracketLeft", keyCode: 219 },
 		"]": { key: "]", code: "BracketRight", keyCode: 221 },
+		"\\": { key: "\\", code: "Backslash", keyCode: 220 },
+		down: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
 		enter: { key: "Enter", code: "Enter", keyCode: 13 },
 		escape: { key: "Escape", code: "Escape", keyCode: 27 },
 		backspace: { key: "Backspace", code: "Backspace", keyCode: 8 },

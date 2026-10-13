@@ -202,3 +202,47 @@ test("only extensions that rendered a GUI get a page: Workshop's core page is no
   const withWorkshopGUI = { ...ui, workshop: { state: {}, icon: { type: "icon", name: "Hammer" } } };
   assert.ok(buildCatalog({ extensions: extensionsWithGUI(extensions, withWorkshopGUI) }).get("global.open-extension.workshop"));
 });
+
+// Launchpad ids predate the redesign and stay put so saved profiles keep
+// their overrides (ADR 0001); only the menu text follows the new page.
+test("Launchpad actions keep their ids and keys but say Launchpad, not Tab or Settings", () => {
+  const catalog = buildCatalog();
+  const expected = [
+    ["launchpad.toggle-settings", "Rename Launchpad", "meta+p", "ctrl+p"],
+    ["launchpad.next-tab", "Next Launchpad", "meta+]", "ctrl+]"],
+    ["launchpad.previous-tab", "Previous Launchpad", "meta+[", "ctrl+["],
+    ["launchpad.delete-tab", "Delete Launchpad", "meta+shift+d", "ctrl+shift+d"],
+    ["launchpad.next-entry", "Next Entry", "meta+shift+]", "ctrl+shift+]"],
+    ["launchpad.launch", "Launch", "meta+shift+l", "ctrl+shift+l"],
+  ];
+  for (const [id, label, mac, win] of expected) {
+    const action = catalog.get(id);
+    assert.ok(action, id);
+    assert.equal(action.label, label, id);
+    assert.deepEqual(action.defaults, { [MACOS]: [mac], [WINDOWS_LINUX]: [win] }, id);
+  }
+  for (const action of catalog.inContext("launchpad")) {
+    assert.doesNotMatch(`${action.label} | ${action.description} | ${action.keywords}`, /\btab\b|settings/i, action.id);
+  }
+});
+
+test("the Launchpad page offers search, create, sidebar, grouping, compare and jump actions", () => {
+  const catalog = buildCatalog();
+  const expected = [
+    ["launchpad.focus-search", "Search Launchpads", "meta+shift+s", "ctrl+shift+s"],
+    ["launchpad.create", "New Launchpad", "meta+shift+a", "ctrl+shift+a"],
+    ["launchpad.toggle-sidebar", "Toggle Launchpad Sidebar", "meta+\\", "ctrl+\\"],
+    ["launchpad.toggle-group-by-status", "Group by Status", "meta+shift+g", "ctrl+shift+g"],
+    ["launchpad.toggle-compare", "Compare Entries", "meta+shift+c", "ctrl+shift+c"],
+    ["launchpad.toggle-compare-tab", "Switch Compare Request/Response", "meta+shift+r", "ctrl+shift+r"],
+    ["launchpad.swap-compare", "Swap Compared Entries", "meta+shift+w", "ctrl+shift+w"],
+    ["launchpad.jump-to-latest", "Jump to Latest Entry", "meta+shift+arrowdown", "ctrl+shift+arrowdown"],
+  ];
+  for (const [id, label, mac, win] of expected) {
+    const action = catalog.get(id);
+    assert.ok(action, id);
+    assert.equal(action.context, "launchpad", id);
+    assert.equal(action.label, label, id);
+    assert.deepEqual(action.defaults, { [MACOS]: [mac], [WINDOWS_LINUX]: [win] }, id);
+  }
+});

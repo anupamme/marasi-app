@@ -6,13 +6,21 @@
     import { getModalStore, getToastStore } from "@skeletonlabs/skeleton";
     import {
         ArrowDownIcon,
+        ArrowDownToLineIcon,
         ArrowLeftIcon,
+        ArrowLeftRightIcon,
         ArrowRightIcon,
         BracesIcon,
+        Columns2Icon,
+        FolderTreeIcon,
+        GitCompareIcon,
         LockIcon,
+        PanelLeftIcon,
         PenIcon,
+        PenLineIcon,
         PlayIcon,
-        ToggleLeftIcon,
+        PlusIcon,
+        SearchIcon,
         TrashIcon,
     } from "lucide-svelte";
     import { onMount } from "svelte";
@@ -32,8 +40,10 @@
     const toastStore = getToastStore();
 
     let dock;
+    let tree;
     let workspace;
     let searchInput;
+    let groupByStatus;
 
     onMount(async () => {
         await launchpadStore.populate();
@@ -168,14 +178,43 @@
         });
     }
 
-    // Existing catalog actions keep their IDs (ADR-0001). New actions
-    // (search, create, rename, compare, toggle sidebar) come with ticket 05.
+    // The sidebar opens first so the tree's search box and new-launchpad
+    // field are on screen when they take focus.
+    async function createLaunchpad() {
+        await dock?.expand();
+        tree?.startCreate();
+    }
+
+    // Swapping needs both sides picked.
+    function swapCompare() {
+        const { compare } = get(launchpadStore);
+        if (compare?.leftId && compare.rightId) launchpadStore.swapCompare();
+    }
+
+    // Catalog actions keep their pre-redesign IDs (ADR-0001):
+    // toggle-settings renames, *-tab steps launchpads.
     const launchpadMenu = [
+        { actionId: "launchpad.focus-search", icon: SearchIcon, handler: () => dock?.expand(true) },
+        { actionId: "launchpad.create", icon: PlusIcon, handler: createLaunchpad },
         {
             actionId: "launchpad.toggle-settings",
-            icon: ToggleLeftIcon,
+            icon: PenLineIcon,
             handler: () => workspace?.toggleEdit(),
         },
+        { actionId: "launchpad.toggle-sidebar", icon: PanelLeftIcon, handler: () => dock?.toggle() },
+        {
+            actionId: "launchpad.toggle-group-by-status",
+            icon: FolderTreeIcon,
+            handler: () => (groupByStatus = !groupByStatus),
+        },
+        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: () => tree?.jumpToLatest() },
+        { actionId: "launchpad.toggle-compare", icon: GitCompareIcon, handler: () => workspace?.toggleCompare() },
+        {
+            actionId: "launchpad.toggle-compare-tab",
+            icon: Columns2Icon,
+            handler: () => workspace?.toggleCompareTab(),
+        },
+        { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },
         { actionId: "launchpad.previous-tab", icon: ArrowLeftIcon, handler: () => stepLaunchpad(-1) },
         { actionId: "launchpad.next-entry", icon: ArrowDownIcon, handler: () => stepEntry(1) },
@@ -216,6 +255,8 @@
 <div class="relative flex h-full min-h-0">
     <LaunchpadDock bind:this={dock} store={launchpadStore} {searchInput}>
         <LaunchpadTree
+            bind:this={tree}
+            bind:groupByStatus
             store={launchpadStore}
             pickLaunchpad={(id) => launchpadStore.selectLaunchpad(id)}
             {pickEntry}

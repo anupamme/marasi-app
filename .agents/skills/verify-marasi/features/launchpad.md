@@ -14,7 +14,17 @@ Select the rail item titled `Launchpad` or press `Command+5`. The left dock hold
 
 Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count, and its last status. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the `Request draft` editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side.
 
-Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. `⌘\` toggles the dock (a page-local handler; the driver cannot send `\`, so use the `Collapse sidebar` and `Show launchpads` buttons).
+Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. Factory keys: `⌘⇧S` search (expands the dock and focuses the search box), `⌘⇧A` new launchpad, `⌘P` rename (id `launchpad.toggle-settings`), `⌘\` toggle the dock, `⌘⇧G` Group by status, `⌘⇧↓` jump to latest, `⌘⇧C` start or close compare, `⌘⇧R` switch the compare Request/Response tab, `⌘⇧W` swap A and B, `⌘]`/`⌘[` next/previous launchpad (ids `launchpad.next-tab`/`previous-tab`), `⌘⇧D` delete launchpad (`launchpad.delete-tab`). Shortcuts are dropped while an input has focus, so click `.lp-topbar` first. The driver sends `cmd+\\` and `cmd+shift+down`.
+
+```json
+{"name":"shortcuts","steps":[
+ {"key":"cmd+shift+a"},{"insert":"KB pad"},{"key":"enter"},{"waitText":"Empty launchpad"},
+ {"click":".lp-topbar"},{"key":"cmd+\\"},{"waitSelector":".lp-strip"},
+ {"key":"cmd+shift+s"},{"waitSelector":"input[aria-label=\"Search launchpads\"]:focus"},{"key":"escape"},
+ {"click":".lp-topbar"},{"key":"cmd+p"},{"waitSelector":"input[aria-label=\"Launchpad name\"]"},{"key":"escape"}]}
+```
+
+With two or more entries, `⌘⇧C` shows `click any entry in the sidebar`; after a quick pick, `⌘⇧R` flips `.lp-compare-strip button[aria-pressed="true"]` and `⌘⇧W` moves the A entry's number into `.lp-chip[data-side="right"]`. `⌘⇧↓` scrolls the tree smoothly; in headless Chrome the `Latest in …` button can stay in the DOM after the scroll, so check the screenshot rather than waiting for the text to go.
 
 ## Driving it with Chrome CDP
 

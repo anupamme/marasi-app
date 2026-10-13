@@ -64,8 +64,10 @@
 		expanded = result.expanded;
 		openGroups = result.openGroups;
 	}
-	const openAll = () => setAll(expandAll({ ...state, groupByStatus, openGroups }));
-	const closeAll = () => setAll(collapseAll(state));
+	// An entry's live launch outcome, or its stored one; decides its status folder.
+	$: launchFor = (entry) => launchOf(state, entry.ID, entry);
+	const openAll = () => setAll(expandAll({ ...state, groupByStatus, openGroups, launchFor }));
+	const closeAll = () => setAll(collapseAll({ ...state, launchFor }));
 
 	export function startCreate() {
 		creating = true;
@@ -118,7 +120,7 @@
 	afterUpdate(updateJump);
 	// Opens the rows holding an entry and scrolls it into view (⌘⇧↓).
 	export async function showEntry(launchpadId, entryId) {
-		setAll(revealEntry({ expanded, openGroups, entriesByLaunchpad: state.entriesByLaunchpad, groupByStatus }, launchpadId, entryId));
+		setAll(revealEntry({ expanded, openGroups, entriesByLaunchpad: state.entriesByLaunchpad, groupByStatus, launchFor }, launchpadId, entryId));
 		await tick();
 		scroller?.querySelector(`[data-entry="${CSS.escape(entryId)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 	}
@@ -208,9 +210,12 @@
 				{@const open = searching || expanded[launchpad.ID]}
 				{@const unseen = state.unseenByLaunchpad[launchpad.ID] || 0}
 				{@const summary = launchpadSummary(launchpad)}
+				{@const newest = entries?.at(-1)}
+				{@const newestLaunch = newest ? launchOf(state, newest.ID, newest) : null}
+				{@const awaiting = Boolean(pendingLaunchOf(state, launchpad.ID)) || newestLaunch?.Status === "pending"}
 				{@const selectedEntryId = state.selectedEntryByLaunchpad[launchpad.ID]}
 				{@const rows = open
-					? entryRows({ launchpad, entries, matchedEntries, groupByStatus, shownByList, openGroups, selectedEntryId })
+					? entryRows({ launchpad, entries, matchedEntries, groupByStatus, shownByList, openGroups, selectedEntryId, launchFor })
 					: []}
 				<div data-launchpad={launchpad.ID}>
 					<div
@@ -253,11 +258,24 @@
 							>
 						{/if}
 						<span class="flex-none text-[10px] opacity-50" title="Entries">{summary.count || ""}</span>
-						{#if summary.lastStatus !== null}
+						{#if summary.lastStatus}
 							<span
 								class="w-7 flex-none text-right font-mono text-[10px] {statusClass(summary.lastStatus)}"
-								title="Last status">{summary.lastStatus || "…"}</span
+								title="Last status">{summary.lastStatus}</span
 							>
+						{:else if summary.lastStatus === 0}
+							<!-- No response code: in flight, or how the newest launch ended. -->
+							<span class="flex w-7 flex-none justify-end text-[10px] opacity-60" title="Last status">
+								{#if awaiting}
+									<LoaderCircle size={11} class="animate-spin" />
+								{:else if newestLaunch?.Status === "cancelled"}
+									<Ban size={11} />
+								{:else if newestLaunch?.Status === "failed"}
+									<CircleAlert size={11} class="text-error-500" />
+								{:else}
+									—
+								{/if}
+							</span>
 						{/if}
 					</div>
 

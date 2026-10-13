@@ -52,11 +52,24 @@ export function launchpadSummary(launchpad) {
   return { count, lastStatus: count ? (launchpad.LastStatusCode ?? 0) : null };
 }
 
-/** The status folder an entry belongs to; unanswered entries are "pending". */
-export const statusKey = (entry) => (entry.StatusCode ? String(entry.StatusCode) : "pending");
+// Folders for entries without a response code, after the code folders.
+const UNANSWERED = ["pending", "cancelled", "failed"];
 
-const byStatus = (a, b) =>
-  a === "pending" ? 1 : b === "pending" ? -1 : Number(a) - Number(b);
+/**
+ * The status folder an entry belongs to: its response code, else how its
+ * launch ended ("cancelled" or "failed"), else "pending". `launch` is the
+ * live outcome when known; the entry's stored `metadata.launch` otherwise.
+ */
+export function statusKey(entry, launch = undefined) {
+  if (entry.StatusCode) return String(entry.StatusCode);
+  const status = launch === undefined ? entry.Metadata?.launch?.status : launch?.Status;
+  return status === "cancelled" || status === "failed" ? status : "pending";
+}
+
+// Code folders in numeric order, then the unanswered folders in UNANSWERED order.
+const statusRank = (key) =>
+  UNANSWERED.includes(key) ? 1000 + UNANSWERED.indexOf(key) : Number(key);
+const byStatus = (a, b) => statusRank(a) - statusRank(b);
 
 /**
  * The rows under one open launchpad: its original entry, then the rest of
@@ -90,6 +103,7 @@ function buildRows({
   shownByList = {},
   openGroups = {},
   selectedEntryId = null,
+  launchFor = undefined,
 }) {
   const indexed = entries.map((entry, index) => ({ kind: "entry", entry, index }));
   if (matchedEntries) {
@@ -109,7 +123,7 @@ function buildRows({
 
   const groups = new Map();
   for (const row of rest) {
-    const key = statusKey(row.entry);
+    const key = statusKey(row.entry, launchFor?.(row.entry));
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }

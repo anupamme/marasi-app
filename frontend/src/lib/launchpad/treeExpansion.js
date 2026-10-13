@@ -4,11 +4,11 @@
 import { statusKey } from "./treeRows.js";
 
 // IDs of every status folder; the original (first) entry is in none.
-function statusFolderIds(launchpads, entriesByLaunchpad) {
+function statusFolderIds(launchpads, entriesByLaunchpad, launchFor) {
   const ids = new Set();
   for (const launchpad of launchpads) {
     for (const entry of (entriesByLaunchpad[launchpad.ID] || []).slice(1)) {
-      ids.add(`${launchpad.ID}:${statusKey(entry)}`);
+      ids.add(`${launchpad.ID}:${statusKey(entry, launchFor?.(entry))}`);
     }
   }
   return [...ids];
@@ -20,10 +20,10 @@ const allSet = (ids, value) => Object.fromEntries(ids.map((id) => [id, value]));
  * Every launchpad open, plus every status folder when `groupByStatus`;
  * otherwise `openGroups` is kept as is.
  */
-export function expandAll({ launchpads, entriesByLaunchpad, groupByStatus, openGroups = {} }) {
+export function expandAll({ launchpads, entriesByLaunchpad, groupByStatus, openGroups = {}, launchFor }) {
   return {
     expanded: allSet(launchpads.map((launchpad) => launchpad.ID), true),
-    openGroups: groupByStatus ? allSet(statusFolderIds(launchpads, entriesByLaunchpad), true) : openGroups,
+    openGroups: groupByStatus ? allSet(statusFolderIds(launchpads, entriesByLaunchpad, launchFor), true) : openGroups,
   };
 }
 
@@ -31,10 +31,10 @@ export function expandAll({ launchpads, entriesByLaunchpad, groupByStatus, openG
  * Every launchpad and status folder closed. Explicit `false`s, so neither
  * autoExpand nor a folder holding the selected entry reopens them.
  */
-export function collapseAll({ launchpads, entriesByLaunchpad }) {
+export function collapseAll({ launchpads, entriesByLaunchpad, launchFor }) {
   return {
     expanded: allSet(launchpads.map((launchpad) => launchpad.ID), false),
-    openGroups: allSet(statusFolderIds(launchpads, entriesByLaunchpad), false),
+    openGroups: allSet(statusFolderIds(launchpads, entriesByLaunchpad, launchFor), false),
   };
 }
 
@@ -42,13 +42,13 @@ export function collapseAll({ launchpads, entriesByLaunchpad }) {
  * Opens the launchpad holding `entryId`, and its status folder when
  * `groupByStatus`, overriding a collapse, so the entry's row renders.
  */
-export function revealEntry({ expanded, openGroups, entriesByLaunchpad, groupByStatus }, launchpadId, entryId) {
+export function revealEntry({ expanded, openGroups, entriesByLaunchpad, groupByStatus, launchFor }, launchpadId, entryId) {
   const entries = entriesByLaunchpad[launchpadId] || [];
   const index = entries.findIndex((entry) => entry.ID === entryId);
   const inFolder = groupByStatus && index > 0;
   return {
     expanded: { ...expanded, [launchpadId]: true },
-    openGroups: inFolder ? { ...openGroups, [`${launchpadId}:${statusKey(entries[index])}`]: true } : openGroups,
+    openGroups: inFolder ? { ...openGroups, [`${launchpadId}:${statusKey(entries[index], launchFor?.(entries[index]))}`]: true } : openGroups,
   };
 }
 

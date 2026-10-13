@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { entryRows, launchpadSummary, searchLaunchpads } from "./treeRows.js";
+import { entryRows, launchpadSummary, searchLaunchpads, statusKey } from "./treeRows.js";
 
 const launchpad = { ID: "lp", Name: "Login", Description: "" };
 const makeEntries = (n, status = () => 200) =>
@@ -161,4 +161,35 @@ test("a launchpad summary comes from its entry count and last status code", () =
   assert.deepEqual(launchpadSummary({ EntryCount: 2, LastStatusCode: null }), { count: 2, lastStatus: 0 });
   assert.deepEqual(launchpadSummary({ EntryCount: 0, LastStatusCode: null }), { count: 0, lastStatus: null });
   assert.deepEqual(launchpadSummary({ ID: "x" }), { count: null, lastStatus: null });
+});
+
+test("statusKey files an unanswered entry by its launch outcome, not as pending", () => {
+  const unanswered = { ID: "e", StatusCode: 0 };
+  assert.equal(statusKey(unanswered, { Status: "cancelled" }), "cancelled");
+  assert.equal(statusKey(unanswered, { Status: "failed", Reason: "network_error" }), "failed");
+  assert.equal(statusKey(unanswered, { Status: "pending" }), "pending");
+  assert.equal(statusKey(unanswered, null), "pending");
+  // The stored outcome counts when no live launch is known.
+  assert.equal(statusKey({ ...unanswered, Metadata: { launch: { status: "cancelled" } } }), "cancelled");
+  // A response code wins: a failed launch stored as 502 files under 502.
+  assert.equal(statusKey({ ID: "f", StatusCode: 502 }, { Status: "failed" }), "502");
+});
+
+test("grouped rows put a cancelled launch in a cancelled folder after the code folders", () => {
+  const launchpad = { ID: "lp", Name: "Pad" };
+  const entries = [
+    { ID: "a", StatusCode: 200 },
+    { ID: "b", StatusCode: 200 },
+    { ID: "c", StatusCode: 0 },
+    { ID: "d", StatusCode: 0 },
+  ];
+  const launches = { c: { Status: "cancelled" }, d: { Status: "pending" } };
+  const rows = entryRows({
+    launchpad,
+    entries,
+    groupByStatus: true,
+    launchFor: (entry) => launches[entry.ID] ?? null,
+  });
+  const folders = rows.filter((row) => row.kind === "group").map((row) => row.key);
+  assert.deepEqual(folders, ["200", "pending", "cancelled"]);
 });

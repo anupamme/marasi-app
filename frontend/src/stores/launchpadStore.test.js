@@ -5,6 +5,8 @@ import {
   createLaunchpadStore,
   dirtyLaunchpadIds,
   isDraftDirty,
+  launchOf,
+  pendingLaunchOf,
 } from "./createLaunchpadStore.js";
 
 // An in-memory backend: launchpads, their entries, and raw details by id.
@@ -30,9 +32,20 @@ function fakeApi({ launchpads = [], entries = {}, raws = {} } = {}) {
       calls.push(["deleteLaunchpad", id]);
       launchpads = launchpads.filter((launchpad) => launchpad.ID !== id);
     },
+    // Launch ids are the entries' UUIDs; tests pick them with nextLaunchIds.
+    nextLaunchIds: [],
+    pending: [],
     launch: async (raw, id, useHttps) => {
       calls.push(["launch", raw, id, useHttps]);
+      return api.nextLaunchIds.shift();
     },
+    cancelLaunch: async (id) => {
+      calls.push(["cancelLaunch", id]);
+      const launch = api.pending.find((item) => item.ID === id);
+      return { ...launch, ID: id, Status: "cancelled", Reason: "" };
+    },
+    getLaunch: async (id) => api.pending.find((item) => item.ID === id) ?? null,
+    pendingLaunches: async () => api.pending.map((item) => ({ ...item })),
   };
   return api;
 }
@@ -194,23 +207,33 @@ const launched = (id, launchpadId, raw) => ({
   RequestedAt: "2026-10-13T10:00:00Z",
 });
 
-test("launch sends the draft and the arriving entry is selected with a clean draft", async () => {
+// A launch as Marasi reports it in launch events and launch bindings.
+const launchState = (id, launchpadId, Status, Reason = "") => ({
+  ID: id,
+  LaunchpadID: launchpadId,
+  Status,
+  Reason,
+});
+
+test("launch sends the draft, stays pending under its launch id, and the arriving entry is selected", async () => {
   const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
   const store = createLaunchpadStore(api);
   await store.populate();
   store.updateDraft("lp1", "GET /b?q=1 HTTP/1.1\nHost: x\n\n");
   store.setUseHttps("lp1", false);
-  await store.launch("lp1");
+  assert.equal(await store.launch("lp1"), "d");
   assert.deepEqual(api.calls.at(-1), [
     "launch",
     "GET /b?q=1 HTTP/1.1\nHost: x\n\n",
     "lp1",
     false,
   ]);
+  assert.equal(pendingLaunchOf(get(store), "lp1")?.ID, "d");
 
   // Marasi echoes the request as sent, with its own line endings.
   store.onRequest(launched("d", "lp1", "GET /b?q=1 HTTP/1.1\r\nHost: x\r\n\r\n"));
-  const state = get(store);
+  let state = get(store);
   assert.deepEqual(
     state.entriesByLaunchpad.lp1.map((item) => item.ID),
     ["a", "b", "d"],
@@ -219,11 +242,34 @@ test("launch sends the draft and the arriving entry is selected with a clean dra
   assert.equal(state.draftsByLaunchpad.lp1.seededFrom, "d");
   assert.equal(state.draftsByLaunchpad.lp1.useHttps, false);
   assert.equal(isDraftDirty(state, "lp1"), false);
-  assert.deepEqual(state.pendingLaunchByLaunchpad, {});
+  // The entry arrived, but the launch is pending until Marasi says it ended.
+  assert.equal(launchOf(state, "d")?.Status, "pending");
+
+  store.onLaunchFinished(launchState("d", "lp1", "completed"));
+  state = get(store);
+  assert.equal(pendingLaunchOf(state, "lp1"), null);
+  assert.equal(launchOf(state, "d")?.Status, "completed");
+});
+
+test("an entry that arrives before the launch binding returns is still selected", async () => {
+  const api = twoLaunchpads();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.launch = async () => {
+    store.onLaunchStarted(launchState("d", "lp1", "pending"));
+    store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+    return "d";
+  };
+  await store.launch("lp1");
+  const state = get(store);
+  assert.equal(state.selectedEntryByLaunchpad.lp1, "d");
+  assert.equal(pendingLaunchOf(state, "lp1")?.ID, "d");
 });
 
 test("edits typed after Launch survive the arrival as a dirty draft", async () => {
-  const store = createLaunchpadStore(twoLaunchpads());
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
   await store.populate();
   store.updateDraft("lp1", "first");
   await store.launch("lp1");
@@ -236,7 +282,9 @@ test("edits typed after Launch survive the arrival as a dirty draft", async () =
 });
 
 test("an arrival for a launchpad that is not open counts as unseen until it is opened", async () => {
-  const store = createLaunchpadStore(twoLaunchpads());
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
   await store.populate();
   await store.selectLaunchpad("lp2");
   await store.launch("lp2");
@@ -261,7 +309,9 @@ test("traffic without a known launchpad id is ignored", async () => {
 });
 
 test("the response fills in the arrived entry's status and length", async () => {
-  const store = createLaunchpadStore(twoLaunchpads());
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
   await store.populate();
   await store.launch("lp1");
   store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
@@ -289,7 +339,118 @@ test("a failed launch is not left pending", async () => {
   const store = createLaunchpadStore(api);
   await store.populate();
   await assert.rejects(store.launch("lp1"), /listener offline/);
-  assert.deepEqual(get(store).pendingLaunchByLaunchpad, {});
+  assert.equal(pendingLaunchOf(get(store), "lp1"), null);
+});
+
+test("cancel ends the open launchpad's pending launch as cancelled", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  api.pending.push(launchState("d", "lp1", "pending"));
+  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+
+  await store.cancelLaunch("lp1");
+  assert.deepEqual(api.calls.at(-1), ["cancelLaunch", "d"]);
+  let state = get(store);
+  assert.equal(pendingLaunchOf(state, "lp1"), null);
+  assert.equal(launchOf(state, "d")?.Status, "cancelled");
+
+  store.onLaunchFinished(launchState("d", "lp1", "cancelled"));
+  state = get(store);
+  assert.equal(launchOf(state, "d")?.Status, "cancelled");
+});
+
+test("a cancel that loses the race to the response takes the launch's final state quietly", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  api.cancelLaunch = async (id) => launchState(id, "lp1", "completed");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  await store.cancelLaunch("lp1");
+  assert.equal(launchOf(get(store), "d")?.Status, "completed");
+  assert.equal(pendingLaunchOf(get(store), "lp1"), null);
+});
+
+test("cancel does nothing when the launchpad has no pending launch", async () => {
+  const api = twoLaunchpads();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.cancelLaunch("lp1");
+  assert.equal(api.calls.length, 0);
+});
+
+test("a failed launch keeps its reason on the entry", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onLaunchFinished(launchState("d", "lp1", "failed", "upstream_error"));
+  assert.deepEqual(launchOf(get(store), "d"), { Status: "failed", Reason: "upstream_error" });
+});
+
+test("a launch that ends before its entry arrived loads the entry and selects it", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  // Marasi stores the cancelled request without a request event.
+  api.getEntries = async () => [entry("a"), entry("b"), entry("d")];
+  await store.onLaunchFinished(launchState("d", "lp1", "cancelled"));
+  const state = get(store);
+  assert.deepEqual(state.entriesByLaunchpad.lp1.map((item) => item.ID), ["a", "b", "d"]);
+  assert.equal(state.selectedEntryByLaunchpad.lp1, "d");
+  assert.equal(launchOf(state, "d")?.Status, "cancelled");
+});
+
+test("populate picks up launches still pending, so a page opened mid-launch shows them", async () => {
+  const api = twoLaunchpads();
+  api.pending.push(launchState("d", "lp2", "pending"));
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  assert.equal(pendingLaunchOf(get(store), "lp2")?.ID, "d");
+  assert.equal(pendingLaunchOf(get(store), "lp1"), null);
+});
+
+test("populate settles a launch the store thought pending but Marasi has finished", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  api.getLaunch = async (id) => launchState(id, "lp1", "failed", "interrupted");
+  await store.populate();
+  assert.equal(pendingLaunchOf(get(store), "lp1"), null);
+  assert.equal(launchOf(get(store), "d")?.Status, "failed");
+});
+
+test("loaded entries carry how their launch ended", async () => {
+  const api = twoLaunchpads();
+  api.getEntries = async () => [
+    entry("a"),
+    { ...entry("b"), Metadata: { launch: { status: "failed", reason: "network_error" } } },
+  ];
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  const state = get(store);
+  assert.equal(launchOf(state, "a"), null);
+  assert.deepEqual(launchOf(state, "b"), { Status: "failed", Reason: "network_error" });
+});
+
+test("clearing the store for another project forgets its launches", async () => {
+  const api = twoLaunchpads();
+  api.nextLaunchIds.push("d");
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  await store.launch("lp1");
+  store.clear();
+  assert.equal(pendingLaunchOf(get(store), "lp1"), null);
+  assert.deepEqual(get(store).launchesById, {});
 });
 
 function threeEntries() {
@@ -445,57 +606,6 @@ test("selecting an entry in another launchpad clears its unseen count", async ()
   await store.selectEntry("lp2", "d");
   assert.equal(get(store).selectedLaunchpadId, "lp2");
   assert.equal(get(store).unseenByLaunchpad.lp2, 0);
-});
-
-// Timers the test fires by hand.
-function manualTimers() {
-  const pending = new Map();
-  let next = 1;
-  return {
-    setTimer: (fn, ms) => {
-      const id = next++;
-      pending.set(id, { fn, ms });
-      return id;
-    },
-    clearTimer: (id) => pending.delete(id),
-    fireAll: () => {
-      const due = [...pending.values()];
-      pending.clear();
-      due.forEach(({ fn }) => fn());
-    },
-    pending,
-  };
-}
-
-test("a launch whose entry never arrives stops being pending after the timeout", async () => {
-  const timers = manualTimers();
-  const store = createLaunchpadStore(twoLaunchpads(), timers);
-  await store.populate();
-  await store.launch("lp1");
-  assert.ok(get(store).pendingLaunchByLaunchpad.lp1);
-  assert.equal([...timers.pending.values()][0].ms, 15000);
-  timers.fireAll();
-  assert.deepEqual(get(store).pendingLaunchByLaunchpad, {});
-});
-
-test("an arrived launch cancels its timeout", async () => {
-  const timers = manualTimers();
-  const store = createLaunchpadStore(twoLaunchpads(), timers);
-  await store.populate();
-  await store.launch("lp1");
-  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
-  assert.equal(timers.pending.size, 0);
-});
-
-test("a timeout from an earlier launch does not clear a newer one", async () => {
-  const timers = manualTimers();
-  const store = createLaunchpadStore(twoLaunchpads(), timers);
-  await store.populate();
-  await store.launch("lp1");
-  const [first] = [...timers.pending.values()];
-  await store.launch("lp1");
-  first.fn();
-  assert.ok(get(store).pendingLaunchByLaunchpad.lp1);
 });
 
 // Jump to Launchpad, from the Ledger's toast, opens /launchpad?id=<id>.

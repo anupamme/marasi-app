@@ -237,6 +237,7 @@ test("the Launchpad page offers search, create, sidebar, grouping, compare and j
     ["launchpad.toggle-compare-view", "Switch Compare Request/Response", "meta+shift+r", "ctrl+shift+r"],
     ["launchpad.swap-compare", "Swap Compared Entries", "meta+shift+x", "ctrl+shift+x"],
     ["launchpad.jump-to-latest", "Jump to Latest Entry", "meta+shift+arrowdown", "ctrl+shift+arrowdown"],
+    ["launchpad.cancel-launch", "Cancel Launch", "meta+shift+.", "ctrl+shift+."],
   ];
   for (const [id, label, mac, win] of expected) {
     const action = catalog.get(id);

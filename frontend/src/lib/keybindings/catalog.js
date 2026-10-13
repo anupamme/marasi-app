@@ -116,6 +116,7 @@ export const FACTORY_ACTIONS = [
     ["edit-request", "Edit Request", "Edit Current Entry Request", "edit, entry, request", primary("shift+e")],
     ["toggle-tls", "Toggle TLS", "Toggle TLS Flag", "toggle, tls, https", primary("shift+t")],
     ["launch", "Launch", "Send request through proxy", "send, launchpad, repeat", primary("shift+l")],
+    ["cancel-launch", "Cancel Launch", "Cancel the open launchpad's pending launch", "cancel, stop, abort, launch", primary("shift+.")],
     ["view-notes", "View Notes", "View or edit request notes", "notes", primary("shift+n")],
     ["view-metadata", "View Metadata", "View request Metadata", "metadata", primary("shift+m")],
     ["focus-search", "Search Launchpads", "Jump to the sidebar search", "search, find, filter", primary("shift+s")],

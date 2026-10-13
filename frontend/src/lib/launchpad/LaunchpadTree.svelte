@@ -9,13 +9,13 @@
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate, tick } from "svelte";
-	import { ArrowDown, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
-	import { isDraftDirty } from "../../stores/launchpadStore";
+	import { ArrowDown, Ban, ChevronDown, CircleAlert, LoaderCircle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
+	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { jumpTarget } from "./jumpTarget.js";
 	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
-	import { primaryVariant, shortTime, statusClass } from "./format.js";
+	import { launchEndText, primaryVariant, shortTime, statusClass } from "./format.js";
 	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
@@ -219,7 +219,7 @@
 							{#if isDraftDirty(state, launchpad.ID)}
 								<span class="h-1.5 w-1.5 flex-none rounded-full bg-warning-500" title="Unsaved draft"></span>
 							{/if}
-							{#if state.pendingLaunchByLaunchpad[launchpad.ID]}
+							{#if pendingLaunchOf(state, launchpad.ID)}
 								<span class="h-1.5 w-1.5 flex-none animate-pulse rounded-full bg-primary-500" title="Launching"></span>
 							{/if}
 						</button>
@@ -287,6 +287,8 @@
 								{@const inCompare = compare?.launchpadId === launchpad.ID}
 								{@const active = isSelected && selectedEntryId === entry.ID && !inCompare}
 								{@const side = inCompare ? compareSideOf(compare, entry.ID) : null}
+								{@const launch = launchOf(state, entry.ID, entry)}
+								{@const endText = launchEndText(launch)}
 								<button
 									class="lp-entry group relative flex w-full items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
 									2
@@ -297,7 +299,10 @@
 											? 'hover:bg-primary-500/15'
 											: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
 									data-compare={side ? COMPARE_SIDES[side].label : undefined}
-									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}"
+									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
+										? ` · ${endText}`
+										: ''}"
+									data-launch={launch?.Status}
 									aria-current={active ? "true" : undefined}
 									data-entry={entry.ID}
 									data-tree-row
@@ -325,7 +330,21 @@
 											as {COMPARE_SIDES[compare.picking].label}
 										</span>
 									{/if}
-									<span class="w-7 flex-none text-right {statusClass(entry.StatusCode)}">{entry.StatusCode || "…"}</span>
+									{#if launch?.Status === "pending"}
+										<span class="flex w-7 flex-none justify-end opacity-60" title="Launching">
+											<LoaderCircle size={12} class="animate-spin" />
+										</span>
+									{:else if launch?.Status === "cancelled"}
+										<span class="flex w-7 flex-none justify-end opacity-60" title={endText}>
+											<Ban size={12} />
+										</span>
+									{:else if launch?.Status === "failed"}
+										<span class="flex w-7 flex-none justify-end text-error-500" title={endText}>
+											<CircleAlert size={12} />
+										</span>
+									{:else}
+										<span class="w-7 flex-none text-right {statusClass(entry.StatusCode)}">{entry.StatusCode || "…"}</span>
+									{/if}
 									<span class="w-9 flex-none text-right opacity-50">{entry.Length || ""}</span>
 								</button>
 							{/if}

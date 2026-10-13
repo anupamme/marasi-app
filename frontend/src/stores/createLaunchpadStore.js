@@ -7,17 +7,11 @@ import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 // The draft an empty launchpad starts from.
 export const BLANK_REQUEST = "GET / HTTP/1.1\nHost: \n\n";
 
-// How long a Launch waits for its entry to arrive before it stops being
-// pending. Arrival is asynchronous (Marasi ADR-0011) and some launches, such
-// as WebSocket upgrades, never produce a normal request/response pair.
-export const LAUNCH_TIMEOUT_MS = 15000;
-
 // The state maps keyed by launchpad id. A deleted launchpad leaves all of them.
 const PER_LAUNCHPAD_KEYS = [
   "entriesByLaunchpad",
   "selectedEntryByLaunchpad",
   "draftsByLaunchpad",
-  "pendingLaunchByLaunchpad",
   "unseenByLaunchpad",
 ];
 
@@ -26,6 +20,9 @@ function initialState(projectStateVersion = 0) {
     projectStateVersion,
     launchpads: [],
     ...Object.fromEntries(PER_LAUNCHPAD_KEYS.map((key) => [key, {}])),
+    // Launches by launch id, which is also their entry's UUID (Marasi
+    // ADR-0031): { ID, LaunchpadID, Status, Reason }.
+    launchesById: {},
     detailsById: {},
     selectedLaunchpadId: null,
     search: "",
@@ -71,6 +68,78 @@ export function dirtyLaunchpadIds(state) {
   );
 }
 
+/**
+ * How the entry's launch went: { Status, Reason } with Status pending,
+ * completed, cancelled or failed, or null for an entry that was not
+ * launched. Live launch events win over the outcome stored in the entry's
+ * metadata (`launch.{status,reason}`). Pass the entry when you have it.
+ */
+export function launchOf(state, entryId, entry = undefined) {
+  const live = state.launchesById[entryId];
+  if (live) return { Status: live.Status, Reason: live.Reason || "" };
+  const found =
+    entry ??
+    Object.values(state.entriesByLaunchpad)
+      .flat()
+      .find((item) => item.ID === entryId);
+  const stored =
+    found?.Metadata?.launch ?? state.detailsById[entryId]?.Metadata?.launch;
+  if (!stored?.status) return null;
+  return { Status: stored.status, Reason: stored.reason || "" };
+}
+
+/** The launchpad's newest pending launch, or null. */
+export function pendingLaunchOf(state, launchpadId) {
+  return (
+    Object.values(state.launchesById)
+      .filter((launch) => launch.LaunchpadID === launchpadId && launch.Status === "pending")
+      .at(-1) ?? null
+  );
+}
+
+// Records a launch. A late "pending" never overrides a terminal state, since
+// the binding's reply can arrive after the launch-finished event.
+function recordLaunch(state, launch) {
+  if (!launch?.ID) return state;
+  const known = state.launchesById[launch.ID];
+  if (known && known.Status !== "pending" && launch.Status === "pending") {
+    return state;
+  }
+  return {
+    ...state,
+    launchesById: {
+      ...state.launchesById,
+      [launch.ID]: {
+        ID: launch.ID,
+        LaunchpadID: launch.LaunchpadID ?? known?.LaunchpadID,
+        Status: launch.Status,
+        Reason: launch.Reason || "",
+      },
+    },
+  };
+}
+
+// Selects a launched entry and reseeds the draft from the request as sent,
+// unless the researcher edited the draft after launching.
+function selectLaunched(state, launchpadId, entryId, sentRaw, launchedRaw) {
+  const draft = state.draftsByLaunchpad[launchpadId];
+  return {
+    ...state,
+    selectedEntryByLaunchpad: {
+      ...state.selectedEntryByLaunchpad,
+      [launchpadId]: entryId,
+    },
+    draftsByLaunchpad: {
+      ...state.draftsByLaunchpad,
+      [launchpadId]: makeDraft(
+        draft?.raw === launchedRaw ? sentRaw : draft?.raw,
+        entryId,
+        draft,
+      ),
+    },
+  };
+}
+
 function without(map, key) {
   const copy = { ...map };
   delete copy[key];
@@ -105,7 +174,8 @@ function arriveRequest(state, request) {
     return state;
   }
   const entries = state.entriesByLaunchpad[launchpadId];
-  const next = {
+  if (entries?.some((entry) => entry.ID === request.ID)) return state;
+  return {
     ...state,
     detailsById: {
       ...state.detailsById,
@@ -125,28 +195,6 @@ function arriveRequest(state, request) {
             ...state.unseenByLaunchpad,
             [launchpadId]: (state.unseenByLaunchpad[launchpadId] || 0) + 1,
           },
-  };
-
-  const pending = state.pendingLaunchByLaunchpad[launchpadId];
-  if (!pending) return next;
-  // The first arrival after a Launch is the launched entry: select it and
-  // reseed the draft from it, unless the researcher kept typing.
-  const draft = state.draftsByLaunchpad[launchpadId];
-  return {
-    ...next,
-    pendingLaunchByLaunchpad: without(state.pendingLaunchByLaunchpad, launchpadId),
-    selectedEntryByLaunchpad: {
-      ...state.selectedEntryByLaunchpad,
-      [launchpadId]: request.ID,
-    },
-    draftsByLaunchpad: {
-      ...state.draftsByLaunchpad,
-      [launchpadId]: makeDraft(
-        draft?.raw === pending.raw ? request.Raw : draft?.raw,
-        request.ID,
-        draft,
-      ),
-    },
   };
 }
 
@@ -182,29 +230,11 @@ function arriveResponse(state, response) {
   };
 }
 
-export function createLaunchpadStore(
-  api,
-  { setTimer = setTimeout, clearTimer = clearTimeout } = {},
-) {
+export function createLaunchpadStore(api) {
   let projectStateVersion = 0;
-  // The fallback timer of each pending Launch, by launchpad id.
-  const launchTimers = new Map();
-
-  function stopLaunchTimer(launchpadId) {
-    if (!launchTimers.has(launchpadId)) return;
-    clearTimer(launchTimers.get(launchpadId));
-    launchTimers.delete(launchpadId);
-  }
-
-  // Ends this Launch's pending state, unless a newer Launch replaced it.
-  function clearPending(launchpadId, pending) {
-    if (current.pendingLaunchByLaunchpad[launchpadId] !== pending) return;
-    stopLaunchTimer(launchpadId);
-    update((state) => ({
-      ...state,
-      pendingLaunchByLaunchpad: without(state.pendingLaunchByLaunchpad, launchpadId),
-    }));
-  }
+  // Launches from this store whose entry has not arrived yet, by launch id:
+  // { launchpadId, raw }. Their entry is selected when it arrives.
+  const awaitingEntry = new Map();
   let current = initialState();
   const { subscribe, set: setStore } = writable(current);
 
@@ -214,6 +244,56 @@ export function createLaunchpadStore(
   }
   function update(fn) {
     set(fn(current));
+  }
+
+  // Selects a launch's entry once it is in the store. A launch that ended
+  // before Marasi sent its request event (cancelled early, for example) is
+  // stored without one, so its launchpad's entries are reloaded.
+  async function selectArrivedLaunch(launchId) {
+    const awaiting = awaitingEntry.get(launchId);
+    if (!awaiting) return;
+    const { launchpadId, raw } = awaiting;
+    const version = projectStateVersion;
+    let details = current.detailsById[launchId];
+    if (!details) {
+      if (current.launchesById[launchId]?.Status === "pending") return;
+      const entries = await loadEntries(launchpadId);
+      if (version !== projectStateVersion) return;
+      if (!entries.some((entry) => entry.ID === launchId)) return;
+      details = await ensureDetails(launchId);
+      if (version !== projectStateVersion) return;
+    }
+    if (!awaitingEntry.delete(launchId)) return;
+    update((state) =>
+      selectLaunched(state, launchpadId, launchId, details?.Request?.Raw ?? raw, raw),
+    );
+  }
+
+  // Replaces the pending launches with Marasi's list. A launch this store
+  // still thinks pending but Marasi no longer lists ended unseen; read it.
+  async function loadPendingLaunches() {
+    const version = projectStateVersion;
+    const pending = (await api.pendingLaunches()) || [];
+    if (version !== projectStateVersion) return;
+    const listed = new Set(pending.map((launch) => launch.ID));
+    const stale = Object.values(current.launchesById).filter(
+      (launch) => launch.Status === "pending" && !listed.has(launch.ID),
+    );
+    update((state) => pending.reduce(recordLaunch, state));
+    const settled = await Promise.all(
+      stale.map((launch) => api.getLaunch(launch.ID).catch(() => null)),
+    );
+    if (version !== projectStateVersion) return;
+    // One Marasi no longer knows is forgotten, so its Cancel does not stick.
+    update((state) =>
+      stale.reduce(
+        (next, launch, index) =>
+          settled[index]
+            ? recordLaunch(next, settled[index])
+            : { ...next, launchesById: without(next.launchesById, launch.ID) },
+        state,
+      ),
+    );
   }
 
   async function ensureDetails(id) {
@@ -364,7 +444,7 @@ export function createLaunchpadStore(
     });
     const exists = (id) => launchpads.some((launchpad) => launchpad.ID === id);
     const selected = [prefer, current.selectedLaunchpadId].find(exists) ?? launchpads[0]?.ID ?? null;
-    await selectLaunchpad(selected);
+    await Promise.all([selectLaunchpad(selected), loadPendingLaunches()]);
   }
 
   // Jump to Launchpad: refreshes the list, opens `launchpadId` and selects
@@ -385,7 +465,7 @@ export function createLaunchpadStore(
   return {
     subscribe,
     clear: () => {
-      [...launchTimers.keys()].forEach(stopLaunchTimer);
+      awaitingEntry.clear();
       set(initialState(++projectStateVersion));
     },
     populate,
@@ -412,31 +492,37 @@ export function createLaunchpadStore(
     setUseHttps: (launchpadId, useHttps) =>
       updateDraftFields(launchpadId, { useHttps }),
 
-    // Launch is fire-and-forget (Marasi ADR-0011): the new entry arrives
-    // later through onRequest, tagged with Metadata.launchpad_id. A launch
-    // that fails, or whose entry does not arrive in time, stops pending.
+    // Launches are tracked (Marasi ADR-0031): the binding returns the launch
+    // id, which is the new entry's UUID, or throws when the launch could not
+    // start. The launch stays pending until onLaunchFinished; its entry is
+    // selected when it arrives. Returns the launch id.
     launch: async (launchpadId) => {
       const draft = current.draftsByLaunchpad[launchpadId];
-      if (!draft) return;
-      const pending = { raw: draft.raw };
-      stopLaunchTimer(launchpadId);
-      update((state) => ({
-        ...state,
-        pendingLaunchByLaunchpad: {
-          ...state.pendingLaunchByLaunchpad,
-          [launchpadId]: pending,
-        },
-      }));
-      launchTimers.set(
-        launchpadId,
-        setTimer(() => clearPending(launchpadId, pending), LAUNCH_TIMEOUT_MS),
+      if (!draft) return null;
+      const version = projectStateVersion;
+      const id = await api.launch(draft.raw, launchpadId, draft.useHttps);
+      if (version !== projectStateVersion || !id) return id;
+      update((state) =>
+        recordLaunch(state, { ID: id, LaunchpadID: launchpadId, Status: "pending" }),
       );
-      try {
-        await api.launch(draft.raw, launchpadId, draft.useHttps);
-      } catch (error) {
-        clearPending(launchpadId, pending);
-        throw error;
-      }
+      awaitingEntry.set(id, { launchpadId, raw: draft.raw });
+      await selectArrivedLaunch(id);
+      return id;
+    },
+
+    // Cancels the launchpad's pending launch. A launch that ended first comes
+    // back in its final state, which is recorded like any other.
+    cancelLaunch: async (launchpadId) => {
+      const pending = pendingLaunchOf(current, launchpadId);
+      if (!pending) return;
+      const launch = await api.cancelLaunch(pending.ID);
+      update((state) => recordLaunch(state, launch));
+    },
+
+    onLaunchStarted: (launch) => update((state) => recordLaunch(state, launch)),
+    onLaunchFinished: async (launch) => {
+      update((state) => recordLaunch(state, launch));
+      await selectArrivedLaunch(launch?.ID);
     },
 
     setSearch: (search) => update((state) => ({ ...state, search })),
@@ -468,7 +554,6 @@ export function createLaunchpadStore(
     deleteLaunchpad: async (id) => {
       await api.deleteLaunchpad(id);
       const index = current.launchpads.findIndex((launchpad) => launchpad.ID === id);
-      stopLaunchTimer(id);
       update((state) => ({
         ...state,
         launchpads: state.launchpads.filter((launchpad) => launchpad.ID !== id),
@@ -483,10 +568,7 @@ export function createLaunchpadStore(
 
     onRequest: (request) => {
       update((state) => arriveRequest(state, request));
-      const launchpadId = request?.Metadata?.launchpad_id;
-      if (launchpadId && !current.pendingLaunchByLaunchpad[launchpadId]) {
-        stopLaunchTimer(launchpadId);
-      }
+      selectArrivedLaunch(request?.ID);
     },
     onResponse: (response) => update((state) => arriveResponse(state, response)),
 

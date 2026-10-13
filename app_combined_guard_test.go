@@ -81,10 +81,3 @@ func TestSwitchProjectWithDraftsAndArmoryRunsAsksOnce(t *testing.T) {
 		t.Fatal("wanted the Armory run left running")
 	}
 }
-
-func TestLaunchErrorReachesTheFrontend(t *testing.T) {
-	app := newScratchpadApp(t)
-	if err := app.Repeat("not a request", "", true); err == nil {
-		t.Fatal("wanted Repeat to return the launch error")
-	}
-}

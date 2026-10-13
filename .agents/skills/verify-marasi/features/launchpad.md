@@ -3,16 +3,16 @@
 ## Sub-features
 
 - Launchpad dock: drag to resize, snap-collapse to a strip, auto-hide while editing
-- Launchpad file tree: Launchpad entries windowed to the original plus the last 10, Group by status, Latest-in button
+- Launchpad file tree: Launchpad entries windowed to the original plus the last 10, Group by status, Expand all / Collapse all, Latest-in button
 - Search, create empty launchpad, rename and description
 - Launchpad draft editor, HTTPS toggle, Launch, response display, unsaved-draft prompts
-- Compare two entries: A/B picking, quick picks, line diff with Request/Response tabs, chip re-pick, swap, Esc
+- Compare two entries: A/B picking, quick picks, read-only CodeMirror MergeView with Request/Response tabs, chip re-pick, swap, Esc
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with a `New launchpad` (+) button, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad` (from the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action), or create an empty one with +.
+Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad` (from the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action), or create an empty one with +.
 
-Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count, and its last status. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the `Request draft` editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side.
+Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count, and its last status. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the request editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side. The editor title (`.lp-request-title`) reads `Request`, and `Request draft` with the unsaved dot only while the draft is dirty. Expand all opens every launchpad (and every status folder while grouping); Collapse all closes them all, and the selected launchpad stays closed.
 
 Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. Factory keys: `⌘⇧S` search (expands the dock and focuses the search box), `⌘⇧A` new launchpad, `⌘P` rename (id `launchpad.toggle-settings`), `⌘\` toggle the dock, `⌘⇧G` Group by status, `⌘⇧↓` jump to latest (not while an editor or text field has focus, which keeps the key), `⌘⇧C` start or close compare, `⌘⇧R` switch the compare Request/Response view (`launchpad.toggle-compare-view`), `⌘⇧W` swap A and B, `⌘]`/`⌘[` next/previous launchpad (ids `launchpad.next-tab`/`previous-tab`), `⌘⇧D` delete launchpad (`launchpad.delete-tab`). Shortcuts are dropped while an input has focus, so click `.lp-topbar` first. The driver sends `cmd+\\` and `cmd+shift+down`.
 
@@ -46,20 +46,20 @@ Then, on Launchpad, edit the draft and Launch:
  {"waitSelector":"div[role=switch][aria-checked=false]:has(input[name=\"TLS Toggle\"])"},
  {"click":".lp-editor .cm-content"},{"key":"cmd+a"},
  {"insert":"GET /launchpad-replay HTTP/1.1\nHost: 127.0.0.1:18099\n\n"},
- {"waitText":"Revert draft"},{"waitSelector":".lp-row:has([title=\"Unsaved draft\"])"},
+ {"waitText":"Revert draft"},{"waitText":"Request draft","within":".lp-request-title"},{"waitSelector":".lp-row:has([title=\"Unsaved draft\"])"},
  {"text":"Launch"},{"waitText":"Request launched"},
  {"waitText":"entry 2 of 2","timeoutMs":15000},
  {"waitText":"verification-response /launchpad-replay","within":".lp-response"},
  {"waitNoText":"Revert draft"}]}
 ```
 
-Compare, with three entries and entry 3 selected (`Compare` stays disabled below two entries). Entry rows carry `data-compare="A"`/`"B"`; chips are `.lp-chip[data-side=left|right]`. Stored request lines use absolute URLs (`GET http://127.0.0.1:18099/… HTTP/1.1`), so wait on `/path HTTP/1.1`, not `GET /path`. The tab buttons render `capitalize`d lowercase text; match them with `hasText:"equest"`.
+Compare, with three entries and entry 3 selected (`Compare` stays disabled below two entries). Entry rows carry `data-compare="A"`/`"B"`; chips are `.lp-chip[data-side=left|right]`. Stored request lines use absolute URLs (`GET http://127.0.0.1:18099/… HTTP/1.1`), so wait on `/path HTTP/1.1`, not `GET /path`. The tab buttons render `capitalize`d lowercase text; match them with `hasText:"equest"`. The diff is a `@codemirror/merge` MergeView inside `.lp-diff`: changed lines carry `.cm-changedLine`, and each collapsed unchanged run is a `.cm-collapsedLines` bar (`⦚ N unchanged lines ⦚`) that expands on click. A 3-line request with one changed line has no collapsed run, so give the entries a longer body or skip that step.
 
 ```json
 {"name":"compare","steps":[
  {"text":"Compare"},{"waitText":"click any entry in the sidebar"},{"waitSelector":".lp-entry[data-compare=\"A\"]"},
  {"text":"Previous (#2)"},{"waitSelector":".lp-diff"},{"waitSelector":".lp-entry[data-compare=\"B\"]"},
- {"click":".lp-fold"},{"waitNoSelector":".lp-fold"},
+ {"click":".lp-diff .cm-collapsedLines"},{"waitNoSelector":".lp-diff .cm-collapsedLines"},
  {"click":".lp-compare-strip button","hasText":"equest"},
  {"click":".lp-chip[data-side=\"left\"]"},{"waitText":"to use as the new A"},
  {"click":".lp-entry","hasText":"/cmp-one"},{"waitText":"#1","within":".lp-chip[data-side=\"left\"]"},

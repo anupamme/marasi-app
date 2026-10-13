@@ -338,6 +338,14 @@ export function createLaunchpadStore(api) {
     clear: () => set(initialState(++projectStateVersion)),
     populate,
     loadEntries,
+    // The tree's counts and last statuses need every entry list; the
+    // backend has no summary field, so this loads the missing ones.
+    loadAllEntries: async () => {
+      const missing = current.launchpads.filter(
+        (launchpad) => !current.entriesByLaunchpad[launchpad.ID],
+      );
+      await Promise.all(missing.map((launchpad) => loadEntries(launchpad.ID)));
+    },
     ensureDetails,
     selectLaunchpad,
     selectEntry,

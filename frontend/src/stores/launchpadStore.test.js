@@ -73,6 +73,17 @@ test("populate selects the first launchpad and seeds its draft from the latest e
   assert.equal(isDraftDirty(state, "lp1"), false);
 });
 
+test("loading all entries fills every launchpad's list for counts and last status", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  assert.equal(get(store).entriesByLaunchpad.lp2, undefined);
+  await store.loadAllEntries();
+  assert.deepEqual(
+    get(store).entriesByLaunchpad.lp2.map((e) => e.ID),
+    ["c"],
+  );
+});
+
 test("an edit that only changes line endings leaves the draft clean", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();

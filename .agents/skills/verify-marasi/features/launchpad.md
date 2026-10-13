@@ -2,49 +2,74 @@
 
 ## Sub-features
 
-- Launchpad groups and request entries
-- Request editor and HTTPS toggle
-- Entry/group navigation and unsaved-edit prompt
-- Send, response display, and handoff to other tools
+- Launchpad dock: drag to resize, snap-collapse to a strip, auto-hide while editing
+- Launchpad file tree: Launchpad entries windowed to the original plus the last 10, Group by status, Latest-in button
+- Search, create empty launchpad, rename and description
+- Launchpad draft editor, HTTPS toggle, Launch, response display, unsaved-draft prompts
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Launchpad` or press `Command+5`. A fresh project shows `No Launchpads` and `Create one from ledger.` Users add an entry from a Ledger request with `Send to Launchpad`. From the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action; the row's right-click menu offers it too. Groups and entries have no list. Unlabelled icon-only arrow buttons beside the `Launchpad X of Y` and `Request X of Y` counters (no `aria-label` or `title`; target them with `click` and `nth`), or `⌘]`/`⌘[` and `⌘⇧]`/`⌘⇧[`, move between them.
+Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with a `New launchpad` (+) button, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad` (from the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action), or create an empty one with +.
 
-Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count, and its last status. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the `Request draft` editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side.
+
+Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. `⌘\` toggles the dock (a page-local handler; the driver cannot send `\`, so use the `Collapse sidebar` and `Show launchpads` buttons).
 
 ## Driving it with Chrome CDP
 
-Run `scripts/drive.sh launchpad` for route proof. It requires `Launchpad Settings`. Proven handoff from Ledger:
+Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`, which the dock paints on every visit (the dock always mounts expanded). Proven handoff from Ledger:
 
 ```json
 {"name":"send-to-launchpad","steps":[
  {"click":"tbody tr","hasText":"/compass-allowed"},{"waitSelector":".drawer"},
  {"key":"cmd+shift+l"},{"waitText":"sent to Launchpad"},
- {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".drawer"}]}
+ {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".drawer"},
+ {"waitText":"Group by status"}]}
 ```
 
-Then, on Launchpad:
+Then, on Launchpad, edit the draft and Launch:
 
 ```json
-{"name":"edit-and-send","steps":[
- {"waitText":"Request 1 of 1"},
+{"name":"edit-and-launch","steps":[
  {"click":"div[role=switch]:has(input[name=\"TLS Toggle\"])"},
  {"waitSelector":"div[role=switch][aria-checked=false]:has(input[name=\"TLS Toggle\"])"},
- {"click":".cm-content","nth":1},{"key":"cmd+a"},
+ {"click":".lp-editor .cm-content"},{"key":"cmd+a"},
  {"insert":"GET /launchpad-replay HTTP/1.1\nHost: 127.0.0.1:18099\n\n"},
- {"waitEnabledText":"Send"},{"text":"Send"},{"waitText":"Request launched"},
- {"waitText":"Request 2 of 2","timeoutMs":15000},{"waitText":"verification-response /launchpad-replay"}]}
+ {"waitText":"Revert draft"},{"waitSelector":".lp-row:has([title=\"Unsaved draft\"])"},
+ {"text":"Launch"},{"waitText":"Request launched"},
+ {"waitText":"entry 2 of 2","timeoutMs":15000},
+ {"waitText":"verification-response /launchpad-replay","within":".lp-response"},
+ {"waitNoText":"Revert draft"}]}
 ```
 
-Prove linkage with `select l.name, r.path, r.status_code from launchpad l join launchpad_request lr on lr.launchpad_id=l.id join request r on r.id=lr.request_id`.
+Tree, prompts and dock:
+
+```json
+{"name":"tree","steps":[
+ {"text":"Show 4 more"},{"waitNoText":"earlier entries"},
+ {"click":"div[role=switch]:has(input[name=\"Group by status\"])"},{"waitSelector":".lp-group"},
+ {"click":".lp-group","hasText":"200"},
+ {"click":"input[aria-label=\"Search launchpads\"]"},{"insert":"replay-1"},{"key":"escape"},
+ {"click":".lp-entry","hasText":"/replay-13"},{"waitText":"Discard the draft?"},{"text":"Confirm"},
+ {"text":"New launchpad"},{"insert":"Scratch pad"},{"key":"enter"},{"waitText":"Empty launchpad"},
+ {"text":"Delete launchpad"},{"waitText":"Delete Scratch pad?"},{"text":"Confirm"},
+ {"text":"Collapse sidebar"},{"waitSelector":".lp-strip"},{"text":"Show launchpads"},{"waitSelector":".lp-dock"}]}
+```
+
+`Latest in <launchpad>` appears at the bottom of the tree once the list at the top of the tree has its last entry cut off; collapse other launchpads and `Show N more` until the tree overflows. Drag-resize has no driver step; drive `.lp-resize` with raw `Input.dispatchMouseEvent` (fire and forget, see Gotchas).
+
+Prove linkage with `select l.name, r.path, r.status_code from launchpad l join launchpad_request lr on lr.launchpad_id=l.id join request r on r.id=lr.request_id`. Tag traffic for a launchpad that is not open with `curl -x http://127.0.0.1:18080 -H "x-launchpad-id: <launchpad id>" …` to see its `+1` unseen badge.
 
 ## Gotchas
 
 - The empty state proves only that the route loaded.
-- Navigating away with changed request text opens a `Confirm Action` prompt and discards the changes when accepted.
+- Moving between pages or launchpads never prompts; drafts survive in memory. Only seeding over a dirty draft (`Discard the draft?`) and deleting a launchpad prompt.
+- After `Cancel` on a prompt, wait with `waitNoSelector` on the modal rather than `waitNoText` on its title.
+- Text waits match the editors too. Scope them with `"within":".lp-scroll"`, `".lp-editor"` or `".lp-response"`.
+- The route check fails while the dock is collapsed (its marker lives in the dock). Expand it, or leave and re-enter the page.
 - The target receives a real network request. Use a local disposable endpoint unless external delivery is the behavior under test.
-- `Send` is disabled while the UI's listener state is offline. HTTPS starts enabled each time the route mounts; disable it for a plain local HTTP endpoint.
+- `Launch` is disabled while the UI's listener state is offline. HTTPS defaults to on for each new draft; disable it for a plain local HTTP endpoint.
 - `Request launched` appears even when the send fails, because `Repeat` logs and drops launch errors. Require the endpoint's response, a new entry, and persisted linkage.
-- The right-click `Send to Launchpad` path opens `/launchpad?lastTab=1`, which the page ignores. It shows the previously active Launchpad, not necessarily the new one. The drawer path uses `?id=`.
-- Each send adds a new entry and leaves the original unchanged. With prettify on, the prettified request is what gets sent.
+- The right-click `Send to Launchpad` path opens `/launchpad?lastTab=1`, which the page ignores. The drawer path uses `?id=`.
+- The headless page reports `visibilityState: hidden`: `requestAnimationFrame` never fires, and CDP does not always ack `Input.dispatchMouseEvent`. Send drag events without awaiting the reply.
+- Editing frontend source during a run makes Vite reload the page, which resets the listener to offline. Clean up and relaunch.

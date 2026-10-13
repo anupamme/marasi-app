@@ -10,7 +10,7 @@
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad` (from the request drawer that is `⌘⇧L`, which shows `Request N sent to Launchpad` with a `Jump to Launchpad` action), or create an empty one with +.
+Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad`: a row's right-click menu, or `⌘⇧L` in the request drawer. Both show `Request N sent to Launchpad` with a `Jump to Launchpad` action, or create an empty one with +.
 
 Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count, and its last status. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the request editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side. The editor title (`.lp-request-title`) reads `Request`, and `Request draft` with the unsaved dot only while the draft is dirty. Expand all opens every launchpad (and every status folder while grouping); Collapse all closes them all, and the selected launchpad stays closed.
 
@@ -40,6 +40,17 @@ Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`,
  {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".drawer"},
  {"waitText":"Group by status"}]}
 ```
+
+Both Ledger paths, the drawer's `⌘⇧L` and the row's right-click `Send to Launchpad`, create a launchpad named `Request N`, and their toast's `Jump to Launchpad` opens `/launchpad?id=<id>`. The page opens that launchpad, selects its newest entry, opens its row even after `Collapse all`, and scrolls it into view. The previously open launchpad is not reselected. This also works when the toast is clicked while `/launchpad` is already open. If the id no longer exists, the page shows `That launchpad no longer exists.` and keeps the current launchpad. Other launchpads can already show `entry 1 of 1`, so wait on the sent path instead:
+
+```json
+{"name":"right-click-jump","steps":[
+ {"click":"tbody tr","hasText":"/seed-7","button":"right"},{"text":"Send to Launchpad"},{"waitText":"sent to Launchpad"},
+ {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},
+ {"waitText":"/seed-7","within":".lp-editor"},{"waitSelector":".lp-entry[aria-current=true]"}]}
+```
+
+Right-click only a row that is already in view. When the driver scrolls the table to reach the row, the scroll closes the context menu, and `Send to Launchpad` then has a zero box.
 
 Then, on Launchpad, edit the draft and Launch:
 
@@ -99,6 +110,6 @@ Prove linkage with `select l.name, r.path, r.status_code from launchpad l join l
 - The target receives a real network request. Use a local disposable endpoint unless external delivery is the behavior under test.
 - `Launch` is disabled while the UI's listener state is offline. HTTPS defaults to on for each new draft; disable it for a plain local HTTP endpoint.
 - A send that `Repeat` rejects (for example an unparsable draft) shows `Failed to launch the request` and clears `Launching…`. A launch whose entry never arrives stops pending after 15 s. `Request launched` only means the send was accepted: require the endpoint's response, a new entry, and persisted linkage.
-- The right-click `Send to Launchpad` path opens `/launchpad?lastTab=1`, which the page ignores. The drawer path uses `?id=`.
+- The `Jump to Launchpad` toast lives 5 s, and each driver click can take about 5 s to be acknowledged in the headless page. Click it right after the toast appears. A click on the mounted Launchpad page before it lets the toast expire.
 - The headless page reports `visibilityState: hidden`: `requestAnimationFrame` never fires, and CDP does not always ack `Input.dispatchMouseEvent`. Send drag events without awaiting the reply.
 - Editing frontend source during a run makes Vite reload the page, which resets the listener to offline. Clean up and relaunch.

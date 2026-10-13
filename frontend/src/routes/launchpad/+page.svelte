@@ -25,6 +25,7 @@
     } from "lucide-svelte";
     import { onMount } from "svelte";
     import { get } from "svelte/store";
+    import { afterNavigate } from "$app/navigation";
     import { page } from "$app/stores";
     import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
     import { useMenuActions } from "../../lib/keybindings/app.js";
@@ -46,15 +47,43 @@
     let searchInput;
     let groupByStatus;
 
+    let mounted = false;
     onMount(async () => {
-        await launchpadStore.populate();
-        const urlID = $page.url.searchParams.get("id");
-        if (urlID && get(launchpadStore).launchpads.some((l) => l.ID === urlID)) {
-            await launchpadStore.selectLaunchpad(urlID);
-        }
+        const id = $page.url.searchParams.get("id");
+        if (id) await openJump(id);
+        else await launchpadStore.populate();
+        mounted = true;
         // Counts and last statuses in the tree need every entry list.
         await launchpadStore.loadAllEntries();
     });
+    // The Ledger's toast can also jump while this page is already open.
+    afterNavigate(({ to }) => {
+        const id = to?.url.searchParams.get("id");
+        if (mounted && id) openJump(id);
+    });
+
+    // Jump to Launchpad (/launchpad?id=<id>, from the Ledger): open that
+    // launchpad on its newest entry, open its rows even after Collapse all,
+    // and scroll it into view. An unknown id keeps the current launchpad.
+    async function openJump(id) {
+        const { found, entryId, needsConfirm } = await launchpadStore.jumpTo(id);
+        if (!found) {
+            toastStore.trigger({
+                message: "That launchpad no longer exists.",
+                background: "variant-filled-warning",
+            });
+            return;
+        }
+        if (!entryId) return;
+        const show = () => tree?.showEntry(id, entryId);
+        if (!needsConfirm) return show();
+        // The draft stays until confirmed; the launchpad is open meanwhile.
+        confirm(
+            "Discard the draft?",
+            "This launchpad's draft has unsaved edits. Loading its newest entry replaces them.",
+            () => launchpadStore.selectEntry(id, entryId, { force: true }).then(show),
+        );
+    }
 
     function confirm(title, body, onConfirm) {
         modalStore.trigger({

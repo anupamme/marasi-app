@@ -83,6 +83,18 @@ test("search matches show only the matched entries, flat and unwindowed", () => 
   assert.deepEqual(describe(rows), ["#2", "#39"]);
 });
 
+test("the window widens to show a selected entry from earlier in the list", () => {
+  const rows = entryRows({ launchpad, entries: makeEntries(25), selectedEntryId: "e5" });
+  assert.deepEqual(describe(rows).slice(0, 4), ["#1", "more:3", "#5", "#6"]);
+  assert.equal(rows.length, 23);
+});
+
+test("a status folder's window widens to show its selected entry", () => {
+  const entries = makeEntries(30, () => 302);
+  const rows = entryRows({ launchpad, entries, groupByStatus: true, selectedEntryId: "e3" });
+  assert.deepEqual(describe(rows).slice(0, 5), ["#1", "group:302:29:open", "more:1", "#3", "#4"]);
+});
+
 test("showing all entries removes the earlier row", () => {
   const rows = entryRows({ launchpad, entries: makeEntries(100), shownByList: { lp: 99 } });
   assert.deepEqual(describe(rows).slice(0, 2), ["#1", "#2"]);

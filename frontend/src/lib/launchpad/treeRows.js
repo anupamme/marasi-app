@@ -7,9 +7,11 @@ export const WINDOW = 10;
 /** Entries one "Show more" click reveals. */
 export const STEP = 50;
 
-// The latest `shown` rows of one list, preceded by an "earlier" row.
-function windowed(rows, list, depth, shown, label) {
-  const hidden = Math.max(0, rows.length - shown);
+// The latest `shown` rows of one list, preceded by an "earlier" row. The
+// window widens so the selected entry is never hidden.
+function windowed(rows, list, depth, shown, label, selectedEntryId) {
+  const selected = rows.findIndex((row) => row.entry.ID === selectedEntryId);
+  const hidden = Math.max(0, Math.min(rows.length - shown, selected < 0 ? Infinity : selected));
   const latest = rows.slice(hidden).map((row) => ({ ...row, depth, list, label }));
   if (!hidden) return latest;
   return [{ kind: "more", list, hidden, total: rows.length, depth }, ...latest];
@@ -55,7 +57,8 @@ const byStatus = (a, b) =>
 /**
  * The rows under one open launchpad: its original entry, then the rest of
  * its Launchpad entries, windowed to the latest `WINDOW` (plus whatever
- * `shownByList[list]` adds). With `groupByStatus`, the rest are filed into
+ * `shownByList[list]` adds, and widened to keep `selectedEntryId` in view).
+ * With `groupByStatus`, the rest are filed into
  * status folders, each windowed the same way. A folder is open when
  * `openGroups` says so, else when it holds `selectedEntryId`.
  */
@@ -94,7 +97,10 @@ function buildRows({
   const rest = indexed.slice(1);
   const shown = (list) => shownByList[list] ?? WINDOW;
   if (!groupByStatus) {
-    return [original, ...windowed(rest, launchpad.ID, 1, shown(launchpad.ID), launchpad.Name)];
+    return [
+      original,
+      ...windowed(rest, launchpad.ID, 1, shown(launchpad.ID), launchpad.Name, selectedEntryId),
+    ];
   }
 
   const groups = new Map();
@@ -110,7 +116,9 @@ function buildRows({
     const id = `${launchpad.ID}:${key}`;
     const open = openGroups[id] ?? groupRows.some((row) => row.entry.ID === selectedEntryId);
     rows.push({ kind: "group", id, key, count: groupRows.length, open, depth: 1 });
-    if (open) rows.push(...windowed(groupRows, id, 2, shown(id), `${launchpad.Name} · ${key}`));
+    if (open) {
+      rows.push(...windowed(groupRows, id, 2, shown(id), `${launchpad.Name} · ${key}`, selectedEntryId));
+    }
   }
   return rows;
 }

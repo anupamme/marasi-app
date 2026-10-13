@@ -2,6 +2,20 @@
 // launchpad store state. The store holds `compare` as
 // { launchpadId, leftId (A), rightId (B), picking: "left" | "right" | null }.
 
+/** The compare sides: each side's id key in `compare`, its label, and the other side. */
+export const COMPARE_SIDES = {
+  left: { key: "leftId", label: "A", other: "right" },
+  right: { key: "rightId", label: "B", other: "left" },
+};
+
+/** The side ("left" or "right") the entry fills in the comparison, or null. */
+export function compareSideOf(compare, entryId) {
+  if (!compare) return null;
+  if (compare.leftId === entryId) return "left";
+  if (compare.rightId === entryId) return "right";
+  return null;
+}
+
 /**
  * What an entry click does while comparing: "left" or "right" to fill that
  * side, "ignore" for the entry already on the other side, or null to select
@@ -11,7 +25,7 @@ export function compareClick(state, launchpadId, entryId) {
   const compare = state.compare;
   if (!compare || compare.launchpadId !== launchpadId) return null;
   const side = compare.picking ?? "right";
-  const otherId = side === "left" ? compare.rightId : compare.leftId;
+  const otherId = compare[COMPARE_SIDES[COMPARE_SIDES[side].other].key];
   return entryId === otherId ? "ignore" : side;
 }
 

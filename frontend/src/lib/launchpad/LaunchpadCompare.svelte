@@ -4,7 +4,7 @@
 	// Rules live in compare.js and lineDiff.js; this only renders them.
 	import { modeCurrent } from "@skeletonlabs/skeleton";
 	import { ArrowLeftRight, GitCompare } from "lucide-svelte";
-	import { compareView, lengthSummary } from "./compare.js";
+	import { COMPARE_SIDES, compareView, lengthSummary } from "./compare.js";
 	import { primaryVariant, statusClass } from "./format.js";
 	import { foldRows, lineDiff } from "./lineDiff.js";
 
@@ -49,8 +49,8 @@
 		added: ["bg-surface-500/10", "bg-success-500/20"],
 	};
 	const chips = (v) => [
-		["left", "A", v.left, "variant-filled-tertiary"],
-		["right", "B", v.right, primary],
+		["left", COMPARE_SIDES.left.label, v.left, "variant-filled-tertiary"],
+		["right", COMPARE_SIDES.right.label, v.right, primary],
 	];
 </script>
 
@@ -67,12 +67,12 @@
 				</span>
 				{#if view.quickPicks.length}<span class="opacity-60">or</span>{/if}
 				{#each view.quickPicks as pick}
-					<button class="btn btn-sm variant-soft-primary py-0.5" on:click={() => store.setCompareSide("right", pick.id)}
+					<button class="btn btn-sm {primary} py-0.5" on:click={() => store.setCompareSide("right", pick.id)}
 						>{pick.label}</button
 					>
 				{/each}
 			{:else}
-				<span><b>Click an entry in the sidebar</b> to use as the new {view.picking === "left" ? "A" : "B"}.</span>
+				<span><b>Click an entry in the sidebar</b> to use as the new {COMPARE_SIDES[view.picking].label}.</span>
 			{/if}
 			<span class="ml-auto opacity-60">Esc to cancel</span>
 		</div>
@@ -83,7 +83,7 @@
 			{#each chips(view) as [side, letter, item, chipClass], i}
 				{#if i === 1}
 					<button
-						class="btn btn-sm variant-soft-primary self-stretch px-2"
+						class="btn btn-sm variant-soft self-stretch px-2"
 						title="Swap A and B"
 						aria-label="Swap A and B"
 						on:click={store.swapCompare}
@@ -118,7 +118,7 @@
 			<div class="ml-auto flex">
 				{#each ["request", "response"] as name}
 					<button
-						class="btn btn-sm capitalize {tab === name ? primary : 'variant-soft-primary'}"
+						class="btn btn-sm capitalize {tab === name ? primary : 'variant-soft'}"
 						aria-pressed={tab === name}
 						on:click={() => (tab = name)}>{name}</button
 					>

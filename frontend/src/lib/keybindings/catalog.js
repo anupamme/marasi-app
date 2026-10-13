@@ -26,10 +26,14 @@ function action(id, label, description, keywords, defaults, context = "global") 
 
 // One page or drawer menu: each action's id is `<context>.<slug>`, so ids
 // stay unique when a key or label is reused in a mutually exclusive state.
+// A row's optional sixth element adds flags, such as `yieldsToEditors`: the
+// action never runs while focus is in an editor or text field, which keeps
+// its keys there (⌘⇧↓ selects to the end in CodeMirror).
 function pageActions(context, rows) {
-  return rows.map(([slug, label, description, keywords, defaults]) =>
-    action(`${context}.${slug}`, label, description, keywords, defaults, context),
-  );
+  return rows.map(([slug, label, description, keywords, defaults, flags = {}]) => ({
+    ...action(`${context}.${slug}`, label, description, keywords, defaults, context),
+    ...flags,
+  }));
 }
 
 export const FACTORY_ACTIONS = [
@@ -119,9 +123,9 @@ export const FACTORY_ACTIONS = [
     ["toggle-sidebar", "Toggle Launchpad Sidebar", "Collapse or expand the launchpad sidebar", "sidebar, dock, collapse, expand", primary("\\")],
     ["toggle-group-by-status", "Group by Status", "Group entries into status-code folders", "group, status, folders", primary("shift+g")],
     ["toggle-compare", "Compare Entries", "Compare two entries of the open launchpad, or stop comparing", "compare, diff", primary("shift+c")],
-    ["toggle-compare-tab", "Switch Compare Request/Response", "Show the request or the response diff while comparing", "compare, diff, request, response", primary("shift+r")],
+    ["toggle-compare-view", "Switch Compare Request/Response", "Show the request or the response diff while comparing", "compare, diff, request, response", primary("shift+r")],
     ["swap-compare", "Swap Compared Entries", "Swap the A and B entries while comparing", "compare, swap", primary("shift+w")],
-    ["jump-to-latest", "Jump to Latest Entry", "Scroll the sidebar to the latest entry in view", "latest, bottom, jump, scroll", primary("shift+down")],
+    ["jump-to-latest", "Jump to Latest Entry", "Scroll the sidebar to the latest entry in view", "latest, bottom, jump, scroll", primary("shift+down"), { yieldsToEditors: true }],
   ]),
   ...pageActions("checkpoint", [
     ["toggle-settings", "Toggle Checkpoint Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],

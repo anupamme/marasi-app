@@ -39,6 +39,23 @@
 	$: searching = state.search.trim().length > 0;
 	$: selectedLaunchpadId = state.selectedLaunchpadId;
 	$: compare = state.compare;
+	$: entrySearch = state.entrySearch;
+	// Entry lists load when a launchpad opens (expanded, Expand all, or
+	// listed by a search); the tree's counts come from Marasi's summary.
+	let requested = new Set();
+	let requestedVersion = null;
+	$: {
+		if (requestedVersion !== state.projectStateVersion) {
+			requested = new Set();
+			requestedVersion = state.projectStateVersion;
+		}
+		for (const { launchpad } of results) {
+			const id = launchpad.ID;
+			if (!(searching || expanded[id]) || state.entriesByLaunchpad[id] !== undefined || requested.has(id)) continue;
+			requested.add(id);
+			store.loadEntries(id);
+		}
+	}
 	$: {
 		const next = autoExpand(expanded, selectedLaunchpadId);
 		if (next !== expanded) expanded = next;
@@ -149,6 +166,13 @@
 				on:keydown={(e) => e.key === "Escape" && store.setSearch("")}
 			/>
 		</div>
+		{#if searching && entrySearch.status === "error"}
+			<p class="lp-search-error text-xs text-error-500" role="alert">{entrySearch.error}</p>
+		{:else if searching && entrySearch.status === "loading"}
+			<p class="lp-search-status text-xs opacity-60">Searching entries…</p>
+		{:else if searching && entrySearch.status === "idle"}
+			<p class="lp-search-status text-xs opacity-60">Type 3 or more characters to search entries.</p>
+		{/if}
 		<div class="flex items-center justify-between">
 			<span class="text-sm font-bold">Group by status</span>
 			<SlideToggle name="Group by status" size="sm" bind:checked={groupByStatus} />
@@ -174,16 +198,16 @@
 
 	<div class="relative min-h-0 flex-1">
 		<div class="lp-scroll h-full overflow-y-auto pb-12" bind:this={scroller} on:scroll={updateJump}>
-			{#if results.length === 0}
+			{#if results.length === 0 && !(searching && entrySearch.status === "loading")}
 				<p class="p-4 text-center text-sm opacity-60">
 					{searching ? "No matching launchpads or entries" : "No launchpads yet"}
 				</p>
 			{/if}
-			{#each results as { launchpad, entries, matchedEntries } (launchpad.ID)}
+			{#each results as { launchpad, entries, matchedEntries, matchCount } (launchpad.ID)}
 				{@const isSelected = launchpad.ID === selectedLaunchpadId}
 				{@const open = searching || expanded[launchpad.ID]}
 				{@const unseen = state.unseenByLaunchpad[launchpad.ID] || 0}
-				{@const summary = launchpadSummary(state.entriesByLaunchpad[launchpad.ID])}
+				{@const summary = launchpadSummary(launchpad)}
 				{@const selectedEntryId = state.selectedEntryByLaunchpad[launchpad.ID]}
 				{@const rows = open
 					? entryRows({ launchpad, entries, matchedEntries, groupByStatus, shownByList, openGroups, selectedEntryId })
@@ -238,6 +262,11 @@
 					</div>
 
 					{#if open}
+						{#if matchedEntries}
+							<p data-tree-row class="lp-match-count py-1 pl-10 text-xs opacity-60">
+								{matchCount} matching {matchCount === 1 ? "entry" : "entries"}
+							</p>
+						{/if}
 						{#if state.entriesByLaunchpad[launchpad.ID] === undefined}
 							<p data-tree-row class="py-1 pl-10 text-xs opacity-50">Loading…</p>
 						{:else if entries.length === 0}

@@ -8,6 +8,7 @@ import {
   launchOf,
   pendingLaunchOf,
 } from "./createLaunchpadStore.js";
+import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
 
 // An in-memory backend: launchpads, their entries, and raw details by id.
 function fakeApi({ launchpads = [], entries = {}, raws = {} } = {}) {
@@ -83,17 +84,6 @@ test("populate selects the first launchpad and seeds its draft from the latest e
     useHttps: true,
   });
   assert.equal(isDraftDirty(state, "lp1"), false);
-});
-
-test("loading all entries fills every launchpad's list for counts and last status", async () => {
-  const store = createLaunchpadStore(twoLaunchpads());
-  await store.populate();
-  assert.equal(get(store).entriesByLaunchpad.lp2, undefined);
-  await store.loadAllEntries();
-  assert.deepEqual(
-    get(store).entriesByLaunchpad.lp2.map((e) => e.ID),
-    ["c"],
-  );
 });
 
 test("an edit that only changes line endings leaves the draft clean", async () => {
@@ -547,6 +537,8 @@ test("a created launchpad opens empty with a blank draft", async () => {
     ID: id,
     Name: "Scratch",
     Description: "notes",
+    EntryCount: 0,
+    LastStatusCode: null,
   });
   assert.deepEqual(state.entriesByLaunchpad[id], []);
   assert.equal(state.draftsByLaunchpad[id].seededFrom, null);
@@ -600,7 +592,7 @@ test("re-selecting the entry a dirty draft came from keeps the draft", async () 
 test("selecting an entry in another launchpad clears its unseen count", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();
-  await store.loadAllEntries();
+  await store.loadEntries("lp2");
   store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\nHost: x\r\n\r\n"));
   assert.equal(get(store).unseenByLaunchpad.lp2, 1);
   await store.selectEntry("lp2", "d");
@@ -680,4 +672,223 @@ test("jumpTo an empty launchpad opens it with no entry to select", async () => {
   const id = await api.createLaunchpad("Empty", "");
   assert.deepEqual(await store.jumpTo(id), { found: true, entryId: null, needsConfirm: false });
   assert.equal(get(store).selectedLaunchpadId, id);
+});
+
+// Summaries: Marasi's launchpad list carries EntryCount and LastStatusCode.
+
+function summarised() {
+  return fakeApi({
+    launchpads: [
+      { ID: "lp1", Name: "Login", EntryCount: 2, LastStatusCode: 200 },
+      { ID: "lp2", Name: "Search", EntryCount: 1, LastStatusCode: 404 },
+    ],
+    entries: {
+      lp1: [entry("a"), entry("b")],
+      lp2: [{ ...entry("c"), StatusCode: 404 }],
+    },
+    raws: { a: "GET /a HTTP/1.1\r\n\r\n", b: "GET /b HTTP/1.1\r\n\r\n" },
+  });
+}
+const summaryOf = (store, id) => {
+  const { EntryCount, LastStatusCode } = get(store).launchpads.find((l) => l.ID === id);
+  return { EntryCount, LastStatusCode };
+};
+
+test("opening the page loads only the open launchpad's entries", async () => {
+  const api = summarised();
+  const calls = [];
+  const getEntries = api.getEntries;
+  api.getEntries = (id) => (calls.push(id), getEntries(id));
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  assert.deepEqual(calls, ["lp1"]);
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 1, LastStatusCode: 404 });
+});
+
+test("a launch arriving in an unexpanded launchpad updates its count and last status live", async () => {
+  const store = createLaunchpadStore(summarised());
+  await store.populate();
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: null });
+  store.onResponse({ ID: "d", StatusCode: 201 });
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 201 });
+});
+
+test("a response to an older entry leaves the last status to the newest", async () => {
+  const store = createLaunchpadStore(summarised());
+  await store.populate();
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  store.onRequest(launched("e", "lp2", "GET /e HTTP/1.1\r\n\r\n"));
+  store.onResponse({ ID: "d", StatusCode: 201 });
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: null });
+  store.onResponse({ ID: "e", StatusCode: 500 });
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: 500 });
+});
+
+test("a repeated request event does not count twice", async () => {
+  const store = createLaunchpadStore(summarised());
+  await store.populate();
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  assert.equal(summaryOf(store, "lp2").EntryCount, 2);
+});
+
+test("loading a launchpad's entries refreshes its summary", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.getEntries = async () => [entry("c"), { ...entry("x"), StatusCode: 302 }];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 302 });
+});
+
+test("a new launchpad starts with no entries", async () => {
+  const store = createLaunchpadStore(summarised());
+  await store.populate();
+  const id = await store.createLaunchpad({ name: "Fresh" });
+  assert.deepEqual(summaryOf(store, id), { EntryCount: 0, LastStatusCode: null });
+});
+
+test("a response after a page revisit still updates the last status", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  // Marasi now reports the in-flight entry as the newest.
+  api.getLaunchpads = async () => [
+    { ID: "lp1", Name: "Login", EntryCount: 2, LastStatusCode: 200 },
+    { ID: "lp2", Name: "Search", EntryCount: 2, LastStatusCode: null },
+  ];
+  await store.populate();
+  store.onResponse({ ID: "d", StatusCode: 201 });
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 201 });
+});
+
+// Entry search: the tree's search box also asks Marasi for matching entries.
+
+// Lets pending promise callbacks run; setImmediate is not mocked.
+const settle = () => new Promise((resolve) => setImmediate(resolve));
+
+// A summarised backend whose searchEntries answers are released by the test.
+function searchable() {
+  const api = summarised();
+  api.searches = [];
+  api.searchEntries = (query) =>
+    new Promise((resolve, reject) => api.searches.push({ query, resolve, reject }));
+  return api;
+}
+
+function withTimers(t) {
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  return t.mock.timers;
+}
+
+test("typing searches Marasi once, 250 ms after the last keystroke", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("tok");
+  timers.tick(100);
+  store.setSearch("toke");
+  timers.tick(249);
+  assert.equal(api.searches.length, 0);
+  timers.tick(1);
+  assert.deepEqual(
+    api.searches.map((s) => s.query),
+    [entrySearchQuery("toke").query],
+  );
+});
+
+test("terms shorter than three characters never query Marasi", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("to");
+  timers.tick(1000);
+  assert.equal(api.searches.length, 0);
+  assert.equal(get(store).entrySearch.matches, null);
+});
+
+test("matches are stored by launchpad and their entry lists load", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  assert.equal(get(store).entriesByLaunchpad.lp2, undefined);
+  store.setSearch("secret");
+  timers.tick(250);
+  assert.equal(get(store).entrySearch.status, "loading");
+  api.searches[0].resolve({ EntriesByLaunchpad: { lp1: ["a"], lp2: ["c"] }, QueryError: null });
+  await settle();
+  await settle();
+  const state = get(store);
+  assert.deepEqual(state.entrySearch, { status: "done", matches: { lp1: ["a"], lp2: ["c"] }, error: null });
+  assert.deepEqual(state.entriesByLaunchpad.lp2.map((e) => e.ID), ["c"]);
+});
+
+test("a stale response never replaces a newer term's matches", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("first");
+  timers.tick(250);
+  store.setSearch("second");
+  timers.tick(250);
+  api.searches[1].resolve({ EntriesByLaunchpad: { lp1: ["b"] }, QueryError: null });
+  await settle();
+  api.searches[0].resolve({ EntriesByLaunchpad: { lp2: ["c"] }, QueryError: null });
+  await settle();
+  assert.deepEqual(get(store).entrySearch.matches, { lp1: ["b"] });
+});
+
+test("a response arriving after the search was cleared is ignored", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("secret");
+  timers.tick(250);
+  store.setSearch("");
+  api.searches[0].resolve({ EntriesByLaunchpad: { lp2: ["c"] }, QueryError: null });
+  await settle();
+  assert.deepEqual(get(store).entrySearch, { status: "idle", matches: null, error: null });
+});
+
+test("an invalid query is reported as the search error", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("secret");
+  timers.tick(250);
+  api.searches[0].resolve({ EntriesByLaunchpad: null, QueryError: { Message: "bad term", Position: 4 } });
+  await settle();
+  assert.deepEqual(get(store).entrySearch, { status: "error", matches: null, error: "bad term" });
+});
+
+test("a failing search binding is reported, not thrown", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("secret");
+  timers.tick(250);
+  api.searches[0].reject("database is locked");
+  await settle();
+  assert.equal(get(store).entrySearch.status, "error");
+  assert.match(get(store).entrySearch.error, /database is locked/);
+});
+
+test("text too long to search is an error without a query", async (t) => {
+  const timers = withTimers(t);
+  const api = searchable();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.setSearch("x".repeat(5000));
+  timers.tick(1000);
+  assert.equal(api.searches.length, 0);
+  assert.equal(get(store).entrySearch.status, "error");
 });

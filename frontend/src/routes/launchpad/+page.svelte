@@ -54,8 +54,6 @@
         if (id) await openJump(id);
         else await launchpadStore.populate();
         mounted = true;
-        // Counts and last statuses in the tree need every entry list.
-        await launchpadStore.loadAllEntries();
     });
     // The Ledger's toast can also jump while this page is already open.
     afterNavigate(({ to }) => {

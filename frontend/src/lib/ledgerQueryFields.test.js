@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { appendToQuery } from "./ledgerQueryFields.js";
+import { appendToQuery, QUERY_FIELDS } from "./ledgerQueryFields.js";
 
 test("an example inserted into an empty query box becomes the whole query", () => {
   assert.equal(appendToQuery("", 'host = "*.acme.test"'), 'host = "*.acme.test"');
@@ -12,4 +12,14 @@ test("an example is appended to existing query text after one space", () => {
 
 test("no extra space is added when the query text already ends in whitespace", () => {
   assert.equal(appendToQuery("status_code >= 500 ", 'method = "POST"'), 'status_code >= 500 method = "POST"');
+});
+
+test("the field list documents launchpad membership in its three forms", () => {
+  const field = QUERY_FIELDS.find((f) => f.name === "launchpad");
+  assert.ok(field, "launchpad field listed");
+  assert.deepEqual(field.ops, ["=", "!=", ":"]);
+  assert.equal(field.example, "launchpad:*");
+  for (const form of ['launchpad = "<uuid>"', 'launchpad != "<uuid>"', "launchpad:*"]) {
+    assert.ok(field.help.includes(form), `help mentions ${form}`);
+  }
 });

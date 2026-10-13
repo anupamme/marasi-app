@@ -107,7 +107,7 @@ export const FACTORY_ACTIONS = [
   // Ids predate the redesigned page (tabs, a settings accordion) and stay
   // put so saved profiles keep their overrides (ADR 0001).
   ...pageActions("launchpad", [
-    ["toggle-settings", "Rename Launchpad", "Edit the launchpad's name and description", "rename, name, description, edit", primary("p")],
+    ["toggle-settings", "Rename Launchpad", "Edit the launchpad's name and description", "rename, name, description, edit", primary("r")],
     ["next-tab", "Next Launchpad", "Open the next launchpad in the sidebar", "next, launchpad", primary("]")],
     ["previous-tab", "Previous Launchpad", "Open the previous launchpad in the sidebar", "previous, launchpad", primary("[")],
     ["next-entry", "Next Entry", "Go to next Launchpad entry", "next, entry", primary("shift+]")],
@@ -124,8 +124,8 @@ export const FACTORY_ACTIONS = [
     ["toggle-group-by-status", "Group by Status", "Group entries into status-code folders", "group, status, folders", primary("shift+g")],
     ["toggle-compare", "Compare Entries", "Compare two entries of the open launchpad, or stop comparing", "compare, diff", primary("shift+c")],
     ["toggle-compare-view", "Switch Compare Request/Response", "Show the request or the response diff while comparing", "compare, diff, request, response", primary("shift+r")],
-    ["swap-compare", "Swap Compared Entries", "Swap the A and B entries while comparing", "compare, swap", primary("shift+w")],
-    ["jump-to-latest", "Jump to Latest Entry", "Scroll the sidebar to the latest entry in view", "latest, bottom, jump, scroll", primary("shift+down"), { yieldsToEditors: true }],
+    ["swap-compare", "Swap Compared Entries", "Swap the A and B entries while comparing", "compare, swap", primary("shift+x")],
+    ["jump-to-latest", "Jump to Latest Entry", "Select the newest entry and scroll the sidebar to it", "latest, newest, bottom, jump, scroll, select", primary("shift+down"), { yieldsToEditors: true }],
   ]),
   ...pageActions("checkpoint", [
     ["toggle-settings", "Toggle Checkpoint Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],

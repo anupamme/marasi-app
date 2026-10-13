@@ -39,6 +39,20 @@ export function collapseAll({ launchpads, entriesByLaunchpad }) {
 }
 
 /**
+ * Opens the launchpad holding `entryId`, and its status folder when
+ * `groupByStatus`, overriding a collapse, so the entry's row renders.
+ */
+export function revealEntry({ expanded, openGroups, entriesByLaunchpad, groupByStatus }, launchpadId, entryId) {
+  const entries = entriesByLaunchpad[launchpadId] || [];
+  const index = entries.findIndex((entry) => entry.ID === entryId);
+  const inFolder = groupByStatus && index > 0;
+  return {
+    expanded: { ...expanded, [launchpadId]: true },
+    openGroups: inFolder ? { ...openGroups, [`${launchpadId}:${statusKey(entries[index])}`]: true } : openGroups,
+  };
+}
+
+/**
  * Opens `selectedId` the first time it is selected; once the user (or
  * collapseAll) has chosen open or closed, that choice stands.
  */

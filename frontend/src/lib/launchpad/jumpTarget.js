@@ -22,3 +22,12 @@ export function jumpTarget(rows, view) {
   if (!last || last.bottom <= view.bottom + FOLD_SLACK) return null;
   return { list: top.list, label: last.label };
 }
+
+/**
+ * What ⌘⇧↓ selects: the open launchpad's newest Launchpad entry as
+ * `{ launchpadId, entryId }`, or null when there is none to select.
+ */
+export function latestEntry({ selectedLaunchpadId, entriesByLaunchpad }) {
+  const newest = entriesByLaunchpad[selectedLaunchpadId]?.at(-1);
+  return newest ? { launchpadId: selectedLaunchpadId, entryId: newest.ID } : null;
+}

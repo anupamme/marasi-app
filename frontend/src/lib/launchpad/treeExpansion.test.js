@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { autoExpand, collapseAll, expandAll } from "./treeExpansion.js";
+import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 
 const launchpads = [{ ID: "lp1" }, { ID: "lp2" }];
 const entriesByLaunchpad = {
@@ -43,4 +43,18 @@ test("collapse all sticks: the selected launchpad does not reopen itself", () =>
 test("auto-expand with nothing selected changes nothing", () => {
   const expanded = { lp1: false };
   assert.equal(autoExpand(expanded, null), expanded);
+});
+
+test("revealing an entry opens its launchpad and its status folder, even after collapse all", () => {
+  const collapsed = collapseAll({ launchpads, entriesByLaunchpad });
+  const shown = revealEntry({ ...collapsed, entriesByLaunchpad, groupByStatus: true }, "lp1", "c");
+  assert.deepEqual(shown.expanded, { lp1: true, lp2: false });
+  assert.deepEqual(shown.openGroups, { "lp1:200": false, "lp1:404": true, "lp2:pending": false });
+});
+
+test("revealing the original entry or an ungrouped entry opens no folder", () => {
+  const closed = { expanded: { lp1: false }, openGroups: { "lp1:200": false }, entriesByLaunchpad };
+  assert.deepEqual(revealEntry({ ...closed, groupByStatus: true }, "lp1", "a").openGroups, { "lp1:200": false });
+  assert.deepEqual(revealEntry({ ...closed, groupByStatus: false }, "lp1", "b").openGroups, { "lp1:200": false });
+  assert.deepEqual(revealEntry({ ...closed, groupByStatus: false }, "lp1", "b").expanded, { lp1: true });
 });

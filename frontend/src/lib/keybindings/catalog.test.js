@@ -208,7 +208,7 @@ test("only extensions that rendered a GUI get a page: Workshop's core page is no
 test("Launchpad actions keep their ids and keys but say Launchpad, not Tab or Settings", () => {
   const catalog = buildCatalog();
   const expected = [
-    ["launchpad.toggle-settings", "Rename Launchpad", "meta+p", "ctrl+p"],
+    ["launchpad.toggle-settings", "Rename Launchpad", "meta+r", "ctrl+r"],
     ["launchpad.next-tab", "Next Launchpad", "meta+]", "ctrl+]"],
     ["launchpad.previous-tab", "Previous Launchpad", "meta+[", "ctrl+["],
     ["launchpad.delete-tab", "Delete Launchpad", "meta+shift+d", "ctrl+shift+d"],
@@ -235,7 +235,7 @@ test("the Launchpad page offers search, create, sidebar, grouping, compare and j
     ["launchpad.toggle-group-by-status", "Group by Status", "meta+shift+g", "ctrl+shift+g"],
     ["launchpad.toggle-compare", "Compare Entries", "meta+shift+c", "ctrl+shift+c"],
     ["launchpad.toggle-compare-view", "Switch Compare Request/Response", "meta+shift+r", "ctrl+shift+r"],
-    ["launchpad.swap-compare", "Swap Compared Entries", "meta+shift+w", "ctrl+shift+w"],
+    ["launchpad.swap-compare", "Swap Compared Entries", "meta+shift+x", "ctrl+shift+x"],
     ["launchpad.jump-to-latest", "Jump to Latest Entry", "meta+shift+arrowdown", "ctrl+shift+arrowdown"],
   ];
   for (const [id, label, mac, win] of expected) {

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jumpTarget } from "./jumpTarget.js";
+import { jumpTarget, latestEntry } from "./jumpTarget.js";
 
 // Rows 20px tall in document order; the viewport shows y 0..100 and its
 // sticky launchpad header covers the top 34px.
@@ -36,4 +36,21 @@ test("a collapsed header at the top shows no target, not a list further down", (
 test("no target when nothing is in view", () => {
   assert.equal(jumpTarget([], view), null);
   assert.equal(jumpTarget([row("a", -100, true)], view), null);
+});
+
+// ⌘⇧↓: the open launchpad's newest Launchpad entry, whatever is on screen.
+const lists = {
+  launchpads: [{ ID: "lp1" }, { ID: "lp2" }],
+  entriesByLaunchpad: { lp1: [{ ID: "a" }, { ID: "b" }, { ID: "c" }], lp2: [{ ID: "d" }] },
+};
+
+test("the latest entry is the open launchpad's newest, even in a short list", () => {
+  assert.deepEqual(latestEntry({ ...lists, selectedLaunchpadId: "lp1" }), { launchpadId: "lp1", entryId: "c" });
+  assert.deepEqual(latestEntry({ ...lists, selectedLaunchpadId: "lp2" }), { launchpadId: "lp2", entryId: "d" });
+});
+
+test("no latest entry without an open launchpad or before its entries load", () => {
+  assert.equal(latestEntry({ ...lists, selectedLaunchpadId: null }), null);
+  assert.equal(latestEntry({ ...lists, selectedLaunchpadId: "lp3" }), null);
+  assert.equal(latestEntry({ ...lists, entriesByLaunchpad: { lp1: [] }, selectedLaunchpadId: "lp1" }), null);
 });

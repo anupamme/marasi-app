@@ -202,7 +202,7 @@
 		<LaunchpadCompare bind:this={comparePane} {store} />
 		<div class="grid min-h-0 flex-1 grid-cols-2" class:hidden={comparing}>
 			<section class="flex min-h-0 min-w-0 flex-col border-r border-surface-500/30">
-				<div class="flex items-center justify-between bg-surface-100 px-3 py-1 text-xs dark:bg-surface-800">
+				<div class="flex items-center justify-between border-b border-surface-500/30 bg-surface-50 px-3 py-1 text-xs dark:bg-surface-900">
 					<span class="lp-request-title font-bold">
 						{dirty ? "Request draft" : "Request"}
 						{#if dirty}<span class="ml-1 text-warning-500" title="Unsaved draft">●</span>{/if}
@@ -225,7 +225,7 @@
 				</div>
 			</section>
 			<section class="flex min-h-0 min-w-0 flex-col">
-				<div class="flex items-center justify-between bg-surface-100 px-3 py-1 text-xs dark:bg-surface-800">
+				<div class="flex items-center justify-between border-b border-surface-500/30 bg-surface-50 px-3 py-1 text-xs dark:bg-surface-900">
 					<span class="font-bold">
 						Response
 						{#if details?.Response}

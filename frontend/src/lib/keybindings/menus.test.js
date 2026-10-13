@@ -393,3 +393,31 @@ test("the previous-tab and next-tab keys cycle through all four WebSocket tabs",
   assert.equal(stepWebSocketTab("stream", -1), "connection");
   assert.equal(stepWebSocketTab("connection", -1), "inject");
 });
+
+test("Launchpad page shortcuts run only on the Launchpad page", () => {
+  const dispatcher = mac();
+  const expected = [
+    [cmd("\\", "Backslash"), "launchpad.toggle-sidebar"],
+    [cmdShift("C", "KeyC"), "launchpad.toggle-compare"],
+    [cmdShift("S", "KeyS"), "launchpad.focus-search"],
+    [cmdShift("ArrowDown", "ArrowDown"), "launchpad.jump-to-latest"],
+  ];
+  for (const [event, actionId] of expected) {
+    assert.equal(dispatcher.resolve(event, on("/launchpad")), actionId, event.key);
+  }
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), null);
+});
+
+test("no Launchpad default hides a global shortcut", () => {
+  const catalog = buildCatalog();
+  for (const platform of [MACOS, WINDOWS_LINUX]) {
+    const global = new Map(
+      catalog.inContext("global").flatMap((a) => a.defaults[platform].map((binding) => [binding, a.id])),
+    );
+    for (const action of catalog.inContext("launchpad")) {
+      for (const binding of action.defaults[platform]) {
+        assert.equal(global.get(binding), undefined, `${platform} ${binding}: ${action.id} hides ${global.get(binding)}`);
+      }
+    }
+  }
+});

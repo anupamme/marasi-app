@@ -241,6 +241,12 @@
 				addRequest(newRequest);
 				launchpadStore.onRequest(newRequest);
 			});
+			EventsOn("launch-started", (launch) =>
+				launchpadStore.onLaunchStarted(launch),
+			);
+			EventsOn("launch-finished", (launch) =>
+				launchpadStore.onLaunchFinished(launch),
+			);
 			EventsOn("response", (newResponse) => {
 				addResponse(newResponse);
 				launchpadStore.onResponse(newResponse);

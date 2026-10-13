@@ -104,6 +104,7 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 	app.listener = listener
 	app.chrome = service.NewChrome(proxy, listener, logWriter)
 	app.configureWebSocketHandlers()
+	app.configureLaunchHandlers()
 	return app
 }
 
@@ -275,6 +276,8 @@ func (a *App) OpenProject(name string) (string, error) {
 	if !confirmed {
 		return "", errors.New("project switch cancelled")
 	}
+	// The project lifecycle interrupts pending launches before it switches
+	// (Marasi ADR-0031), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
 		return "", err
 	}
@@ -298,6 +301,9 @@ func (a *App) SetupScratchpad() error {
 	return nil
 }
 func (a *App) close(ctx context.Context) {
+	// Like the service's shutdown: end pending launches first, so their
+	// outcomes are written to the open project before the listener goes.
+	a.Proxy.InterruptLaunches()
 	_ = a.listener.Shutdown()
 	if a.projects != nil {
 		if err := a.projects.Shutdown(); err != nil {
@@ -571,14 +577,50 @@ func (a *App) ForwardCheckpoint(id uuid.UUID, body string, interceptResponse boo
 func (a *App) DropCheckpoint(id uuid.UUID) error {
 	return a.Proxy.DropCheckpoint(id)
 }
-// Repeat launches raw from the launchpad. The error reaches the frontend, so
-// a failed launch is not left pending there.
-func (a *App) Repeat(raw string, repeaterId string, useHttps bool) error {
-	if err := a.Proxy.Launch(raw, repeaterId, useHttps); err != nil {
+// Launch sends raw from the launchpad and returns the launch id, which is
+// also the UUID of the entry it creates. A malformed request or a missing
+// Host fails at once; how the launch ends arrives as a launch-finished event.
+func (a *App) Launch(raw string, launchpadID string, useHttps bool) (uuid.UUID, error) {
+	id, err := a.Proxy.Launch(raw, launchpadID, useHttps)
+	if err != nil {
 		log.Println(err)
-		return err
+		return uuid.Nil, err
 	}
-	return nil
+	return id, nil
+}
+
+// CancelLaunch cancels a pending launch and returns it as it will end. A
+// launch that finished before the cancel reached it is returned with its
+// final state and no error, so that race stays quiet in the UI.
+func (a *App) CancelLaunch(id uuid.UUID) (domain.Launch, error) {
+	launch, err := a.Proxy.CancelLaunch(id)
+	if errors.Is(err, domain.ErrLaunchFinished) {
+		return launch, nil
+	}
+	return launch, err
+}
+
+// GetLaunch returns a launch by id, pending or finished.
+func (a *App) GetLaunch(id uuid.UUID) (domain.Launch, error) {
+	return a.Proxy.GetLaunch(id)
+}
+
+// PendingLaunches returns the launches that have not ended, oldest first.
+func (a *App) PendingLaunches() []domain.Launch {
+	return a.Proxy.Launches()
+}
+
+// configureLaunchHandlers sends launch lifecycle events to the frontend
+// through the app's emitter, read when they fire so tests can swap it.
+func (a *App) configureLaunchHandlers() {
+	a.Proxy.WithOptions(
+		marasi.WithLaunchStartedHandler(func(launch domain.Launch) {
+			a.emitEvent("launch-started", launch)
+		}),
+		marasi.WithLaunchFinishedHandler(func(launch domain.Launch) {
+			a.emitEvent("launch-finished", launch)
+		}),
+	)
 }
 func (a *App) CheckHTTPParse(body string, itemType string) string {
 	switch itemType {

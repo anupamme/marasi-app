@@ -11,6 +11,7 @@
         ArrowLeftRightIcon,
         ArrowRightIcon,
         BracesIcon,
+        CircleStopIcon,
         Columns2Icon,
         FolderTreeIcon,
         GitCompareIcon,
@@ -36,7 +37,7 @@
     import { latestEntry } from "../../lib/launchpad/jumpTarget.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
-    import { isDraftDirty, launchpadStore } from "../../stores/launchpadStore";
+    import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
 
     const modalStore = getModalStore();
     const toastStore = getToastStore();
@@ -143,8 +144,10 @@
     }
 
     async function launch() {
-        const id = get(launchpadStore).selectedLaunchpadId;
-        if (!id) return;
+        const state = get(launchpadStore);
+        const id = state.selectedLaunchpadId;
+        // While a launch is pending, the Launch button is Cancel.
+        if (!id || pendingLaunchOf(state, id)) return;
         if (!$listener.status) {
             toastStore.trigger({
                 message: "Listener is offline.",
@@ -154,7 +157,7 @@
         }
         try {
             // The launched entry arrives through the layout's request event
-            // and the store selects it.
+            // and the store selects it; launch-finished ends it.
             await launchpadStore.launch(id);
             toastStore.trigger({
                 message: "Request launched",
@@ -164,6 +167,22 @@
             console.error("Launchpad error:", err);
             toastStore.trigger({
                 message: "Failed to launch the request",
+                background: "variant-filled-error",
+            });
+        }
+    }
+
+    // A launch that finished before the cancel reached it comes back in its
+    // final state from the binding, so only real failures show a toast.
+    async function cancelLaunch() {
+        const id = get(launchpadStore).selectedLaunchpadId;
+        if (!id) return;
+        try {
+            await launchpadStore.cancelLaunch(id);
+        } catch (err) {
+            console.error("Launchpad cancel error:", err);
+            toastStore.trigger({
+                message: "Failed to cancel the launch",
                 background: "variant-filled-error",
             });
         }
@@ -274,6 +293,7 @@
             },
         },
         { actionId: "launchpad.launch", icon: PlayIcon, handler: launch },
+        { actionId: "launchpad.cancel-launch", icon: CircleStopIcon, handler: cancelLaunch },
         {
             actionId: "launchpad.view-notes",
             icon: PenIcon,
@@ -308,6 +328,7 @@
             store={launchpadStore}
             onEditorFocus={() => dock?.onEditorFocus()}
             onLaunch={launch}
+            onCancel={cancelLaunch}
             onDelete={deleteLaunchpad}
             launchDisabled={!$listener.status}
         />

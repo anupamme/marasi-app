@@ -11,6 +11,7 @@ function fakeApi() {
     ],
     getEntries: async (id) => [{ ID: `${id}-1` }],
     getRawDetails: async (id) => ({ Request: { ID: id, Raw: `GET /${id}` } }),
+    pendingLaunches: async () => [],
   };
 }
 

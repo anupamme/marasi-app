@@ -11,15 +11,16 @@
 	import { modeCurrent, ProgressRadial, SlideToggle } from "@skeletonlabs/skeleton";
 	import { Check, GitCompare, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
 	import { lineWrap, marasiConfig } from "../../stores";
-	import { isDraftDirty } from "../../stores/launchpadStore";
+	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
 	import { compareView } from "./compare.js";
-	import { primaryVariant, statusClass } from "./format.js";
+	import { launchEndText, primaryVariant, statusClass } from "./format.js";
 	import LaunchpadCompare from "./LaunchpadCompare.svelte";
 	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
 	export let onEditorFocus = () => {};
 	export let onLaunch = () => {};
+	export let onCancel = () => {};
 	export let onDelete = () => {};
 	export let launchDisabled = false;
 
@@ -32,7 +33,8 @@
 	$: entryIndex = entries.findIndex((entry) => entry.ID === selectedId);
 	$: details = selectedId ? state.detailsById[selectedId] : null;
 	$: dirty = isDraftDirty(state, launchpadId);
-	$: pending = !!state.pendingLaunchByLaunchpad[launchpadId];
+	$: pending = !!pendingLaunchOf(state, launchpadId);
+	$: endText = selectedId ? launchEndText(launchOf(state, selectedId)) : null;
 	$: primary = primaryVariant($modeCurrent);
 	$: theme = $modeCurrent ? githubLight : oneDark;
 	$: vimExtensions = $marasiConfig.VimEnabled ? [vim()] : [];
@@ -181,14 +183,16 @@
 					on:change={(e) => store.setUseHttps(launchpadId, e.target.checked)}
 				/>
 			</div>
-			<button class="btn btn-sm {primary}" disabled={pending || !draft || launchDisabled} on:click={onLaunch}>
-				{#if pending}
-					<ProgressRadial width="w-4" stroke={100} meter="stroke-surface-50" track="stroke-surface-500/30" />
-					<span class="ml-2">Launching…</span>
-				{:else}
+			{#if pending}
+				<button class="lp-cancel btn btn-sm {primary}" title="Cancel the pending launch" on:click={onCancel}>
+					<ProgressRadial width="w-4" stroke={100} meter={$modeCurrent ? "stroke-primary-500" : "stroke-surface-50"} track="stroke-surface-500/30" />
+					<span class="ml-2">Cancel</span>
+				</button>
+			{:else}
+				<button class="lp-launch btn btn-sm {primary}" disabled={!draft || launchDisabled} on:click={onLaunch}>
 					<Send size={14} class="mr-2" /> Launch
-				{/if}
-			</button>
+				</button>
+			{/if}
 			<button
 				class="btn btn-sm variant-soft px-2"
 				aria-label="Delete launchpad"
@@ -235,8 +239,12 @@
 					</span>
 				</div>
 				<div class="lp-response lp-scroll min-h-0 flex-1 overflow-auto dark:bg-[#282c34]">
-					{#if pending || (details && !details.Response)}
-						<p class="p-4 text-sm opacity-60">No response yet…</p>
+					{#if endText}
+						<p class="lp-launch-end p-4 text-sm {endText === 'Cancelled' ? 'opacity-60' : 'text-error-500'}">
+							{endText === "Cancelled" ? "Cancelled — no response" : endText}
+						</p>
+					{:else if details && !details.Response}
+						<p class="p-4 text-sm opacity-60">Waiting for the response…</p>
 					{:else if details?.Response}
 						<CodeMirror
 							value={details.Response.Raw}

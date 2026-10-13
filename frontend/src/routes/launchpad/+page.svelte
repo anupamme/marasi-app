@@ -32,6 +32,7 @@
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
     import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
+    import { latestEntry } from "../../lib/launchpad/jumpTarget.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore } from "../../stores/launchpadStore";
@@ -76,6 +77,17 @@
             "This launchpad's draft has unsaved edits. Loading another entry replaces them.",
             () => launchpadStore.selectEntry(launchpadId, entryId, { force: true }),
         );
+    }
+
+    // ⌘⇧↓ selects the open launchpad's newest entry through the usual
+    // draft guard. While that launchpad is compared, it only scrolls, so A
+    // and B stay as picked.
+    async function jumpToLatest() {
+        const state = get(launchpadStore);
+        const latest = latestEntry(state);
+        if (!latest) return;
+        if (state.compare?.launchpadId !== latest.launchpadId) await pickEntry(latest.launchpadId, latest.entryId);
+        await tree?.showEntry(latest.launchpadId, latest.entryId);
     }
 
     // Esc cancels a chip re-pick, then closes compare. Editors, inputs and
@@ -205,7 +217,7 @@
             icon: FolderTreeIcon,
             handler: () => (groupByStatus = !groupByStatus),
         },
-        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: () => tree?.jumpToLatest() },
+        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: jumpToLatest },
         { actionId: "launchpad.toggle-compare", icon: GitCompareIcon, handler: () => workspace?.toggleCompare() },
         {
             actionId: "launchpad.toggle-compare-view",

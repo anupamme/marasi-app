@@ -99,7 +99,6 @@ test("⌘⇧] steps Armory runs on the page and the run's requests in its reques
 test("each page's shared shortcuts run that page's action", () => {
   const dispatcher = mac();
   const expected = [
-    ["/launchpad", "launchpad.toggle-settings", "launchpad.launch"],
     ["/checkpoint", "checkpoint.toggle-settings", "checkpoint.show-logs"],
     ["/logbook", "logbook.toggle-settings", null],
     ["/compass", "compass.toggle-settings", "compass.show-logs"],
@@ -109,6 +108,15 @@ test("each page's shared shortcuts run that page's action", () => {
     assert.equal(dispatcher.resolve(cmd("p", "KeyP"), on(route)), settings, route);
     assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), on(route)), shiftL, route);
   }
+});
+
+test("the Launchpad renames on ⌘R and swaps compared entries on ⌘⇧X", () => {
+  const dispatcher = mac();
+  assert.equal(dispatcher.resolve(cmd("r", "KeyR"), on("/launchpad")), "launchpad.toggle-settings");
+  assert.equal(dispatcher.resolve(cmd("p", "KeyP"), on("/launchpad")), null);
+  assert.equal(dispatcher.resolve(cmdShift("X", "KeyX"), on("/launchpad")), "launchpad.swap-compare");
+  assert.equal(dispatcher.resolve(cmdShift("W", "KeyW"), on("/launchpad")), null);
+  assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), on("/launchpad")), "launchpad.launch");
 });
 
 test("a logs or report drawer keeps its page's menu", () => {

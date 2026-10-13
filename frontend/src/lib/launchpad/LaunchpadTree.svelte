@@ -8,12 +8,12 @@
 	// each list windowed to its original entry plus the latest entries.
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
-	import { afterUpdate } from "svelte";
+	import { afterUpdate, tick } from "svelte";
 	import { ArrowDown, ChevronDown, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
 	import { isDraftDirty } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { jumpTarget } from "./jumpTarget.js";
-	import { autoExpand, collapseAll, expandAll } from "./treeExpansion.js";
+	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
 	import { primaryVariant, shortTime, statusClass } from "./format.js";
 	import OriginIcon from "./OriginIcon.svelte";
@@ -99,6 +99,13 @@
 		if (next?.list !== jump?.list || next?.label !== jump?.label) jump = next;
 	}
 	afterUpdate(updateJump);
+	// Opens the rows holding an entry and scrolls it into view (⌘⇧↓).
+	export async function showEntry(launchpadId, entryId) {
+		setAll(revealEntry({ expanded, openGroups, entriesByLaunchpad: state.entriesByLaunchpad, groupByStatus }, launchpadId, entryId));
+		await tick();
+		scroller?.querySelector(`[data-entry="${CSS.escape(entryId)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
+	}
+	// The floating button only scrolls; it never changes the selection.
 	export function jumpToLatest() {
 		if (!jump) return;
 		const last = scroller.querySelector(`[data-list="${CSS.escape(jump.list)}"][data-last="true"]`);
@@ -157,7 +164,10 @@
 					if (e.key === "Enter") finishCreate();
 					if (e.key === "Escape") creating = false;
 				}}
-				on:blur={finishCreate}
+				on:blur={(e) => {
+					// The Marasi menu (⌘K) borrows focus and hands it back on close.
+					if (!e.relatedTarget?.closest?.("dialog")) finishCreate();
+				}}
 			/>
 		{/if}
 	</header>

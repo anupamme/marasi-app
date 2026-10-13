@@ -47,25 +47,6 @@ export function dirtyLaunchpadIds(state) {
   );
 }
 
-/**
- * The entry a compare quick button picks for B: "previous" or "next" to A in
- * the timeline, or the launchpad's "original" (first) entry. Null when there
- * is none.
- */
-export function compareQuickPick(state, which) {
-  const compare = state.compare;
-  if (!compare) return null;
-  const entries = state.entriesByLaunchpad[compare.launchpadId] || [];
-  const index = entries.findIndex((entry) => entry.ID === compare.leftId);
-  const target =
-    which === "original"
-      ? entries[0]
-      : index < 0
-        ? undefined
-        : entries[index + (which === "previous" ? -1 : 1)];
-  return target?.ID ?? null;
-}
-
 function without(map, key) {
   const copy = { ...map };
   delete copy[key];
@@ -275,7 +256,7 @@ export function createLaunchpadStore(api) {
       return { needsConfirm: true };
     }
     if (current.selectedLaunchpadId !== launchpadId) {
-      update((state) => ({ ...state, selectedLaunchpadId: launchpadId }));
+      update((state) => ({ ...state, selectedLaunchpadId: launchpadId, compare: null }));
       if (!current.entriesByLaunchpad[launchpadId]) await loadEntries(launchpadId);
     }
     await seedDraft(launchpadId, entryId);

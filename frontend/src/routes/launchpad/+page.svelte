@@ -23,6 +23,7 @@
     import LaunchpadDock from "../../lib/launchpad/LaunchpadDock.svelte";
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
+    import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore } from "../../stores/launchpadStore";
@@ -54,6 +55,10 @@
     }
 
     async function pickEntry(launchpadId, entryId) {
+        // While comparing, a click on the compared launchpad fills a side.
+        const side = compareClick(get(launchpadStore), launchpadId, entryId);
+        if (side === "ignore") return;
+        if (side) return launchpadStore.setCompareSide(side, entryId);
         const { needsConfirm } = await launchpadStore.selectEntry(launchpadId, entryId);
         if (!needsConfirm) return;
         confirm(
@@ -61,6 +66,18 @@
             "This launchpad's draft has unsaved edits. Loading another entry replaces them.",
             () => launchpadStore.selectEntry(launchpadId, entryId, { force: true }),
         );
+    }
+
+    // Esc cancels a chip re-pick, then closes compare. Editors, inputs and
+    // open modals keep their own Esc (vim mode uses it).
+    function onKeydown(event) {
+        if (event.key !== "Escape" || event.defaultPrevented || $modalStore.length) return;
+        if (event.target?.closest?.("input, textarea, select, .cm-editor")) return;
+        const action = compareEscape(get(launchpadStore));
+        if (!action) return;
+        event.preventDefault();
+        if (action === "stop-picking") launchpadStore.pickCompareSide(null);
+        else launchpadStore.closeCompare();
     }
 
     function deleteLaunchpad() {
@@ -114,7 +131,12 @@
         const state = get(launchpadStore);
         const id = state.selectedLaunchpadId;
         const entries = state.entriesByLaunchpad[id] || [];
-        const index = entries.findIndex((e) => e.ID === state.selectedEntryByLaunchpad[id]);
+        // While comparing, stepping moves B (pickEntry routes the click).
+        const from =
+            state.compare?.launchpadId === id && state.compare.rightId
+                ? state.compare.rightId
+                : state.selectedEntryByLaunchpad[id];
+        const index = entries.findIndex((e) => e.ID === from);
         const next = entries[index + direction];
         if (next) pickEntry(id, next.ID);
     }
@@ -188,6 +210,7 @@
     useMenuActions(launchpadMenu);
 </script>
 
+<svelte:window on:keydown={onKeydown} />
 <MarasiKeys menuOptions={launchpadMenu} />
 
 <div class="relative flex h-full min-h-0">

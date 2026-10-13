@@ -36,6 +36,7 @@
 	$: results = searchLaunchpads(state);
 	$: searching = state.search.trim().length > 0;
 	$: selectedLaunchpadId = state.selectedLaunchpadId;
+	$: compare = state.compare;
 	$: if (selectedLaunchpadId && expanded[selectedLaunchpadId] === undefined) {
 		expanded = { ...expanded, [selectedLaunchpadId]: true };
 	}
@@ -244,12 +245,20 @@
 								</button>
 							{:else}
 								{@const entry = row.entry}
-								{@const active = isSelected && selectedEntryId === entry.ID}
+								{@const inCompare = compare?.launchpadId === launchpad.ID}
+								{@const active = isSelected && selectedEntryId === entry.ID && !inCompare}
+								{@const isA = inCompare && compare.leftId === entry.ID}
+								{@const isB = inCompare && compare.rightId === entry.ID}
 								<button
-									class="lp-entry relative flex w-full items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
+									class="lp-entry group relative flex w-full items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
 									2
 										? 'pl-14'
-										: 'pl-10'} {active ? 'bg-primary-500/20' : 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
+										: 'pl-10'} {active
+										? 'bg-primary-500/20'
+										: inCompare && compare.picking
+											? 'hover:bg-primary-500/15'
+											: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
+									data-compare={isA ? "A" : isB ? "B" : undefined}
 									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}"
 									aria-current={active ? "true" : undefined}
 									data-entry={entry.ID}
@@ -267,6 +276,13 @@
 									</span>
 									<span class="w-11 flex-none opacity-60">{entry.Method}</span>
 									<span class="min-w-0 flex-1 truncate">{entry.Path}</span>
+									{#if isA}<span class="variant-filled-tertiary flex-none px-1.5 text-[10px] font-bold">A</span>{/if}
+									{#if isB}<span class="{primary} flex-none px-1.5 text-[10px] font-bold">B</span>{/if}
+									{#if inCompare && compare.picking && !isA && !isB}
+										<span class="hidden flex-none text-[10px] text-primary-500 group-hover:inline">
+											as {compare.picking === "left" ? "A" : "B"}
+										</span>
+									{/if}
 									<span class="w-7 flex-none text-right {statusClass(entry.StatusCode)}">{entry.StatusCode || "…"}</span>
 									<span class="w-9 flex-none text-right opacity-50">{entry.Length || ""}</span>
 								</button>

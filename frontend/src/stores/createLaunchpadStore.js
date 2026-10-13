@@ -3,6 +3,14 @@
 // launchpadStore.js for the Wails one), so this module loads under node --test.
 import { writable } from "svelte/store";
 import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
+import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
+
+// Entry search through Marasi: `matches` holds entry ids by launchpad id,
+// `status` is idle, loading, done or error.
+const IDLE_SEARCH = { status: "idle", matches: null, error: null };
+
+/** Milliseconds the search box waits after a keystroke before asking Marasi. */
+export const ENTRY_SEARCH_DELAY = 250;
 
 // The draft an empty launchpad starts from.
 export const BLANK_REQUEST = "GET / HTTP/1.1\nHost: \n\n";
@@ -26,6 +34,7 @@ function initialState(projectStateVersion = 0) {
     detailsById: {},
     selectedLaunchpadId: null,
     search: "",
+    entrySearch: IDLE_SEARCH,
     compare: null,
   };
 }
@@ -165,18 +174,39 @@ function entryFromRequest(request) {
   };
 }
 
+// Updates one launchpad's summary: EntryCount and LastStatusCode come from
+// Marasi's launchpad list, and NewestEntryID names the entry LastStatusCode
+// follows once a live arrival made it the newest.
+function updateSummary(launchpads, launchpadId, fields) {
+  return launchpads.map((launchpad) =>
+    launchpad.ID === launchpadId ? { ...launchpad, ...fields } : launchpad,
+  );
+}
+
+// The summary of a freshly loaded entry list, oldest first.
+const summaryOfEntries = (entries) => ({
+  EntryCount: entries.length,
+  LastStatusCode: entries.at(-1)?.StatusCode || null,
+  NewestEntryID: entries.at(-1)?.ID ?? null,
+});
+
 // A request from the layout's "request" event. Launched requests carry their
 // launchpad in Metadata.launchpad_id; anything else is ignored.
 function arriveRequest(state, request) {
   const launchpadId = request?.Metadata?.launchpad_id;
   if (!launchpadId) return state;
-  if (!state.launchpads.some((launchpad) => launchpad.ID === launchpadId)) {
-    return state;
-  }
+  const launchpad = state.launchpads.find((item) => item.ID === launchpadId);
+  if (!launchpad) return state;
   const entries = state.entriesByLaunchpad[launchpadId];
   if (entries?.some((entry) => entry.ID === request.ID)) return state;
+  if (state.detailsById[request.ID]) return state;
   return {
     ...state,
+    launchpads: updateSummary(state.launchpads, launchpadId, {
+      EntryCount: (launchpad.EntryCount ?? entries?.length ?? 0) + 1,
+      LastStatusCode: null,
+      NewestEntryID: request.ID,
+    }),
     detailsById: {
       ...state.detailsById,
       [request.ID]: { Request: request, Response: null, Metadata: {} },
@@ -204,8 +234,15 @@ function arriveResponse(state, response) {
   const launchpadId = details?.Request?.Metadata?.launchpad_id;
   if (!launchpadId) return state;
   const entries = state.entriesByLaunchpad[launchpadId];
+  const newest = state.launchpads.find((item) => item.ID === launchpadId)?.NewestEntryID;
   return {
     ...state,
+    launchpads:
+      newest === response.ID
+        ? updateSummary(state.launchpads, launchpadId, {
+            LastStatusCode: response.StatusCode || null,
+          })
+        : state.launchpads,
     detailsById: {
       ...state.detailsById,
       [response.ID]: { ...details, Response: response },
@@ -244,6 +281,58 @@ export function createLaunchpadStore(api) {
   }
   function update(fn) {
     set(fn(current));
+  }
+
+  // Entry search: one debounced Marasi query per settled term. Every new
+  // term bumps searchSeq, so an older answer arriving late is dropped.
+  let searchTimer = null;
+  let searchSeq = 0;
+
+  function setEntrySearch(entrySearch) {
+    update((state) => ({ ...state, entrySearch }));
+  }
+
+  function setSearch(search) {
+    clearTimeout(searchTimer);
+    searchTimer = null;
+    const seq = ++searchSeq;
+    const { query, error } = entrySearchQuery(search);
+    update((state) => ({
+      ...state,
+      search,
+      entrySearch: query
+        ? // Earlier matches stay listed until the new answer replaces them.
+          { ...state.entrySearch, status: "loading", error: null }
+        : error
+          ? { status: "error", matches: null, error }
+          : IDLE_SEARCH,
+    }));
+    if (query) searchTimer = setTimeout(() => runEntrySearch(seq, query), ENTRY_SEARCH_DELAY);
+  }
+
+  async function runEntrySearch(seq, query) {
+    const version = projectStateVersion;
+    const fresh = () => seq === searchSeq && version === projectStateVersion;
+    let result;
+    try {
+      result = await api.searchEntries(query);
+    } catch (err) {
+      if (fresh()) setEntrySearch({ status: "error", matches: null, error: `Entry search failed: ${err}` });
+      return;
+    }
+    if (!fresh()) return;
+    if (result?.QueryError) {
+      setEntrySearch({ status: "error", matches: null, error: result.QueryError.Message });
+      return;
+    }
+    const matches = result?.EntriesByLaunchpad || {};
+    setEntrySearch({ status: "done", matches, error: null });
+    // Matching rows need their launchpad's entries for numbering.
+    await Promise.all(
+      Object.keys(matches)
+        .filter((id) => !current.entriesByLaunchpad[id])
+        .map((id) => loadEntries(id)),
+    );
   }
 
   // Selects a launch's entry once it is in the store. A launch that ended
@@ -314,6 +403,7 @@ export function createLaunchpadStore(api) {
     if (version !== projectStateVersion) return [];
     update((state) => ({
       ...state,
+      launchpads: updateSummary(state.launchpads, launchpadId, summaryOfEntries(entries)),
       entriesByLaunchpad: { ...state.entriesByLaunchpad, [launchpadId]: entries },
     }));
     return entries;
@@ -435,9 +525,15 @@ export function createLaunchpadStore(api) {
       const ids = new Set(launchpads.map((launchpad) => launchpad.ID));
       const keep = (map) =>
         Object.fromEntries(Object.entries(map).filter(([id]) => ids.has(id)));
+      // Fresh summaries; the newest live arrival stays known for its response.
+      const newest = Object.fromEntries(
+        state.launchpads.map((launchpad) => [launchpad.ID, launchpad.NewestEntryID]),
+      );
       return {
         ...state,
-        launchpads,
+        launchpads: launchpads.map((launchpad) =>
+          newest[launchpad.ID] ? { ...launchpad, NewestEntryID: newest[launchpad.ID] } : launchpad,
+        ),
         ...mapPerLaunchpad(state, keep),
         compare: ids.has(state.compare?.launchpadId) ? state.compare : null,
       };
@@ -466,19 +562,13 @@ export function createLaunchpadStore(api) {
     subscribe,
     clear: () => {
       awaitingEntry.clear();
+      clearTimeout(searchTimer);
+      searchSeq += 1;
       set(initialState(++projectStateVersion));
     },
     populate,
     jumpTo,
     loadEntries,
-    // The tree's counts and last statuses need every entry list; the
-    // backend has no summary field, so this loads the missing ones.
-    loadAllEntries: async () => {
-      const missing = current.launchpads.filter(
-        (launchpad) => !current.entriesByLaunchpad[launchpad.ID],
-      );
-      await Promise.all(missing.map((launchpad) => loadEntries(launchpad.ID)));
-    },
     ensureDetails,
     selectLaunchpad,
     selectEntry,
@@ -525,13 +615,17 @@ export function createLaunchpadStore(api) {
       await selectArrivedLaunch(launch?.ID);
     },
 
-    setSearch: (search) => update((state) => ({ ...state, search })),
+    // Names and descriptions match locally at once; entries through Marasi.
+    setSearch,
 
     createLaunchpad: async ({ name, description = "" }) => {
       const id = await api.createLaunchpad(name, description);
       update((state) => ({
         ...state,
-        launchpads: [...state.launchpads, { ID: id, Name: name, Description: description }],
+        launchpads: [
+          ...state.launchpads,
+          { ID: id, Name: name, Description: description, EntryCount: 0, LastStatusCode: null },
+        ],
         entriesByLaunchpad: { ...state.entriesByLaunchpad, [id]: [] },
       }));
       await selectLaunchpad(id);

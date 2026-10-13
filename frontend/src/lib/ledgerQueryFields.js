@@ -24,6 +24,7 @@ export const QUERY_FIELDS = [
   { name: "requested_at", ops: ["=", "!=", "<", "<=", ">", ">="], example: 'requested_at > "2026-10-09T10:00:00Z"', help: "RFC 3339 timestamp." },
   { name: "responded_at", ops: ["=", "!=", "<", "<=", ">", ">="], example: 'responded_at < "2026-10-09T10:00:00Z"', help: "RFC 3339 timestamp." },
   { name: "metadata.<key>", ops: ["=", "!="], example: 'metadata.extension = "workshop"', help: "The value at that key: a string, number, true, false or null." },
+  { name: "launchpad", ops: ["=", "!=", ":"], example: "launchpad:*", help: 'Launchpad membership: launchpad = "<uuid>" for one launchpad, launchpad != "<uuid>" for pairs outside it, launchpad:* for pairs in any launchpad.' },
   { name: "request_head", ops: [":"], example: 'request_head:"authorization"', help: "Contains, ignoring case. Request line plus headers." },
   { name: "request_body", ops: [":"], example: 'request_body:"password"', help: "Contains, ignoring case. Binary bodies never match." },
   { name: "response_head", ops: [":"], example: 'response_head:"set-cookie"', help: "Contains, ignoring case. Status line plus headers." },

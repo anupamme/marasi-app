@@ -100,7 +100,7 @@ test("showing all entries removes the earlier row", () => {
   assert.deepEqual(describe(rows).slice(0, 2), ["#1", "#2"]);
 });
 
-const state = (search) => ({
+const state = (search, entryMatches = null) => ({
   search,
   launchpads: [
     { ID: "a", Name: "Login flow", Description: "auth checks" },
@@ -115,6 +115,7 @@ const state = (search) => ({
     ],
   },
   selectedLaunchpadId: "b",
+  entrySearch: { matches: entryMatches },
 });
 
 test("without a search every launchpad is listed with all its entries", () => {
@@ -129,17 +130,35 @@ test("a name or description match lists the whole launchpad", () => {
   assert.deepEqual(searchLaunchpads(state("AUTH")).map((r) => [r.launchpad.ID, r.matchedEntries]), [["a", null]]);
 });
 
-test("entry search covers only the current launchpad", () => {
+test("entry matches come from Marasi's search, across every launchpad", () => {
+  const results = searchLaunchpads(state("secret", { a: ["a1"], b: ["b2"] }));
   assert.deepEqual(
-    searchLaunchpads(state("delete")).map((r) => [r.launchpad.ID, r.matchedEntries.map((e) => e.ID)]),
-    [["b", ["b2"]]],
+    results.map((r) => [r.launchpad.ID, r.matchedEntries.map((e) => e.ID), r.matchCount]),
+    [["a", ["a1"], 1], ["b", ["b2"], 1]],
   );
-  assert.deepEqual(searchLaunchpads(state("/login")), []);
 });
 
-test("a launchpad summary counts entries and reports the last status", () => {
-  assert.deepEqual(launchpadSummary([{ StatusCode: 200 }, { StatusCode: 404 }]), { count: 2, lastStatus: 404 });
-  assert.deepEqual(launchpadSummary([{ StatusCode: 200 }, { StatusCode: 0 }]), { count: 2, lastStatus: 0 });
-  assert.deepEqual(launchpadSummary([]), { count: 0, lastStatus: null });
-  assert.deepEqual(launchpadSummary(undefined), { count: null, lastStatus: null });
+test("entry text is not matched locally; without Marasi's matches nothing is listed", () => {
+  assert.deepEqual(searchLaunchpads(state("delete")), []);
+});
+
+test("a launchpad whose entries have not loaded still lists its match count", () => {
+  const results = searchLaunchpads(state("secret", { c: ["c7", "c9"] }));
+  assert.deepEqual(
+    results.map((r) => [r.launchpad.ID, r.matchedEntries, r.matchCount]),
+    [["c", [], 2]],
+  );
+});
+
+test("a name match wins over entry matches in the same launchpad", () => {
+  const results = searchLaunchpads(state("login", { a: ["a1"] }));
+  assert.deepEqual(results.map((r) => [r.launchpad.ID, r.matchedEntries]), [["a", null]]);
+});
+
+test("a launchpad summary comes from its entry count and last status code", () => {
+  assert.deepEqual(launchpadSummary({ EntryCount: 2, LastStatusCode: 404 }), { count: 2, lastStatus: 404 });
+  // The newest entry has no response yet.
+  assert.deepEqual(launchpadSummary({ EntryCount: 2, LastStatusCode: null }), { count: 2, lastStatus: 0 });
+  assert.deepEqual(launchpadSummary({ EntryCount: 0, LastStatusCode: null }), { count: 0, lastStatus: null });
+  assert.deepEqual(launchpadSummary({ ID: "x" }), { count: null, lastStatus: null });
 });

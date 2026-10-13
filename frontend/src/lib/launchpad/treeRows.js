@@ -17,16 +17,14 @@ function windowed(rows, list, depth, shown, label, selectedEntryId) {
   return [{ kind: "more", list, hidden, total: rows.length, depth }, ...latest];
 }
 
-const entryText = (entry) =>
-  `${entry.Method} ${entry.Host}${entry.Path} ${entry.StatusCode || ""}`.toLowerCase();
-
 /**
  * The launchpads the tree lists for `state.search`. A name or description
- * match lists the whole launchpad (`matchedEntries: null`); otherwise only
- * the current launchpad's entries are searched, and a launchpad with
- * matching entries lists just those.
+ * match lists the whole launchpad (`matchedEntries: null`). Otherwise a
+ * launchpad with entries matching Marasi's search (`state.entrySearch`,
+ * entry ids by launchpad id) lists just those; `matchCount` counts them even
+ * before the launchpad's entries load.
  */
-export function searchLaunchpads({ search, launchpads, entriesByLaunchpad, selectedLaunchpadId }) {
+export function searchLaunchpads({ search, launchpads, entriesByLaunchpad, entrySearch }) {
   const query = search.trim().toLowerCase();
   const results = [];
   for (const launchpad of launchpads) {
@@ -35,17 +33,23 @@ export function searchLaunchpads({ search, launchpads, entriesByLaunchpad, selec
       results.push({ launchpad, entries, matchedEntries: null });
       continue;
     }
-    if (launchpad.ID !== selectedLaunchpadId) continue;
-    const matchedEntries = entries.filter((entry) => entryText(entry).includes(query));
-    if (matchedEntries.length) results.push({ launchpad, entries, matchedEntries });
+    const ids = entrySearch?.matches?.[launchpad.ID];
+    if (!ids?.length) continue;
+    const keep = new Set(ids);
+    const matchedEntries = entries.filter((entry) => keep.has(entry.ID));
+    results.push({ launchpad, entries, matchedEntries, matchCount: ids.length });
   }
   return results;
 }
 
-/** Entry count and the last entry's status; nulls while entries are unloaded. */
-export function launchpadSummary(entries) {
-  if (!entries) return { count: null, lastStatus: null };
-  return { count: entries.length, lastStatus: entries.at(-1)?.StatusCode ?? null };
+/**
+ * Entry count and the newest entry's status from Marasi's launchpad summary;
+ * 0 while that entry awaits its response, nulls when there is no summary.
+ */
+export function launchpadSummary(launchpad) {
+  const count = launchpad?.EntryCount;
+  if (typeof count !== "number") return { count: null, lastStatus: null };
+  return { count, lastStatus: count ? (launchpad.LastStatusCode ?? 0) : null };
 }
 
 /** The status folder an entry belongs to; unanswered entries are "pending". */

@@ -10,6 +10,7 @@ import {
   GetRawDetails,
   Launch,
   PendingLaunches,
+  SearchLaunchpadEntries,
   SetUnsavedDraftCount,
   UpdateLaunchpadEntry,
 } from "../lib/wailsjs/go/main/App";
@@ -37,6 +38,7 @@ export const launchpadStore = createLaunchpadStore({
   cancelLaunch: (id) => CancelLaunch(id),
   getLaunch: (id) => GetLaunch(id),
   pendingLaunches: () => PendingLaunches(),
+  searchEntries: (query) => SearchLaunchpadEntries(query),
 });
 
 // Keeps the Go side told how many launchpads have unsaved drafts, so quitting

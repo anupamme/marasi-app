@@ -30,6 +30,16 @@ _Avoid_: updates, live results
 The project's list of content types the ledger hides, in both the live view and query results. A pair with no content type yet is never hidden by it.
 _Avoid_: filter, content type filter
 
+### Launchpad
+
+**Launchpad entry**:
+An ordinary request/response pair linked to a launchpad rather than copied. A launchpad's entries are a flat, oldest-first timeline; the first entry is the pair the launchpad was created from, and every Launch adds one more.
+_Avoid_: member, tab, request when referring to the linked pair
+
+**Launchpad draft**:
+The working request of a launchpad, held only in memory, seeded from one launchpad entry and sent by Launch. It is dirty when it differs from the request of the entry it was seeded from, and it is lost when the project closes.
+_Avoid_: edit, buffer, saved request
+
 ### Marasi menu keybindings
 
 **Menu action**:

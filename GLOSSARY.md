@@ -11,12 +11,36 @@ The app's table of the open project's traffic.
 _Avoid_: history, HTTP history, proxy items
 
 **Live view**:
-The ledger with no query: every request/response pair, with new traffic appearing as it is captured.
+The ledger with no query: every request/response pair, with new traffic appearing at the top as it is captured. Sorted any other way than newest first, new traffic waits as new matches instead, so rows never move under the researcher.
 _Avoid_: unfiltered view, all items
 
 **Query**:
-A text expression that narrows the ledger to the request/response pairs that match it, as Marasi defines it. It is not stored.
+A text expression that narrows the ledger to the request/response pairs that match it, as Marasi defines it. The ledger's current query is not stored; a researcher keeps one by making it a saved query.
 _Avoid_: search, search string, filter, FTS
+
+**Saved query**:
+A named query a researcher keeps for reuse and applies by choosing it. It belongs to one project, or to the app so every project offers it; some ship with the app.
+_Avoid_: saved search, saved filter, bookmark
+
+**Highlight**:
+A number from 1 to 8 that a researcher puts on a request/response pair to mark it, as Marasi defines it. A pair has at most one highlight, and it stays with the pair in the project. The app shows each number as a colour, set for all projects, and a highlight label. A researcher can choose the ledger's pairs by highlight through the query.
+_Avoid_: tag, mark, slot, colour filter
+
+**Highlight label**:
+The name that gives a highlight colour its meaning to the researcher, such as "IDOR candidate". It defaults to the colour's own name. A project can give a colour its own label, which wins over the app's. Renaming a label or changing its colour does not change which pairs carry that highlight.
+_Avoid_: preset, tag name
+
+**Sitemap**:
+The project's traffic as a tree, first by origin and then by path segment, with a count of pairs and of server errors at each node, as Marasi defines it. The ledger shows it beside the table; choosing a node narrows the query to that node and everything under it.
+_Avoid_: site tree, target tree
+
+**Selection**:
+The pairs a researcher has picked in the ledger for a context-menu action to apply to together, as Marasi defines it: either particular pairs, or every pair in the query results up to the newest one the researcher has seen, including pairs not scrolled into view. New matches are not in it until the researcher shows them.
+_Avoid_: checked rows, marked rows, batch
+
+**Drawer**:
+The ledger's pane, below the table, that shows one pair's request and response side by side.
+_Avoid_: inspector, detail view
 
 **Query results**:
 The request/response pairs that match the ledger's current query, newest first.
@@ -27,7 +51,7 @@ Request/response pairs that match the current query but arrived or started match
 _Avoid_: updates, live results
 
 **Content-type exclusion**:
-The project's list of content types the ledger hides, in both the live view and query results. A pair with no content type yet is never hidden by it.
+The list of content types the ledger hides, in both the live view and query results, as Marasi defines it: each type exact or a whole major type such as `image/*`. A project follows the app's default list until the researcher changes the project's own list. A pair with no content type yet is never hidden by it.
 _Avoid_: filter, content type filter
 
 ### Launchpad

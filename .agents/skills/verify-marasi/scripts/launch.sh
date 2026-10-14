@@ -3,6 +3,11 @@
 set -eu
 . "$(dirname -- "$0")/common.sh"
 
+require_tools lsof curl node go wails
+case $(uname -s) in
+	Linux) require_tools pkg-config ;;
+esac
+
 PORT=${MARASI_VERIFY_PROXY_PORT:-18080}
 DEV_PORT=${MARASI_VERIFY_DEV_PORT:-34115}
 CDP_PORT=${MARASI_VERIFY_CDP_PORT:-0}

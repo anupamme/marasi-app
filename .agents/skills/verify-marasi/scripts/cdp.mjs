@@ -29,12 +29,20 @@ const routes = {
 	settings: { selector: '[title="Settings"]', path: "/settings", expected: "Marasi Settings" },
 };
 
-// Skeleton's modal wrapper is display: contents, so measure its card.
+// Skeleton's modal wrapper is display: contents, so measure its card. The
+// Marasi menu is an open native <dialog>; measure the dialog itself, because
+// its first child is the 48 px search input, and a filtered menu stays under
+// 100 px tall.
 const overlayPainted = `Boolean((() => {
-	const overlay = document.querySelector("dialog[open], [data-testid='modal-component']");
+	const menu = Array.from(document.querySelectorAll("dialog[open]")).some((dialog) => {
+		const box = dialog.getBoundingClientRect();
+		return box.width > 100 && box.height > 40;
+	});
+	if (menu) return true;
+	const overlay = document.querySelector("[data-testid='modal-component']");
 	const card = overlay?.querySelector(".modal-example-form") || overlay?.firstElementChild || overlay;
 	const box = card?.getBoundingClientRect();
-	return box && box.width > 100 && box.height > 100;
+	return Boolean(box && box.width > 100 && box.height > 100);
 })())`;
 
 const viewportMatches = `innerWidth === ${viewport.width} && innerHeight === ${viewport.height} && devicePixelRatio === 1`;

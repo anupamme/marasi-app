@@ -29,6 +29,22 @@ case $(uname -s) in
 esac
 APP_BIN=$REPO_ROOT/build/bin/marasi-app.app/Contents/MacOS/marasi-app
 
+# Fail fast when a helper's tool is missing. Without lsof every port check
+# reads as free and launch only fails after the app has started; without
+# pkg-config the Linux Wails build fails and launch waits out its 120 s.
+require_tools() {
+	for TOOL in "$@"; do
+		command -v "$TOOL" >/dev/null 2>&1 || {
+			printf 'Required tool %s is not on PATH.' "$TOOL" >&2
+			case $TOOL in
+				wails) printf ' It is usually in %s/bin.' "$(go env GOPATH 2>/dev/null)" >&2 ;;
+			esac
+			printf '\n' >&2
+			exit 1
+		}
+	done
+}
+
 recorded_pid() {
 	[ -f "$PID_FILE" ] || {
 		printf 'No verification PID at %s\n' "$PID_FILE" >&2

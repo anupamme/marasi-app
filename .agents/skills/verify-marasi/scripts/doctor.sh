@@ -3,6 +3,7 @@
 set -eu
 . "$(dirname -- "$0")/common.sh"
 
+require_tools lsof curl node
 PID=$(recorded_pid)
 PORT=$(recorded_port)
 DEV_PORT=$(recorded_dev_port)

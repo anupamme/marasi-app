@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"slices"
 	"sync"
 
 	"github.com/spf13/viper"
@@ -56,6 +57,9 @@ type Config struct {
 	// profile when keybindingsProblem is set.
 	keybindings        KeybindingConfig
 	keybindingsProblem string
+	// contentTypeExclusion is the app default content-type exclusion, which
+	// projects without their own list follow (ADR 0004).
+	contentTypeExclusion []string
 	// highlights is the 8 highlight colours and app labels (highlights.go).
 	highlights []Highlight
 }
@@ -153,6 +157,9 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 	if documentValue(doc, keybindingsKey) == nil {
 		missing[keybindingsKey] = factoryKeybindings()
 	}
+	if documentValue(doc, contentTypeExclusionConfigKey) == nil {
+		missing[contentTypeExclusionConfigKey] = seededContentTypeExclusion
+	}
 	if documentValue(doc, highlightsKey) == nil {
 		missing[highlightsKey] = defaultHighlights()
 	}
@@ -188,6 +195,11 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 		log.Printf("[!] keybindings in %s left untouched, using factory shortcuts: %v", config.path(), err)
 	}
 
+	config.contentTypeExclusion, err = parseContentTypeExclusion(documentValue(doc, contentTypeExclusionConfigKey))
+	if err != nil {
+		config.contentTypeExclusion = slices.Clone(seededContentTypeExclusion)
+		log.Printf("[!] %s in %s left untouched, using the seeded default: %v", contentTypeExclusionConfigKey, config.path(), err)
+	}
 	config.highlights = parseHighlights(documentValue(doc, highlightsKey))
 
 	if err := loadTestCases(appConfigDir, config); err != nil {

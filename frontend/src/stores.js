@@ -4,7 +4,7 @@ import {
   GetLogs,
   GetMarasiConfig,
   GetKeybindings,
-  GetFilters,
+  GetContentTypeExclusion,
   GetExtensionCode,
   GetWaypoints,
   GetInterceptFlag,
@@ -315,7 +315,7 @@ export async function populateScope() {
     });
 }
 export async function populateFilters() {
-  GetFilters().then((filters) => {
+  GetContentTypeExclusion().then((filters) => {
     console.log("----- Filter ------");
     console.log(filters);
     console.log("----- Filter ------");

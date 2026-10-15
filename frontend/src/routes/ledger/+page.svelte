@@ -75,7 +75,7 @@
 		GetRawDetails,
 		HighlightRow,
 		LinkRequestToLaunchpad,
-		SetFilters,
+		SetContentTypeExclusion,
 	} from "../../lib/wailsjs/go/main/App";
 	import { onMount } from "svelte";
 	import { testCaseStore } from "../../stores/testCaseStore";
@@ -1029,7 +1029,7 @@
 			...old,
 			pageIndex: 0,
 		}));
-		await SetFilters($contentTypeFilter);
+		await SetContentTypeExclusion($contentTypeFilter);
 		await rerunQuery();
 	}
 

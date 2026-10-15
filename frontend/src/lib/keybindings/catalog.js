@@ -63,6 +63,7 @@ export const FACTORY_ACTIONS = [
     ["next-page", "Next", "Go to next page", "next", primary("]")],
     ["previous-page", "Previous", "Go to the previous page", "previous", primary("[")],
     ["open-request", "Open", "Open Request Drawer", "open", primary("shift+o")],
+    ["toggle-sidebar", "Toggle Sitemap Sidebar", "Collapse or expand the sitemap sidebar", "sidebar, dock, sitemap, collapse, expand", primary("\\")],
   ]),
   ...pageActions("ledger.drawer-open.websocket", [
     ["open-stream", "Open WebSocket Stream", "Open the upgraded connection stream", "open websocket upgrade stream messages", primary("shift+o")],
@@ -85,6 +86,7 @@ export const FACTORY_ACTIONS = [
     ["copy-raw-response", "Copy Raw Response", "Copy the complete HTTP response", "response, raw", primary("shift+s")],
     ["toggle-fullscreen", "Toggle Fullscreen", "Expand or collapse the request drawer", "toggle, expand", primary("shift+e")],
     ["toggle-word-wrap", "Toggle Word Wrap", "Wrap request / response lines", "toggle, linewrap", primary("shift+w")],
+    ["toggle-sidebar", "Toggle Sitemap Sidebar", "Collapse or expand the sitemap sidebar", "sidebar, dock, sitemap, collapse, expand", primary("\\")],
   ]),
   ...pageActions("armory.page", [
     ["toggle-settings", "Toggle Armory Settings", "Toggle attack configuration", "settings, toggle, configuration", primary("p")],

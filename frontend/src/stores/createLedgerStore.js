@@ -14,7 +14,8 @@
 //
 // Query mode is active exactly when the last query that ran successfully is
 // non-empty. The content-type exclusion is applied by the queryTraffic call,
-// which reads it from the project config, so it never appears in the query.
+// which reads the project's exclusion itself, so it never appears in the
+// query. Cursors are opaque strings; "" asks for the first page.
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 
@@ -398,7 +399,7 @@ export function createLedgerStore(api) {
     let result;
     let failure = null;
     try {
-      result = await api.queryTraffic(text, null);
+      result = await api.queryTraffic(text, "");
       if (result.QueryError) {
         failure = {
           message: result.QueryError.Message,
@@ -517,7 +518,7 @@ export function createLedgerStore(api) {
     trafficChanged = false;
     let result;
     try {
-      result = await api.queryTraffic(ranQuery, null);
+      result = await api.queryTraffic(ranQuery, "");
     } catch (err) {
       console.error("Checking for new matches failed:", err);
       trafficChanged = true;
@@ -528,9 +529,17 @@ export function createLedgerStore(api) {
       // A different query ran, or the ledger went back to the live view.
       if (q.ranQuery !== ranQuery || q.runID !== runID) return q;
       const loaded = pairIDSet(q.items);
+      // The cursor is opaque; the oldest loaded pair marks where the next
+      // page starts. Pair ids are UUIDv7, so they sort by capture time.
+      const oldestLoaded = q.items.length
+        ? q.items.reduce(
+            (min, item) => (String(item.ID) < min ? String(item.ID) : min),
+            String(q.items[0].ID),
+          )
+        : null;
       const isNew = (item) =>
         !loaded.has(String(item.ID)) &&
-        (q.nextCursor == null || String(item.ID) > String(q.nextCursor));
+        (q.nextCursor == null || String(item.ID) > oldestLoaded);
       const fresh = (result.Items ?? []).filter(isNew);
       const freshIDs = pairIDSet(fresh);
       // Earlier new matches can fall off the newest page when a lot of

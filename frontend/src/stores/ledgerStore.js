@@ -2,15 +2,22 @@
 // createLedgerStore.js, which tests load with a fake API.
 import {
   CreateLaunchpadEntry,
-  GetFilters,
+  DeleteClientSetting,
+  GetClientSetting,
+  GetContentTypeExclusion,
+  GetDefaultContentTypeExclusion,
   GetMetadata,
   GetNote,
   GetProxyItems,
   GetRawDetails,
   HighlightRow,
   LinkRequestToLaunchpad,
+  ListClientSettings,
   QueryTraffic,
-  SetFilters,
+  ResetContentTypeExclusion,
+  SetClientSetting,
+  SetContentTypeExclusion,
+  SetDefaultContentTypeExclusion,
 } from "../lib/wailsjs/go/main/App";
 import {
   createLedgerStore,
@@ -36,8 +43,8 @@ export {
 export const ledgerStore = createLedgerStore({
   getLiveView: () => GetProxyItems(),
   queryTraffic: (query, cursor) => QueryTraffic(query, cursor),
-  getExclusion: () => GetFilters(),
-  setExclusion: (types) => SetFilters(types),
+  getExclusion: () => GetContentTypeExclusion(),
+  setExclusion: (types) => SetContentTypeExclusion(types),
   getRawDetails: (id) => GetRawDetails(id),
   getMetadata: (id) => GetMetadata(id),
   getNote: (id) => GetNote(id),
@@ -45,6 +52,15 @@ export const ledgerStore = createLedgerStore({
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
   linkToLaunchpad: (requestId, launchpadId) =>
     LinkRequestToLaunchpad(requestId, launchpadId),
+  // Not called by the store yet; the exclusion layering and the Ledger's
+  // client settings use them.
+  resetExclusion: () => ResetContentTypeExclusion(),
+  getDefaultExclusion: () => GetDefaultContentTypeExclusion(),
+  setDefaultExclusion: (types) => SetDefaultContentTypeExclusion(types),
+  getClientSetting: (key) => GetClientSetting(key),
+  setClientSetting: (key, value) => SetClientSetting(key, value),
+  deleteClientSetting: (key) => DeleteClientSetting(key),
+  listClientSettings: (prefix) => ListClientSettings(prefix),
 });
 
 /** The live view, for the pages outside the Ledger that read it. */

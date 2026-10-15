@@ -283,9 +283,7 @@ func (a *App) OpenProject(name string) (string, error) {
 	}
 	// The drafts belonged to the old project and are gone with it.
 	a.unsavedDrafts.Store(0)
-	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
-		log.Printf("recovering interrupted armory runs: %v", err)
-	}
+	a.prepareOpenedProject()
 	base := filepath.Base(filePath)
 	projectName := strings.TrimSuffix(base, filepath.Ext(base))
 	return projectName, nil
@@ -295,10 +293,19 @@ func (a *App) SetupScratchpad() error {
 	if err := a.projects.Open(context.Background(), scratchPad); err != nil {
 		return err
 	}
+	a.prepareOpenedProject()
+	return nil
+}
+
+// prepareOpenedProject brings a just-opened project up to date with the
+// app. Failures are logged; the project stays usable.
+func (a *App) prepareOpenedProject() {
 	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
 		log.Printf("recovering interrupted armory runs: %v", err)
 	}
-	return nil
+	if err := a.migrateLegacyExclusion(); err != nil {
+		log.Printf("migrating content-type exclusion: %v", err)
+	}
 }
 func (a *App) close(ctx context.Context) {
 	// Like the service's shutdown: end pending launches first, so their
@@ -457,23 +464,6 @@ func (a *App) GetRawDetails(id uuid.UUID) *domain.RequestResponseRow {
 		log.Print(err)
 	}
 	return row
-}
-
-func (a *App) GetFilters() []string {
-	results, err := a.Proxy.ConfigRepo.GetFilters()
-	if err != nil {
-		log.Print(err)
-		return []string{}
-	}
-	return results
-}
-
-func (a *App) SetFilters(updated []string) error {
-	err := a.Proxy.ConfigRepo.SetFilters(updated)
-	if err != nil {
-		return fmt.Errorf("setting filters : %w", err)
-	}
-	return nil
 }
 
 type ExtensionUI struct {
@@ -781,7 +771,7 @@ func (a *App) GetLaunchpads() []*domain.Launchpad {
 }
 
 func (a *App) GetLaunchpadRequests(id uuid.UUID) []*domain.RequestResponseSummary {
-	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "")
+	launchpadRequest, _, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "", nil, "")
 	if err != nil {
 		return nil
 	}

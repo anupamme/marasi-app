@@ -124,7 +124,7 @@ test("running a query shows its results, and clearing it returns to the live vie
   assert.equal(store.pairNumber("c"), 3);
   assert.equal(store.shownPairAtNumber(2), undefined, "b doesn't match");
   assert.equal(store.shownPairAtNumber(3).ID, "c");
-  assert.deepEqual(api.calls, [["queryTraffic", 'method = "POST"', null]]);
+  assert.deepEqual(api.calls, [["queryTraffic", 'method = "POST"', ""]]);
 
   store.clearQuery();
   state = get(store);
@@ -173,7 +173,7 @@ test("an invalid query records the error with its position and keeps the earlier
 
 test("paging past the loaded query results loads the next older page", async () => {
   const pages = {
-    null: { Items: [pair("e"), pair("d")], NextCursor: "d", IndexComplete: true },
+    "": { Items: [pair("e"), pair("d")], NextCursor: "d", IndexComplete: true },
     d: { Items: [pair("c"), pair("b")], NextCursor: "b", IndexComplete: true },
     b: { Items: [pair("a")], NextCursor: null, IndexComplete: true },
   };
@@ -208,7 +208,7 @@ test("paging past the loaded query results loads the next older page", async () 
   assert.equal(state.query.nextCursor, null);
   assert.deepEqual(
     api.calls.map((call) => call[2]),
-    [null, "d", "b"],
+    ["", "d", "b"],
   );
 });
 
@@ -260,6 +260,21 @@ test("new matches wait until merged, then join the results newest first", async 
   assert.deepEqual(query.newMatches, []);
 });
 
+test("new matches are told apart from older pages by the oldest loaded pair, not the opaque cursor", async () => {
+  const pages = [
+    { Items: [pair("d"), pair("c")], NextCursor: "opaque-token", IndexComplete: true },
+    { Items: [pair("e"), pair("d"), pair("c")], NextCursor: "opaque-token-2", IndexComplete: true },
+  ];
+  const store = createLedgerStore(fakeApi({ results: { "host = x": () => pages.shift() } }));
+  await store.runQuery("host = x");
+  store.markTrafficChanged();
+  await store.checkForNewMatches();
+  assert.deepEqual(
+    get(store).query.newMatches.map((row) => row.ID),
+    ["e"],
+  );
+});
+
 test("saving the exclusion stores it and runs the active query again", async () => {
   const api = fakeApi({
     results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
@@ -269,9 +284,9 @@ test("saving the exclusion stores it and runs the active query again", async () 
   await store.saveExclusion(["image/png"]);
   assert.deepEqual(get(store).exclusion, ["image/png"]);
   assert.deepEqual(api.calls, [
-    ["queryTraffic", "host = x", null],
+    ["queryTraffic", "host = x", ""],
     ["setExclusion", ["image/png"]],
-    ["queryTraffic", "host = x", null],
+    ["queryTraffic", "host = x", ""],
   ]);
 });
 

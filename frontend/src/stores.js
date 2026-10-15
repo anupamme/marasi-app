@@ -15,6 +15,7 @@ import { findingStore } from "./stores/findingStore";
 import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
+import { readHighlights } from "./stores/highlightsStore";
 import { ledgerStore, liveViewItems } from "./stores/ledgerStore";
 
 // Startup
@@ -77,7 +78,7 @@ export let marasiConfig = writable({});
 export async function readConfig() {
   const config = await GetMarasiConfig();
   marasiConfig.set(config);
-  await readKeybindings();
+  await Promise.all([readKeybindings(), readHighlights()]);
 }
 
 // Saved keybinding profiles ({ config, problem }) from the app config; the

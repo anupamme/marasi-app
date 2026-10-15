@@ -614,7 +614,7 @@
 <svelte:window on:keydown={onWindowKeydown} on:pointerdown={onWindowPointerDown} />
 <MarasiKeys {menuOptions} />
 
-<div class="ledger-page relative flex h-full min-h-0">
+<div class="ledger-page relative flex h-full min-h-0 overflow-hidden">
 	<Dock
 		bind:this={dock}
 		state={ledgerStore.dockState}
@@ -715,7 +715,7 @@
 				</button>
 				{#if typesOpen}
 					<div
-						class="card absolute right-0 top-full z-40 mt-1 w-96 space-y-2 p-3 shadow-xl"
+						class="card absolute right-0 top-full z-40 mt-1 max-h-[60vh] w-96 space-y-2 overflow-auto p-3 shadow-xl"
 						role="dialog"
 						aria-label="Hidden content types"
 					>

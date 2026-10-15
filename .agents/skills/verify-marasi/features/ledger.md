@@ -2,16 +2,16 @@
 
 ## Sub-features
 
-- HTTP request/response rows, and WebSocket upgrade rows whose ID cell shows the upgrade state
+- HTTP request/response rows, and WebSocket upgrade rows whose badges column shows the upgrade state
 - The WebSocket modal opened from an upgrade: Stream, Checkpoint, Inject, and Connection tabs
-- Indexed query search, content-type exclusions, sorting, and pagination
-- Request detail, notes, highlights, and handoff to Launchpad, Armory, or Logbook
+- Indexed query search, content-type exclusions, and loading older query pages on scroll
+- Request detail in the drawer, notes, highlights, and handoff to Launchpad, Armory, or Logbook
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Ledger` or press `Command+2`. The page exposes `Ledger Settings`, `#searchBox` (placeholder `Search traffic…`), an input with placeholder `Filter by Content Type`, and pagination buttons titled `First Page`, `Previous Page`, `Next Page`, and `Last Page`.
+Select the rail item titled `Ledger` or press `Command+2`. The page is the sitemap dock (`.lp-dock`, strip `.lp-strip` labelled `Sitemap` when collapsed; `⌘\` toggles it), a one-row toolbar (`.ledger-toolbar`) with `#searchBox` (placeholder `Search traffic…`) and a `Types` button (`.ledger-types > button`) whose panel holds the input with placeholder `Filter by Content Type`, the windowed table (`.ledger-table`, rows `.ledger-row`, columns `# · badges · Time · Method · Host · Path · Status · Type · Size`), and the status bar (`.ledger-status`: `N in the live view` or `N matching`, `N hidden by type`, `Request N selected` with `Clear`). Only the rows in view are in the DOM.
 
-Shortcuts: every menu shortcut for this feature is a catalog action in context `ledger.drawer-closed`, `ledger.drawer-open` and `ledger.drawer-open.websocket` (and, in the WebSocket modal, `websocket` plus `websocket.<tab>`) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
+Shortcuts: every menu shortcut for this feature is a catalog action in context `ledger.drawer-closed`, `ledger.drawer-open` and `ledger.drawer-open.websocket` (and, in the WebSocket modal, `websocket` plus `websocket.<tab>`) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. The drawer contexts follow the Ledger store's drawer (`state.ledgerDrawer` in the layout's shortcut state), not Skeleton's drawer.
 
 ## Driving it with Chrome CDP
 
@@ -27,19 +27,18 @@ Search supports field expressions and boolean operators, not just a table substr
 
 ```json
 {"name":"search","steps":[
- {"click":"button.accordion-control"},{"waitSelector":"#searchBox"},{"click":"#searchBox"},{"key":"cmd+a"},
+ {"click":"#searchBox"},{"key":"cmd+a"},
  {"insert":"response_body:\"ledger-second\""},{"key":"enter"},
- {"waitSelector":"#ledgerQueryMatchCount"},{"waitText":"1 match"},
+ {"waitSelector":"#ledgerQueryMatchCount"},{"waitText":"1 match"},{"waitText":"1 matching"},
  {"waitNoText":"/ledger-first"},{"waitText":"/ledger-second"},
- {"click":"[aria-label=\"Clear query\"]"},{"waitText":"/ledger-first"},
- {"click":"button.accordion-control"},{"waitNoSelector":"#searchBox"}]}
+ {"click":"[aria-label=\"Clear query\"]"},{"waitText":"/ledger-first"}]}
 ```
 
-The query stays active across navigation until cleared, so the recipe clears it and closes the panel; otherwise later recipes cannot find rows the query excludes.
+The query stays active across navigation until cleared, so the recipe clears it; otherwise later recipes cannot find rows the query excludes.
 
 Enter runs the query at once. Typing alone runs it after a 700 ms debounce. `#ledgerQueryMatchCount` reads `1 match`, `N matches`, or `N+ matches` while older pages remain. The query-help toggle describes the supported fields, operators, and examples. Bare text searches the request, response, note, and metadata, and needs at least three characters; punctuation can require quoting.
 
-For handoff, click a row with `{"click":"tbody tr","hasText":"<path>"}`, wait for `.drawer`, then use the drawer's shortcuts. For example, `cmd+shift+l` sends the row to Launchpad and shows `Request N sent to Launchpad` with a `Jump to Launchpad` action.
+For handoff, click a row with `{"click":".ledger-row","hasText":"<path>"}`, wait for `.ledger-drawer` (below the table, request and response side by side), then use the drawer's shortcuts. For example, `cmd+shift+l` sends the row to Launchpad and shows `Request N sent to Launchpad` with a `Jump to Launchpad` action. `cmd+shift+e` maximises the drawer over the table (`.ledger-table` leaves the DOM) and restores it; `cmd+shift+]`/`[` move the selection; `escape`, the status bar's `Clear`, or the drawer's `Close the drawer` button closes it. Drag `.ledger-drawer-resize` to resize it. The selection, the drawer's height and maximised state, and the dock's width and collapsed state survive leaving and returning to the Ledger, so close the drawer at the end of a recipe.
 
 ## WebSocket streams
 
@@ -47,7 +46,7 @@ A WebSocket message is the whole message, however many frames it arrived in. UI 
 
 Drive a WebSocket through the proxy with a raw-socket client: send an absolute-form upgrade (`GET http://127.0.0.1:<port>/<path> HTTP/1.1` with `Upgrade: websocket`, `Connection: Upgrade`, `Sec-WebSocket-Key`, `Sec-WebSocket-Version: 13`) to `127.0.0.1:18080`, then read and write masked frames. Use a disposable local server you control, so each state below is a deliberate server behaviour. Offer `Sec-WebSocket-Extensions: permessage-deflate` to get a deflate connection; add another offer (for example `x-webkit-deflate-frame`) to see it stripped.
 
-**Upgrade states.** The ID cell shows a WebSocket icon whose state comes from `frontend/src/lib/websocket/presentation.js`:
+**Upgrade states.** The badges column shows a WebSocket icon (its label is the badge's `title` and `aria-label`; past three badges, hover the `+N` slot `.ledger-badges-more` for the full list) whose state comes from `frontend/src/lib/websocket/presentation.js`:
 
 | `websocket.state` | Icon | Opens a stream | How to produce it |
 | --- | --- | --- | --- |
@@ -83,10 +82,11 @@ Hover a row to read `<label>: <flag tooltip>` lines; a forwarded interception re
 
 ## Gotchas
 
-- `#searchBox`, the content-type chips, and pagination live inside `Ledger Settings`, which starts closed and mounts its content only while open. Open it with `{"click":"button.accordion-control"}`: while a query is active the header reads `Ledger Settings Query <query> N matches`, so an exact `{"text":"Ledger Settings"}` match fails. Wait for `#searchBox` after opening it. `⌘P` toggles the panel, so it closes an open one; `⌘⇧S` opens it if needed and focuses `#searchBox` (pressing it again blurs the box).
+- `#searchBox` is always in the toolbar. The content-type chips mount only while the `Types` panel is open: open it with `{"click":".ledger-types > button"}` (its text includes the exclusion count, so `{"text":"Types"}` fails) or `⌘⇧F`, which also focuses the chip input. A click outside the panel closes it; click `.ledger-status`, not the table, which would select a row. `⌘P` toggles the query fields panel; `⌘⇧S` focuses `#searchBox` (pressing it again blurs the box). `⌘]`/`⌘[` scroll the table a page.
+- Clicking anywhere in `.ledger-table` selects the row under the pointer and opens the drawer, which swaps the shortcut context to `ledger.drawer-open` (`⌘⇧F` then creates a finding).
 - Content-type chips exclude matching types. The defaults already hide images, fonts, media, JavaScript, CSS, PDF, archives, and office types. Use `text/html` for capture proof. They include `application/octet-stream`, which `python3 -m http.server` sends for extensionless paths, so serve a `.html` path.
 - An empty Ledger only proves navigation. Complete capture proof needs traffic through the proxy.
 - HTTPS traffic needs the verification instance's generated certificate.
 - Search and filters can hide newly captured rows; record their values in evidence.
-- The live view batches `request`/`response` events and flushes every 200 ms. Query results are newest first with column sorting disabled. Matching traffic that arrives during a query is staged behind a button labelled `1 new match` or `N new matches`, which appears after the next 5 s poll.
+- The live view batches `request`/`response` events and flushes every 200 ms. The table lists the live view and query results newest first; headers don't sort yet. Matching traffic that arrives during a query is staged behind a button labelled `1 new match` or `N new matches`, which appears after the next 5 s poll.
 - Content-type exclusions match stored values exactly, not MIME families. Inspect the actual saved chips rather than assuming defaults.

@@ -59,8 +59,10 @@
 	export function reveal(id) {
 		const index = rows.findIndex((row) => sameID(row.ID, id));
 		if (!viewport || index < 0) return;
+		// Measure now: the bound height lags on the first render.
+		const visible = Math.max(0, viewport.clientHeight - HEADER_HEIGHT);
 		viewport.scrollTop = scrollToReveal(
-			{ scrollTop: viewport.scrollTop, height: rowsHeight, rowHeight: ROW_HEIGHT },
+			{ scrollTop: viewport.scrollTop, height: visible, rowHeight: ROW_HEIGHT },
 			index,
 		);
 	}

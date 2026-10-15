@@ -37,17 +37,19 @@ Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`,
 
 ```json
 {"name":"send-to-launchpad","steps":[
- {"click":"tbody tr","hasText":"/compass-allowed"},{"waitSelector":".drawer"},
+ {"click":".ledger-row","hasText":"/compass-allowed"},{"waitSelector":".ledger-drawer"},
  {"key":"cmd+shift+l"},{"waitText":"sent to Launchpad"},
- {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".drawer"},
+ {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".ledger-drawer"},
  {"waitText":"Group by status"}]}
 ```
+
+The Ledger keeps its selection, so its drawer is open again on the next Ledger visit; close it there before the next Ledger recipe.
 
 Both Ledger paths, the drawer's `⌘⇧L` and the row's right-click `Send to Launchpad`, create a launchpad named `Request N`, and their toast's `Jump to Launchpad` opens `/launchpad?id=<id>`. The page opens that launchpad, selects its newest entry, opens its row even after `Collapse all`, and scrolls it into view. The previously open launchpad is not reselected. This also works when the toast is clicked while `/launchpad` is already open. If the id no longer exists, the page shows `That launchpad no longer exists.` and keeps the current launchpad. Other launchpads can already show `entry 1 of 1`, so wait on the sent path instead:
 
 ```json
 {"name":"right-click-jump","steps":[
- {"click":"tbody tr","hasText":"/seed-7","button":"right"},{"text":"Send to Launchpad"},{"waitText":"sent to Launchpad"},
+ {"click":".ledger-row","hasText":"/seed-7","button":"right"},{"text":"Send to Launchpad"},{"waitText":"sent to Launchpad"},
  {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},
  {"waitText":"/seed-7","within":".lp-editor"},{"waitSelector":".lp-entry[aria-current=true]"}]}
 ```

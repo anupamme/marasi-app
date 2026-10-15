@@ -13,8 +13,6 @@
 	import {
 		drawerHeight,
 		sorting,
-		pagination,
-		contentTypeFilter,
 		contentTypeFilterInput,
 		lineWrap,
 	} from "../../stores";
@@ -68,49 +66,42 @@
 	import { useMenuActions } from "../../lib/keybindings/app.js";
 	import { canOpenDrawerStream } from "../../lib/websocket/presentation.js";
 	import IDCell from "../../lib/components/IDCell.svelte";
-	import {
-		CreateLaunchpadEntry,
-		GetMetadata,
-		GetNote,
-		GetRawDetails,
-		HighlightRow,
-		LinkRequestToLaunchpad,
-		SetContentTypeExclusion,
-	} from "../../lib/wailsjs/go/main/App";
 	import { onMount } from "svelte";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
 	import { armoryStore } from "../../stores/armoryStore";
 	import {
+		ledgerStore,
+		select,
 		shownRows,
-		findShownPair,
-		pairNumber,
-		shownPairAtNumber,
-		patchShownPairMetadata,
 		ledgerPagination,
-		setLedgerPagination,
-	} from "../../stores/ledgerRows";
-	import {
-		queryText,
-		queryPending,
-		ledgerQuery,
-		queryActive,
 		isQueryActive,
 		matchNoun,
-		scheduleQuery,
-		runQuery,
-		rerunQuery,
-		clearQuery,
 		markQueryError,
-		queryPageIndex,
 		matchCountLabel,
 		queryStatusLabel,
 		indexWarning,
 		needsOlderPage,
-		loadOlderPage,
-		markTrafficChanged,
-		mergeNewMatches,
-	} from "../../stores/ledgerQuery";
+	} from "../../stores/ledgerStore";
+
+	// The parts of the Ledger store the page follows. Each notifies only when
+	// its own value changes.
+	const rows = select(ledgerStore, shownRows);
+	const query = select(ledgerStore, (state) => state.query);
+	const queryText = select(ledgerStore, (state) => state.queryText);
+	const queryPending = select(ledgerStore, (state) => state.queryPending);
+	const queryActive = select(ledgerStore, (state) =>
+		isQueryActive(state.query),
+	);
+	const exclusion = select(ledgerStore, (state) => state.exclusion);
+	const pageIndex = select(
+		ledgerStore,
+		(state) => ledgerPagination(state).pageIndex,
+	);
+	const pageSize = select(
+		ledgerStore,
+		(state) => state.pagination.pageSize,
+	);
 
 	const drawerStore = getDrawerStore();
 	const modalStore = getModalStore();
@@ -283,7 +274,7 @@
 						if (!requestIndex)
 							return;
 						const pair =
-							shownPairAtNumber(
+							ledgerStore.shownPairAtNumber(
 								parseInt(
 									requestIndex,
 								),
@@ -328,20 +319,12 @@
 					const index =
 						$drawerStore?.meta
 							?.requestIndex;
-					CreateLaunchpadEntry(
-						"Request " + index,
-						"Launchpad for Request " +
-							index,
-					).then((id) => {
-						LinkRequestToLaunchpad(
-							$drawerStore
-								?.meta
-								?.request
-								?.ID,
-							id,
-						).then(() => {
-							// Linking edits the pair's metadata.
-							markTrafficChanged();
+					ledgerStore
+						.sendToLaunchpad(
+							$drawerStore?.meta
+								?.request?.ID,
+						)
+						.then((id) => {
 							const toastSettings =
 								{
 									message:
@@ -371,7 +354,6 @@
 									toastSettings,
 								);
 						});
-					});
 				}
 			},
 		},
@@ -657,7 +639,7 @@
 			icon: PenIcon,
 			handler: () => {
 				if (drawerOpened) {
-					GetNote(
+					ledgerStore.getNote(
 						$drawerStore?.meta
 							?.request?.ID,
 					).then((note) => {
@@ -697,7 +679,7 @@
 			icon: BracesIcon,
 			handler: () => {
 				if (drawerOpened) {
-					GetMetadata(
+					ledgerStore.getMetadata(
 						$drawerStore?.meta
 							?.request?.ID,
 					).then((metadata) => {
@@ -880,7 +862,7 @@
 			header: "ID",
 			cell: (info) =>
 				renderComponent(IDCell, {
-					index: pairNumber(info.row.original.ID),
+					index: ledgerStore.pairNumber(info.row.original.ID),
 					row: info.row.original,
 				}),
 			sortingFn: "text",
@@ -941,24 +923,18 @@
 	// Reaching the last loaded page of query results loads the next older
 	// page. This runs again after each load, so pages that come back short
 	// or empty while a cursor remains keep loading.
-	$: if (
-		needsOlderPage(
-			$ledgerQuery,
-			$queryPageIndex,
-			$pagination.pageSize,
-		)
-	) {
-		loadOlderPage();
+	$: if (needsOlderPage($query, $pageIndex, $pageSize)) {
+		ledgerStore.loadOlderPage();
 	}
 
-	$: queryErrorMark = markQueryError($ledgerQuery.error);
+	$: queryErrorMark = markQueryError($query.error);
 
 	// After a query change or a change in the loaded results (a merge of new
 	// matches or an older page), the selected row and the open drawer stay
 	// when their pair is still in the rows, and close otherwise.
-	let lastShownRowsSignature = shownRowsSignature($ledgerQuery);
-	$: if (shownRowsSignature($ledgerQuery) !== lastShownRowsSignature) {
-		lastShownRowsSignature = shownRowsSignature($ledgerQuery);
+	let lastShownRowsSignature = shownRowsSignature($query);
+	$: if (shownRowsSignature($query) !== lastShownRowsSignature) {
+		lastShownRowsSignature = shownRowsSignature($query);
 		keepFocusOnShownPair();
 	}
 
@@ -969,18 +945,18 @@
 	}
 
 	function keepFocusOnShownPair() {
-		if (selectedPairID != null && !findShownPair(selectedPairID)) {
+		if (selectedPairID != null && !ledgerStore.findShownPair(selectedPairID)) {
 			selectedPairID = undefined;
 		}
 		if (!drawerOpened || $drawerStore.id !== "request-response") return;
-		const pair = findShownPair($drawerStore.meta?.request?.ID);
+		const pair = ledgerStore.findShownPair($drawerStore.meta?.request?.ID);
 		if (!pair) {
 			drawerStore.close();
 			return;
 		}
 		// A pair new to the live view gets its number, and a switch between
 		// modes changes whether the exclusion can hide it.
-		const requestIndex = pairNumber(pair.ID);
+		const requestIndex = ledgerStore.pairNumber(pair.ID);
 		const isFiltered = hiddenByExclusion(pair);
 		if (
 			$drawerStore.meta.requestIndex !== requestIndex ||
@@ -1005,47 +981,45 @@
 	// Appends a field-list example to the query box and runs it like typing.
 	function insertQueryExample(example) {
 		const text = appendToQuery($queryText, example);
-		queryText.set(text);
-		scheduleQuery(text);
+		ledgerStore.setQueryText(text);
+		ledgerStore.scheduleQuery(text);
 		document.getElementById("searchBox")?.focus();
 	}
 
 	function onQueryKeydown(e) {
 		if (e.key === "Enter") {
 			e.preventDefault();
-			runQuery($queryText);
+			ledgerStore.runQuery($queryText);
 		} else if (e.key === "Escape") {
 			e.preventDefault();
 			e.stopPropagation();
-			clearQuery();
+			ledgerStore.clearQuery();
 		}
 	}
 
+	// The content-type chips edit a copy of the exclusion, refreshed whenever
+	// the store's exclusion changes.
+	let exclusionDraft = [];
+	let draftedExclusion;
+	$: if ($exclusion !== draftedExclusion) {
+		draftedExclusion = $exclusion;
+		exclusionDraft = [...$exclusion];
+	}
+
 	// Stores the content-type exclusion, then runs the active query again so
-	// its results reflect it. The QueryTraffic binding reads the stored
-	// exclusion itself.
-	async function saveContentTypeExclusion() {
-		setLedgerPagination((old) => ({
-			...old,
-			pageIndex: 0,
-		}));
-		await SetContentTypeExclusion($contentTypeFilter);
-		await rerunQuery();
+	// its results reflect it. The query reads the stored exclusion itself.
+	function saveContentTypeExclusion() {
+		return ledgerStore.saveExclusion(exclusionDraft);
 	}
 
 	const options = derived(
-		[
-			shownRows,
-			sorting,
-			ledgerPagination,
-			contentTypeFilter,
-			queryActive,
-		],
+		[rows, sorting, pageIndex, pageSize, exclusion, queryActive],
 		([
 			$data,
 			$sorting,
-			$pagination,
-			$contentTypeFilter,
+			$pageIndex,
+			$pageSize,
+			$exclusion,
 			$queryActive,
 		]) => {
 			const currentFilters = [];
@@ -1053,10 +1027,10 @@
 			// Query results come back with the content-type exclusion
 			// already applied, so the table applies it in the live view
 			// only.
-			if (!$queryActive && $contentTypeFilter?.length) {
+			if (!$queryActive && $exclusion?.length) {
 				currentFilters.push({
 					id: "ContentType",
-					value: $contentTypeFilter,
+					value: $exclusion,
 				});
 			}
 			// Query results stay newest first: sorting only the loaded
@@ -1068,11 +1042,14 @@
 				enableSorting: !$queryActive,
 				state: {
 					sorting: $queryActive ? [] : $sorting,
-					pagination: $pagination,
+					pagination: {
+						pageIndex: $pageIndex,
+						pageSize: $pageSize,
+					},
 					columnFilters: currentFilters,
 				},
 				onSortingChange: setSorting,
-				onPaginationChange: setLedgerPagination,
+				onPaginationChange: ledgerStore.setPagination,
 				getCoreRowModel: getCoreRowModel(),
 				getSortedRowModel: getSortedRowModel(),
 				getPaginationRowModel: getPaginationRowModel(),
@@ -1096,16 +1073,16 @@
 	function hiddenByExclusion(pair) {
 		return (
 			!$queryActive &&
-			($contentTypeFilter ?? []).includes(pair.ContentType)
+			($exclusion ?? []).includes(pair.ContentType)
 		);
 	}
 
 	// Opens the drawer on the shown pair with this ID.
 	function openDrawer(id) {
-		const pair = findShownPair(id);
+		const pair = ledgerStore.findShownPair(id);
 		if (!pair) return;
-		const requestIndex = pairNumber(id);
-		GetRawDetails(pair.ID).then((requestResponse) => {
+		const requestIndex = ledgerStore.pairNumber(id);
+		ledgerStore.getDetails(pair.ID).then((requestResponse) => {
 			const drawerSettings = {
 				id: "request-response",
 				meta: {
@@ -1175,15 +1152,15 @@
 					>
 					<span
 						class="min-w-0 truncate font-mono text-xs opacity-80"
-						title={$ledgerQuery.ranQuery}
-						>{$ledgerQuery.ranQuery}</span
+						title={$query.ranQuery}
+						>{$query.ranQuery}</span
 					>
 					<span
 						id="ledgerQueryMatchCount"
 						class="whitespace-nowrap text-xs opacity-70"
-						>{$matchCountLabel}</span
+						>{matchCountLabel($query)}</span
 					>
-					{#if !$ledgerQuery.indexComplete}
+					{#if !$query.indexComplete}
 						<span
 							class="text-warning-500"
 							title="Indexing older traffic — text matches may be incomplete"
@@ -1191,11 +1168,11 @@
 						>
 					{/if}
 				{/if}
-				{#if $ledgerQuery.error?.query === $queryText && !accOpened}
+				{#if $query.error?.query === $queryText && !accOpened}
 					<span
 						id="ledgerQueryErrorMarker"
 						class="text-error-500"
-						title="Invalid query: {$ledgerQuery.error.message}"
+						title="Invalid query: {$query.error.message}"
 						><CircleAlert size={14} /></span
 					>
 				{/if}
@@ -1226,9 +1203,15 @@
 							autocomplete="off"
 							spellcheck="false"
 							placeholder="Search traffic…"
-							bind:value={$queryText}
-							on:input={() =>
-								scheduleQuery($queryText)}
+							value={$queryText}
+							on:input={(e) => {
+								ledgerStore.setQueryText(
+									e.currentTarget.value,
+								);
+								ledgerStore.scheduleQuery(
+									e.currentTarget.value,
+								);
+							}}
 							on:keydown={onQueryKeydown}
 						/>
 						{#if $queryText}
@@ -1238,7 +1221,8 @@
 								class="input-group-shim"
 								title="Clear query (Esc)"
 								aria-label="Clear query"
-								on:click={() => clearQuery()}
+								on:click={() =>
+									ledgerStore.clearQuery()}
 							>
 								<X size={16} />
 							</button>
@@ -1259,7 +1243,7 @@
 							<CircleHelp size={16} />
 						</button>
 					</div>
-					{#if $ledgerQuery.error}
+					{#if $query.error}
 						<div
 							class="text-error-500 text-xs"
 							role="alert"
@@ -1271,31 +1255,31 @@
 										>{queryErrorMark.at}</mark
 									>{queryErrorMark.after}</pre>
 								<span
-									>Position {$ledgerQuery
+									>Position {$query
 										.error
-										.position}: {$ledgerQuery
+										.position}: {$query
 										.error
 										.message}</span
 								>
 							{:else}
 								<span
-									>{$ledgerQuery.error
+									>{$query.error
 										.message}</span
 								>
 							{/if}
 						</div>
 					{/if}
-					{#if $queryStatusLabel}
+					{#if queryStatusLabel($query)}
 						<div class="text-xs opacity-70">
-							{$queryStatusLabel}
+							{queryStatusLabel($query)}
 						</div>
 					{/if}
-					{#if $indexWarning}
+					{#if indexWarning($query)}
 						<div
 							class="text-warning-500 text-xs"
 							role="status"
 						>
-							{$indexWarning}
+							{indexWarning($query)}
 						</div>
 					{/if}
 				</div>
@@ -1312,7 +1296,7 @@
 				{/if}
 				<InputChip
 					bind:input={$contentTypeFilterInput}
-					bind:value={$contentTypeFilter}
+					bind:value={exclusionDraft}
 					name="chips"
 					placeholder="Filter by Content Type"
 					rounded="none"
@@ -1329,7 +1313,7 @@
 						>
 						<select
 							class="select select-sm w-20"
-							value={$pagination.pageSize}
+							value={$pageSize}
 							on:change={(e) => {
 								const val = e
 									.target
@@ -1340,7 +1324,7 @@
 												.value,
 										)
 									: 10;
-								setLedgerPagination(
+								ledgerStore.setPagination(
 									(
 										old,
 									) => ({
@@ -1426,7 +1410,7 @@
 </Accordion>
 
 <div class="no-select font-mono text-xs">
-	{#if $queryActive && $ledgerQuery.newMatches.length > 0}
+	{#if $queryActive && $query.newMatches.length > 0}
 		<!-- Fixed strip across the content area (right of the 80px app rail),
 		     so the button floats centred at the bottom of the window without
 		     moving the rows. The strip ignores clicks; only the button takes them. -->
@@ -1437,10 +1421,10 @@
 				<button
 					type="button"
 					class="btn btn-sm {primaryClass}"
-					on:click={mergeNewMatches}
+					on:click={ledgerStore.mergeNewMatches}
 				>
-					{$ledgerQuery.newMatches.length.toLocaleString()}
-					new {matchNoun($ledgerQuery.newMatches.length)}
+					{$query.newMatches.length.toLocaleString()}
+					new {matchNoun($query.newMatches.length)}
 				</button>
 			</div>
 		</div>
@@ -1520,14 +1504,14 @@
 <ContextMenu bind:this={contextMenu}>
 	<Item
 		on:click={() => {
-			GetNote(selectedPairID).then((note) => {
+			ledgerStore.getNote(selectedPairID).then((note) => {
 				const modal = {
 					type: "component",
 					component: "Notes",
 					toggleAction: "ledger.drawer-open.view-note",
 					title:
 						"Request " +
-						pairNumber(selectedPairID) +
+						ledgerStore.pairNumber(selectedPairID) +
 						" notes",
 					requestID: selectedPairID,
 					content: note,
@@ -1542,43 +1526,33 @@
 	</Item>
 	<Item
 		on:click={() => {
-			const index = pairNumber(selectedPairID);
-			CreateLaunchpadEntry(
-				"Request " + index,
-				"Launchpad for Request " + index,
-			).then((id) => {
-				LinkRequestToLaunchpad(
-					selectedPairID,
-					id,
-				).then(() => {
-					// Linking edits the pair's metadata.
-					markTrafficChanged();
-					const toastSettings = {
-						message:
-							"Request " +
-							index +
-							" sent to Launchpad",
-						background: $modeCurrent
-							? "bg-surface-50 text-surface-900 border border-surface-300"
-							: "bg-surface-100 text-surface-900",
-						action: {
-							label: "Jump to Launchpad",
-							response: () => {
-								drawerStore.close();
-								toastStore.close(
-									toastId,
-								);
-								goto(
-									"/launchpad?id=" + id,
-								);
-							},
+			const index = ledgerStore.pairNumber(selectedPairID);
+			ledgerStore.sendToLaunchpad(selectedPairID).then((id) => {
+				const toastSettings = {
+					message:
+						"Request " +
+						index +
+						" sent to Launchpad",
+					background: $modeCurrent
+						? "bg-surface-50 text-surface-900 border border-surface-300"
+						: "bg-surface-100 text-surface-900",
+					action: {
+						label: "Jump to Launchpad",
+						response: () => {
+							drawerStore.close();
+							toastStore.close(
+								toastId,
+							);
+							goto(
+								"/launchpad?id=" + id,
+							);
 						},
-					};
-					const toastId =
-						toastStore.trigger(
-							toastSettings,
-						);
-				});
+					},
+				};
+				const toastId =
+					toastStore.trigger(
+						toastSettings,
+					);
 			});
 		}}>Send to Launchpad</Item
 	>
@@ -1626,18 +1600,7 @@
 			value
 			on:click={() => {
 				const color = 15680580;
-				HighlightRow(
-					selectedPairID,
-					color,
-				).then(() => {
-					patchShownPairMetadata(selectedPairID, {
-						highlight:
-							"#" +
-							color
-								.toString(16)
-								.padStart(6, "0"),
-					});
-				});
+				ledgerStore.highlight(selectedPairID, color);
 			}}
 			class="!bg-red-500 text-black hover:brightness-110">Red</ListBoxItem
 		>
@@ -1647,18 +1610,7 @@
 			value
 			on:click={() => {
 				const color = 2278750;
-				HighlightRow(
-					selectedPairID,
-					color,
-				).then(() => {
-					patchShownPairMetadata(selectedPairID, {
-						highlight:
-							"#" +
-							color
-								.toString(16)
-								.padStart(6, "0"),
-					});
-				});
+				ledgerStore.highlight(selectedPairID, color);
 			}}
 			class="!bg-green-500 text-black hover:brightness-110">Green</ListBoxItem
 		>
@@ -1668,18 +1620,7 @@
 			value
 			on:click={() => {
 				const color = 15381256;
-				HighlightRow(
-					selectedPairID,
-					color,
-				).then(() => {
-					patchShownPairMetadata(selectedPairID, {
-						highlight:
-							"#" +
-							color
-								.toString(16)
-								.padStart(6, "0"),
-					});
-				});
+				ledgerStore.highlight(selectedPairID, color);
 			}}
 			class="!bg-yellow-500 text-black hover:brightness-110">Yellow</ListBoxItem
 		>
@@ -1689,18 +1630,7 @@
 			value
 			on:click={() => {
 				const color = 3900150;
-				HighlightRow(
-					selectedPairID,
-					color,
-				).then(() => {
-					patchShownPairMetadata(selectedPairID, {
-						highlight:
-							"#" +
-							color
-								.toString(16)
-								.padStart(6, "0"),
-					});
-				});
+				ledgerStore.highlight(selectedPairID, color);
 			}}
 			class="!bg-blue-500 text-black hover:brightness-110">Blue</ListBoxItem
 		>
@@ -1710,18 +1640,7 @@
 			value
 			on:click={() => {
 				const color = 11032055;
-				HighlightRow(
-					selectedPairID,
-					color,
-				).then(() => {
-					patchShownPairMetadata(selectedPairID, {
-						highlight:
-							"#" +
-							color
-								.toString(16)
-								.padStart(6, "0"),
-					});
-				});
+				ledgerStore.highlight(selectedPairID, color);
 			}}
 			class="!bg-purple-500 text-black hover:brightness-110">Purple</ListBoxItem
 		>
@@ -1730,13 +1649,7 @@
 			name
 			value
 			on:click={() => {
-				HighlightRow(selectedPairID, -1).then(
-					() => {
-						patchShownPairMetadata(selectedPairID, {
-							highlight: "",
-						});
-					},
-				);
+				ledgerStore.highlight(selectedPairID, -1);
 			}}
 			class="context-menu-none">None</ListBoxItem
 		>

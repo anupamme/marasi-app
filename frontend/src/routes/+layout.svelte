@@ -45,14 +45,12 @@
 		marasiConfig,
 		extensions,
 		extensions_ui,
-		addRequest,
-		addResponse,
 		appState,
-		patchWebSocketMetadata,
 		projectOpenMessage,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
+	import { ledgerStore } from "../stores/ledgerStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -238,7 +236,7 @@
 				$logItems = [...$logItems, newLog];
 			}
 			EventsOn("request", (newRequest) => {
-				addRequest(newRequest);
+				ledgerStore.onRequest(newRequest);
 				launchpadStore.onRequest(newRequest);
 			});
 			EventsOn("launch-started", (launch) =>
@@ -248,7 +246,7 @@
 				launchpadStore.onLaunchFinished(launch),
 			);
 			EventsOn("response", (newResponse) => {
-				addResponse(newResponse);
+				ledgerStore.onResponse(newResponse);
 				launchpadStore.onResponse(newResponse);
 				if (
 					$drawerStore.id ===
@@ -278,14 +276,14 @@
 			});
 			EventsOn("ws-open", (conn) => {
 				connectionStore.upsertConnection(conn);
-				patchWebSocketMetadata(conn);
+				ledgerStore.patchWebSocketMetadata(conn);
 			});
 			EventsOn("ws-close", (conn) => {
 				connectionStore.upsertConnection(conn);
 				connectionStore.clearInterceptions(
 					conn.RequestID,
 				);
-				patchWebSocketMetadata(conn);
+				ledgerStore.patchWebSocketMetadata(conn);
 			});
 			EventsOn("ws-progress", (progress) =>
 				connectionStore.upsertProgress(progress),
@@ -293,7 +291,7 @@
 			// An upgrade whose handshake failed or was dropped opens no
 			// connection, so only its Ledger row changes.
 			EventsOn("ws-state", ({ RequestID, State }) =>
-				patchWebSocketMetadata({ RequestID, State }),
+				ledgerStore.patchWebSocketMetadata({ RequestID, State }),
 			);
 			EventsOn("log", (newLog) => {
 				if (typeof newLog?.Level !== "string") {

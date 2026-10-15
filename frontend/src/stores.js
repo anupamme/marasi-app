@@ -1,10 +1,8 @@
 import { get, writable } from "svelte/store";
 import {
-  GetProxyItems,
   GetLogs,
   GetMarasiConfig,
   GetKeybindings,
-  GetContentTypeExclusion,
   GetExtensionCode,
   GetWaypoints,
   GetInterceptFlag,
@@ -18,14 +16,7 @@ import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
 import { readHighlights } from "./stores/highlightsStore";
-import { webSocketMetadataPatch } from "./lib/websocket/metadataPatch.js";
-import {
-  clearQuery,
-  markTrafficChanged,
-  patchQueryResultMetadata,
-  patchQueryResultResponses,
-  sameID,
-} from "./stores/ledgerQuery";
+import { ledgerStore, liveViewItems } from "./stores/ledgerStore";
 
 // Startup
 export const appState = writable({
@@ -38,12 +29,11 @@ export const appState = writable({
 export const extensions = writable([]);
 export const extensions_ui = writable({});
 
-// Ledger Stores
+// Ledger Stores. The rest of the Ledger's state is in ledgerStore.
 export const sorting = writable([{ id: "ID", desc: true }]);
-export const pagination = writable({ pageIndex: 0, pageSize: 100 });
-export const proxyItems = writable([]);
-export const contentTypeFilter = writable([]);
 export const contentTypeFilterInput = writable("");
+// The live view, read by pages outside the Ledger.
+export const proxyItems = liveViewItems;
 
 // Logbook Stores
 export const logbookSearchInput = writable("");
@@ -62,87 +52,6 @@ export const reportMetadata = writable({
   truncate_length: 0,
   custom_properties: {},
 });
-
-let requestBuffer = [];
-let responseBuffer = new Map();
-function flushBuffer() {
-  if (requestBuffer.length === 0 && responseBuffer.size === 0) return;
-
-  const reqBatch = requestBuffer;
-  const resBatch = responseBuffer;
-
-  requestBuffer = [];
-  responseBuffer = new Map();
-
-  proxyItems.update((items) => {
-    let current = Array.isArray(items) ? items : [];
-
-    if (resBatch.size > 0 && current.length > 0) {
-      current = current.map((item) => {
-        if (resBatch.has(item.ID)) {
-          return { ...item, ...resBatch.get(item.ID) };
-        }
-        return item;
-      });
-    }
-
-    if (reqBatch.length > 0) {
-      if (resBatch.size > 0) {
-        for (let i = 0; i < reqBatch.length; i++) {
-          const req = reqBatch[i];
-          if (resBatch.has(req.ID)) {
-            reqBatch[i] = { ...req, ...resBatch.get(req.ID) };
-          }
-        }
-      }
-      current = [...current, ...reqBatch];
-    }
-
-    return current;
-  });
-
-  // Responses also fill in loaded query results, and any traffic may bring
-  // new matches.
-  patchQueryResultResponses(resBatch);
-  markTrafficChanged();
-}
-if (typeof window !== "undefined") {
-  setInterval(flushBuffer, 200);
-}
-
-export function addRequest(req) {
-  requestBuffer.push(req);
-  if (requestBuffer.length > 500) flushBuffer();
-}
-export function addResponse(res) {
-  responseBuffer.set(res.ID, res);
-
-  if (responseBuffer.size > 500) flushBuffer();
-}
-
-export function patchWebSocketMetadata(conn) {
-  if (!conn?.RequestID) return;
-  const patch = webSocketMetadataPatch(conn);
-  // The upgrade request may still be waiting in the buffer; a failed
-  // handshake's ws-state arrives right behind it.
-  flushBuffer();
-  patchLiveViewMetadata(conn.RequestID, patch);
-  patchQueryResultMetadata(conn.RequestID, patch);
-  markTrafficChanged();
-}
-
-/**
- * Merges `patch` into the Metadata of the live-view pair with this ID. Does
- * nothing when the live view doesn't hold the pair.
- */
-export function patchLiveViewMetadata(id, patch) {
-  proxyItems.update((items) =>
-    (items || []).map((item) => {
-      if (!sameID(item.ID, id)) return item;
-      return { ...item, Metadata: { ...(item.Metadata || {}), ...patch } };
-    }),
-  );
-}
 
 // ---------------------------
 // Compass
@@ -215,11 +124,7 @@ export async function openProject() {
     message: "Loading " + get(activeProject) + "…",
     details: "",
   });
-  requestBuffer = [];
-  responseBuffer = new Map();
-  pagination.set({ pageIndex: 0, pageSize: 100 });
   sorting.set([{ id: "ID", desc: true }]);
-  clearQuery();
   logbookSearchInput.set("");
   reportMetadata.set({
     title: get(activeProject) + " Report",
@@ -236,7 +141,6 @@ export async function openProject() {
     truncate_length: 0,
     custom_properties: {},
   });
-  contentTypeFilter.set([]);
   contentTypeFilterInput.set("");
   compassCode.set("");
   testerInput.set("");
@@ -244,7 +148,7 @@ export async function openProject() {
   interceptFlag.set(false);
   workshopCode.set("");
   waypoints.set({});
-  proxyItems.set([]);
+  ledgerStore.clear();
   extensions.set([]);
   extensions_ui.set({});
   testCaseStore.clear();
@@ -258,10 +162,10 @@ export async function openProject() {
     console.error("Failed to load project extensions:", err);
   }
 
-  // Reset items
-  await populateHistory();
+  // Reset items. The Ledger's live view and exclusion load in the
+  // background.
+  ledgerStore.populate();
   await populateLogs();
-  await populateFilters();
   await populateScope();
   await populateCheckpoint();
   await populateWorkshop();
@@ -314,34 +218,12 @@ export async function populateScope() {
       console.log(error);
     });
 }
-export async function populateFilters() {
-  GetContentTypeExclusion().then((filters) => {
-    console.log("----- Filter ------");
-    console.log(filters);
-    console.log("----- Filter ------");
-    contentTypeFilter.set(filters ? filters : []);
-  });
-}
 export async function populateLogs() {
   GetLogs().then((items) => {
     console.log(items);
     logItems.set(items ? items : []);
   });
 }
-export async function populateHistory() {
-  const start = performance.now();
-  GetProxyItems()
-    .then((items) => {
-      console.log("Received items from Go:", items);
-      proxyItems.set(items ? items : []);
-      const end = performance.now();
-      console.log(`Time taken to set store: ${end - start} ms`);
-    })
-    .catch((err) => {
-      console.log(err);
-    });
-}
-
 export async function populateExtensions() {
   GetExtensions().then((exts) => {
     console.log(exts);

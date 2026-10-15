@@ -236,12 +236,19 @@ export function indexWarning(q) {
 }
 
 /**
+ * True when an older page of query results can be fetched now: older pages
+ * remain, none is loading, and the last fetch didn't fail.
+ */
+export function canLoadOlder(q) {
+  return isQueryActive(q) && !!q.nextCursor && !q.loadingOlder && !q.olderFailed;
+}
+
+/**
  * True when the ledger, showing `pageIndex` at `pageSize` rows per page, is on
  * the last loaded page of query results while older pages remain.
  */
 export function needsOlderPage(q, pageIndex, pageSize) {
-  if (!isQueryActive(q) || !q.nextCursor || q.loadingOlder || q.olderFailed)
-    return false;
+  if (!canLoadOlder(q)) return false;
   const lastLoaded = Math.max(Math.ceil(q.items.length / pageSize) - 1, 0);
   return pageIndex >= lastLoaded;
 }
@@ -731,6 +738,10 @@ export function createLedgerStore(api) {
     update((state) => ({ ...state, layout: fn(state.layout) }));
   }
 
+  function setDock(dock) {
+    updateLayout((layout) => ({ ...layout, dock: { ...layout.dock, ...dock } }));
+  }
+
   return {
     subscribe,
     selectPair,
@@ -752,8 +763,12 @@ export function createLedgerStore(api) {
       }));
     },
     /** Sets the dock's { width, collapsed }. */
-    setDock: (dock) =>
-      updateLayout((layout) => ({ ...layout, dock: { ...layout.dock, ...dock } })),
+    setDock,
+    /** The dock's { width, collapsed } as a store with `set`, for Dock.svelte. */
+    dockState: {
+      subscribe: select({ subscribe }, (state) => state.layout.dock).subscribe,
+      set: setDock,
+    },
     clear: () => {
       projectStateVersion++;
       cancelDelay();

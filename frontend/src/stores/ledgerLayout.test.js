@@ -142,6 +142,9 @@ test("the dock starts open at 320px; its width and collapsed state are kept", ()
   assert.deepEqual(get(store).layout.dock, { width: 320, collapsed: false });
   store.setDock({ width: 400, collapsed: true });
   assert.deepEqual(get(store).layout.dock, { width: 400, collapsed: true });
+  // The dock component reads and writes it as a store of its own.
+  store.dockState.set({ width: 300, collapsed: false });
+  assert.deepEqual(get(store.dockState), { width: 300, collapsed: false });
 });
 
 test("the drawer and dock layout outlast a project switch; the selection doesn't", async () => {

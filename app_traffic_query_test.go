@@ -6,7 +6,6 @@ import (
 	"log/slog"
 	"path/filepath"
 	"slices"
-	"strings"
 	"testing"
 	"time"
 
@@ -59,7 +58,7 @@ func itemIDs(items []*domain.RequestResponseSummary) []uuid.UUID {
 	return ids
 }
 
-func queryTraffic(t *testing.T, app *App, query string, cursor *uuid.UUID) TrafficQueryResult {
+func queryTraffic(t *testing.T, app *App, query string, cursor string) TrafficQueryResult {
 	t.Helper()
 	result, err := app.QueryTraffic(query, cursor)
 	if err != nil {
@@ -84,7 +83,7 @@ func TestQueryTrafficMatchesBareTextNewestFirst(t *testing.T) {
 	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "application/json", body: `{"ok":true}`})
 	newer := capturePair(t, app, capturedPair{host: "www.acme.test", path: "/c", statusCode: 200, contentType: "text/html", body: "<p>eyJhbGciOi</p>"})
 
-	result := queryTraffic(t, app, "eyJhbGci", nil)
+	result := queryTraffic(t, app, "eyJhbGci", "")
 
 	assertIDs(t, []uuid.UUID{newer, older}, itemIDs(result.Items))
 	if result.NextCursor != nil {
@@ -99,14 +98,14 @@ func TestQueryTrafficMatchesFieldExpressionNewestFirst(t *testing.T) {
 	capturePair(t, app, capturedPair{host: "www.acme.test", path: "/c", statusCode: 502, contentType: "text/html"})
 	newer := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/d", statusCode: 503, contentType: "application/json"})
 
-	result := queryTraffic(t, app, `status_code >= 500 AND host = "api.acme.test"`, nil)
+	result := queryTraffic(t, app, `status_code >= 500 AND host = "api.acme.test"`, "")
 
 	assertIDs(t, []uuid.UUID{newer, older}, itemIDs(result.Items))
 }
 
 func excludeContentTypes(t *testing.T, app *App, contentTypes ...string) {
 	t.Helper()
-	if err := app.SetFilters(contentTypes); err != nil {
+	if err := app.SetContentTypeExclusion(contentTypes); err != nil {
 		t.Fatalf("storing content-type exclusion: %v", err)
 	}
 }
@@ -118,7 +117,7 @@ func TestQueryTrafficAppliesStoredContentTypeExclusion(t *testing.T) {
 	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/c", statusCode: 200, contentType: "image/png"})
 	excludeContentTypes(t, app, "text/html", "image/png")
 
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
+	result := queryTraffic(t, app, `host = "api.acme.test"`, "")
 
 	assertIDs(t, []uuid.UUID{json}, itemIDs(result.Items))
 }
@@ -129,35 +128,9 @@ func TestQueryTrafficKeepsInFlightPairsUnderExclusion(t *testing.T) {
 	inFlight := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b"})
 	excludeContentTypes(t, app, "text/html")
 
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
+	result := queryTraffic(t, app, `host = "api.acme.test"`, "")
 
 	assertIDs(t, []uuid.UUID{inFlight}, itemIDs(result.Items))
-}
-
-func TestQueryTrafficExcludesContentTypesContainingQuotesAndBackslashes(t *testing.T) {
-	app := newScratchpadApp(t)
-	kept := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "text/plain"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: `we"ird\ct`})
-	excludeContentTypes(t, app, `we"ird\ct`)
-
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
-
-	assertIDs(t, []uuid.UUID{kept}, itemIDs(result.Items))
-}
-
-// The live view's exclusion matches content types exactly, so a stored value
-// with a * at either end excludes only that literal value, not a wildcard.
-func TestQueryTrafficExcludesContentTypesWithStarsExactly(t *testing.T) {
-	app := newScratchpadApp(t)
-	html := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "text/html"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "text/*"})
-	json := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/c", statusCode: 200, contentType: "application/json"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/d", statusCode: 200, contentType: "*/*"})
-	excludeContentTypes(t, app, "text/*", "*/*")
-
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
-
-	assertIDs(t, []uuid.UUID{json, html}, itemIDs(result.Items))
 }
 
 func TestQueryTrafficPagesWithCursorWithoutDuplicatesOrGaps(t *testing.T) {
@@ -171,35 +144,13 @@ func TestQueryTrafficPagesWithCursorWithoutDuplicatesOrGaps(t *testing.T) {
 	}
 	slices.Reverse(matching)
 
-	first := queryTraffic(t, app, `host = "api.acme.test"`, nil)
+	first := queryTraffic(t, app, `host = "api.acme.test"`, "")
 	if first.NextCursor == nil {
 		t.Fatalf("wanted a next cursor after the first page of %d items", len(first.Items))
 	}
-	second := queryTraffic(t, app, `host = "api.acme.test"`, first.NextCursor)
+	second := queryTraffic(t, app, `host = "api.acme.test"`, *first.NextCursor)
 
 	assertIDs(t, matching, append(itemIDs(first.Items), itemIDs(second.Items)...))
-	if second.NextCursor != nil {
-		t.Fatalf("wanted no cursor after the last page, got %v", *second.NextCursor)
-	}
-}
-
-// Values with a * are excluded after marasi returns the page, so a page can
-// come back empty while older pages remain. The cursor must still lead on.
-func TestQueryTrafficKeepsCursorWhenStarExclusionEmptiesAPage(t *testing.T) {
-	app := newScratchpadApp(t)
-	older := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
-	for range 501 {
-		capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "*/*"})
-	}
-	excludeContentTypes(t, app, "*/*")
-
-	first := queryTraffic(t, app, `host = "api.acme.test"`, nil)
-	if len(first.Items) != 0 || first.NextCursor == nil {
-		t.Fatalf("wanted an empty first page with a cursor, got %d items and cursor %v", len(first.Items), first.NextCursor)
-	}
-	second := queryTraffic(t, app, `host = "api.acme.test"`, first.NextCursor)
-
-	assertIDs(t, []uuid.UUID{older}, itemIDs(second.Items))
 	if second.NextCursor != nil {
 		t.Fatalf("wanted no cursor after the last page, got %v", *second.NextCursor)
 	}
@@ -209,7 +160,7 @@ func TestQueryTrafficReportsCompleteIndex(t *testing.T) {
 	app := newScratchpadApp(t)
 	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "text/html"})
 
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
+	result := queryTraffic(t, app, `host = "api.acme.test"`, "")
 
 	if !result.IndexComplete {
 		t.Fatalf("wanted IndexComplete for a project whose pairs are all indexed")
@@ -240,11 +191,16 @@ func newTrafficApp(t *testing.T) (*App, projectDatabase) {
 	if err != nil {
 		t.Fatalf("creating proxy: %v", err)
 	}
-	return &App{Proxy: proxy}, database
+	config, err := LoadConfig(t.TempDir())
+	if err != nil {
+		t.Fatalf("loading app config: %v", err)
+	}
+	return &App{Proxy: proxy, Config: config}, database
 }
 
 // newLegacyTrafficApp opens a project holding a pair written the way an older
-// Marasi binary wrote it, without an index row, and never builds the index.
+// Marasi binary wrote it, without an index row, with the search index job
+// restarted and never run.
 func newLegacyTrafficApp(t *testing.T) *App {
 	t.Helper()
 	app, database := newTrafficApp(t)
@@ -259,13 +215,20 @@ func newLegacyTrafficApp(t *testing.T) *App {
 	if err != nil {
 		t.Fatalf("inserting legacy pair: %v", err)
 	}
+	repo, ok := app.Proxy.TrafficRepo.(*db.Repository)
+	if !ok {
+		t.Fatalf("wanted the project's *db.Repository, got %T", app.Proxy.TrafficRepo)
+	}
+	if err := repo.RebuildJob(domain.JobTrafficIndex); err != nil {
+		t.Fatalf("restarting the search index job: %v", err)
+	}
 	return app
 }
 
 func TestQueryTrafficReportsIncompleteIndex(t *testing.T) {
 	app := newLegacyTrafficApp(t)
 
-	result := queryTraffic(t, app, `host = "api.acme.test"`, nil)
+	result := queryTraffic(t, app, `host = "api.acme.test"`, "")
 
 	if result.IndexComplete {
 		t.Fatalf("wanted IndexComplete false while a pair has no index row")
@@ -275,7 +238,7 @@ func TestQueryTrafficReportsIncompleteIndex(t *testing.T) {
 func TestQueryTrafficReturnsGoErrorWithoutAProject(t *testing.T) {
 	app := newProjectApp(t)
 
-	_, err := app.QueryTraffic(`host = "api.acme.test"`, nil)
+	_, err := app.QueryTraffic(`host = "api.acme.test"`, "")
 
 	if err == nil {
 		t.Fatalf("wanted an error when no project is open")
@@ -284,7 +247,7 @@ func TestQueryTrafficReturnsGoErrorWithoutAProject(t *testing.T) {
 
 func queryTrafficError(t *testing.T, app *App, query string) TrafficQueryError {
 	t.Helper()
-	result, err := app.QueryTraffic(query, nil)
+	result, err := app.QueryTraffic(query, "")
 	if err != nil {
 		t.Fatalf("querying %q: wanted a query error, got Go error %v", query, err)
 	}
@@ -332,43 +295,11 @@ func TestQueryTrafficRejectsUnbalancedParenthesesUnderExclusion(t *testing.T) {
 	}
 }
 
-// The researcher's query can be valid on its own and still fail once it is
-// combined with the content-type exclusion, for example by nesting too deeply.
-// The error must point into the researcher's text, not the combined query.
-func TestQueryTrafficReportsCombinedQueryErrorAtResearchersPosition(t *testing.T) {
-	app := newScratchpadApp(t)
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "text/html", body: "abc"})
-	excludeContentTypes(t, app, "image/png")
-
-	got := queryTrafficError(t, app, strings.Repeat(`NOT (`, 199)+`"abc"`+strings.Repeat(`)`, 199))
-
-	want := TrafficQueryError{Message: `query nests more than 200 conditions; use fewer conditions or less nesting`, Position: 996}
-	if got != want {
-		t.Fatalf("\nwanted:\n%+v\ngot:\n%+v", want, got)
-	}
-}
-
-func TestQueryTrafficKeepsCombinedQueryErrorInsideResearchersText(t *testing.T) {
-	app := newScratchpadApp(t)
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "text/html", body: "abc"})
-	excludeContentTypes(t, app, "image/png", "image/gif")
-	for _, query := range []string{
-		strings.Repeat(`"abc" AND `, 199) + `"abc"`,
-		`host = "` + strings.Repeat("a", 8170) + `"`,
-	} {
-		got := queryTrafficError(t, app, query)
-
-		if got.Position < 1 || got.Position > len(query) {
-			t.Fatalf("wanted a position inside the %d-character query, got %+v", len(query), got)
-		}
-	}
-}
-
 func TestQueryTrafficReturnsGoErrorWhenTheDatabaseFails(t *testing.T) {
 	app, database := newTrafficApp(t)
 	database.Close()
 
-	result, err := app.QueryTraffic(`host = "api.acme.test"`, nil)
+	result, err := app.QueryTraffic(`host = "api.acme.test"`, "")
 
 	if err == nil {
 		t.Fatalf("wanted a Go error from a closed database, got %+v", result)

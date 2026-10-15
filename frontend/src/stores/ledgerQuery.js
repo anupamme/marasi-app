@@ -5,7 +5,7 @@
 // non-empty. The live view (`proxyItems`) is untouched by anything here.
 //
 // The content-type exclusion is applied by the QueryTraffic binding, which
-// reads it from the project config, so it never appears in the query text.
+// reads the project's exclusion itself, so it never appears in the query text.
 //
 // Plain module: no Svelte component dependencies.
 import { derived, get, writable } from "svelte/store";
@@ -134,7 +134,7 @@ export async function runQuery(text = get(queryText)) {
   let result;
   let failure = null;
   try {
-    result = await QueryTraffic(text, null);
+    result = await QueryTraffic(text, "");
     if (result.QueryError) {
       failure = {
         message: result.QueryError.Message,
@@ -324,7 +324,7 @@ export async function checkForNewMatches() {
   trafficChanged = false;
   let result;
   try {
-    result = await QueryTraffic(ranQuery, null);
+    result = await QueryTraffic(ranQuery, "");
   } catch (err) {
     console.error("Checking for new matches failed:", err);
     trafficChanged = true;
@@ -335,9 +335,16 @@ export async function checkForNewMatches() {
     // A different query ran, or the ledger went back to the live view.
     if (q.ranQuery !== ranQuery || q.runID !== runID) return q;
     const loaded = pairIDSet(q.items);
+    // The cursor is opaque; the oldest loaded pair marks where the next
+    // page starts. Pair ids are UUIDv7, so they sort by capture time.
+    const oldestLoaded = q.items.length
+      ? q.items.reduce((min, item) =>
+          String(item.ID) < min ? String(item.ID) : min,
+        String(q.items[0].ID))
+      : null;
     const isNew = (item) =>
       !loaded.has(String(item.ID)) &&
-      (q.nextCursor == null || String(item.ID) > String(q.nextCursor));
+      (q.nextCursor == null || String(item.ID) > oldestLoaded);
     const fresh = (result.Items ?? []).filter(isNew);
     const freshIDs = pairIDSet(fresh);
     // Earlier new matches can fall off the newest page when a lot of

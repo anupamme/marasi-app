@@ -41,6 +41,7 @@
 	import { findingStore } from "../../stores/findingStore";
 	import { armoryStore } from "../../stores/armoryStore";
 	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
+	import { prettifiedBody } from "../prettified.js";
 
 	const modalStore = getModalStore();
 	const drawerStore = getDrawerStore();
@@ -262,15 +263,11 @@
 			if (requestReadOnly && responseReadOnly) {
 				if ($prettify) {
 					requestBody =
-						selectedRow?.Metadata?.[
-							"prettified-request"
-						] ??
+						prettifiedBody(selectedRow, "request") ??
 						selectedRow?.Request?.Raw ??
 						"";
 					responseBody =
-						selectedRow?.Metadata?.[
-							"prettified-response"
-						] ??
+						prettifiedBody(selectedRow, "response") ??
 						selectedRow?.Response?.Raw ??
 						"";
 				} else {
@@ -284,17 +281,13 @@
 				if (!userEdited) {
 					if ($prettify) {
 						requestBody =
-							selectedRow?.Metadata?.[
-								"prettified-request"
-							] ??
+							prettifiedBody(selectedRow, "request") ??
 							selectedRow?.Request
 								?.Raw ??
 							requestBody;
 
 						responseBody =
-							selectedRow?.Metadata?.[
-								"prettified-response"
-							] ??
+							prettifiedBody(selectedRow, "response") ??
 							selectedRow?.Response
 								?.Raw ??
 							"";
@@ -532,10 +525,7 @@
 						if (
 							!safeCompare(
 								text,
-								selectedRow
-									?.Metadata[
-									"prettified-request"
-								],
+								prettifiedBody(selectedRow, "request"),
 							) &&
 							!safeCompare(
 								text,

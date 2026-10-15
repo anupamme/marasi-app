@@ -18,6 +18,10 @@
 // query. Cursors are opaque strings; "" asks for the first page.
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
+import { LEDGER_DOCK } from "../lib/dock/dock.js";
+
+/** The drawer's share of the table area's height: default and limits. */
+export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
 
 /** How long the query box waits after the last keystroke before running. */
 export const QUERY_DELAY_MS = 700;
@@ -63,8 +67,31 @@ function emptyQueryState(runID = 0) {
   };
 }
 
-function initialState(runID = 0) {
+// The table and drawer layout. It outlasts a project switch.
+function initialLayout() {
   return {
+    // The sitemap dock: its width in px, and whether it is collapsed to a strip.
+    dock: { width: LEDGER_DOCK.default, collapsed: false },
+    // The drawer's share of the table area's height, and whether it covers
+    // the table.
+    drawer: { split: DRAWER_SPLIT.default, maximised: false },
+  };
+}
+
+function emptySelection() {
+  return {
+    // The pair the drawer shows, or null when nothing is selected.
+    focus: null,
+    // The focused pair's response when it arrived after the pair was
+    // selected, so the drawer can show it without reloading.
+    incomingResponse: null,
+  };
+}
+
+function initialState(runID = 0, layout = initialLayout()) {
+  return {
+    layout,
+    selection: emptySelection(),
     // The live view, oldest first.
     items: [],
     // Content types the table hides.
@@ -87,6 +114,74 @@ export function isQueryActive(q) {
 /** Rows currently shown in the ledger, in source order. */
 export function shownRows(state) {
   return isQueryActive(state.query) ? state.query.items : state.items;
+}
+
+// tableRows' last result, so the same inputs give the same array and a
+// subscriber can tell an unchanged table by identity.
+let tableRowsCache = { items: null, exclusion: null, rows: [] };
+
+/**
+ * The rows the Ledger table lists, newest first: the loaded query results
+ * (marasi applies the content-type exclusion to them), or the live view
+ * without the pairs the exclusion hides.
+ */
+export function tableRows(state) {
+  if (isQueryActive(state.query)) return state.query.items;
+  const { items, exclusion } = state;
+  if (tableRowsCache.items === items && tableRowsCache.exclusion === exclusion) {
+    return tableRowsCache.rows;
+  }
+  const hidden = new Set(exclusion ?? []);
+  const rows = [];
+  for (let i = items.length - 1; i >= 0; i--) {
+    if (!hidden.has(items[i].ContentType)) rows.push(items[i]);
+  }
+  tableRowsCache = { items, exclusion, rows };
+  return rows;
+}
+
+/**
+ * How many pairs the content-type exclusion hides from the live view, or
+ * null with query results, whose hidden pairs marasi doesn't count.
+ */
+export function hiddenByTypeCount(state) {
+  if (isQueryActive(state.query)) return null;
+  return state.items.length - tableRows(state).length;
+}
+
+/** True while a pair is selected; the drawer shows it. */
+export function isDrawerOpen(state) {
+  return state.selection.focus != null;
+}
+
+/** The pair the drawer shows, or undefined. */
+export function focusedPair(state) {
+  const focus = state.selection.focus;
+  if (focus == null) return undefined;
+  return tableRows(state).find((item) => sameID(item.ID, focus));
+}
+
+/**
+ * The drawer as the keybinding contexts see it: whether it is open, and the
+ * focused pair in the shape `canOpenDrawerStream` reads (lower-case
+ * `metadata`, the loaded `response`, and one that arrived live).
+ */
+export function drawerKeybindingState(state) {
+  const pair = focusedPair(state);
+  if (!pair) return { open: false, meta: null };
+  return {
+    open: true,
+    meta: {
+      metadata: pair.Metadata ?? {},
+      response: { StatusCode: pair.StatusCode, ContentType: pair.ContentType },
+      incomingResponse: state.selection.incomingResponse,
+    },
+  };
+}
+
+/** `split` within the drawer's limits. */
+export function clampDrawerSplit(split) {
+  return Math.min(DRAWER_SPLIT.max, Math.max(DRAWER_SPLIT.min, split));
 }
 
 /**
@@ -141,12 +236,19 @@ export function indexWarning(q) {
 }
 
 /**
+ * True when an older page of query results can be fetched now: older pages
+ * remain, none is loading, and the last fetch didn't fail.
+ */
+export function canLoadOlder(q) {
+  return isQueryActive(q) && !!q.nextCursor && !q.loadingOlder && !q.olderFailed;
+}
+
+/**
  * True when the ledger, showing `pageIndex` at `pageSize` rows per page, is on
  * the last loaded page of query results while older pages remain.
  */
 export function needsOlderPage(q, pageIndex, pageSize) {
-  if (!isQueryActive(q) || !q.nextCursor || q.loadingOlder || q.olderFailed)
-    return false;
+  if (!canLoadOlder(q)) return false;
   const lastLoaded = Math.max(Math.ceil(q.items.length / pageSize) - 1, 0);
   return pageIndex >= lastLoaded;
 }
@@ -215,6 +317,12 @@ export function createLedgerStore(api) {
   const { subscribe, set: setStore } = writable(current);
 
   function set(next) {
+    // The selection only holds pairs the table lists: when a query, an
+    // exclusion or a project switch removes the focused pair, the drawer
+    // closes.
+    if (next.selection.focus != null && !focusedPair(next)) {
+      next = { ...next, selection: emptySelection() };
+    }
     current = next;
     setStore(next);
   }
@@ -587,8 +695,80 @@ export function createLedgerStore(api) {
     );
   }
 
+  function setSelection(selection) {
+    update((state) => ({ ...state, selection }));
+  }
+
+  /** Selects the pair with this ID; the drawer opens on it. */
+  function selectPair(id) {
+    if (id == null) return;
+    if (sameID(current.selection.focus, id)) return;
+    setSelection({ ...emptySelection(), focus: id });
+  }
+
+  /** Clears the selection; the drawer closes and stops covering the table. */
+  function clearSelection() {
+    update((state) => ({
+      ...state,
+      selection: emptySelection(),
+      layout: { ...state.layout, drawer: { ...state.layout.drawer, maximised: false } },
+    }));
+  }
+
+  /**
+   * Selects the row `step` rows below the focused one (negative steps go
+   * up), stopping at the table's ends. With nothing selected, a step down
+   * selects the top row and a step up the bottom one.
+   */
+  function stepSelection(step) {
+    const rows = tableRows(current);
+    if (rows.length === 0) return;
+    const focus = current.selection.focus;
+    const at = focus == null ? -1 : rows.findIndex((row) => sameID(row.ID, focus));
+    const target =
+      at === -1
+        ? step > 0
+          ? 0
+          : rows.length - 1
+        : Math.min(rows.length - 1, Math.max(0, at + step));
+    selectPair(rows[target].ID);
+  }
+
+  function updateLayout(fn) {
+    update((state) => ({ ...state, layout: fn(state.layout) }));
+  }
+
+  function setDock(dock) {
+    updateLayout((layout) => ({ ...layout, dock: { ...layout.dock, ...dock } }));
+  }
+
   return {
     subscribe,
+    selectPair,
+    clearSelection,
+    stepSelection,
+
+    /** Sets the drawer's share of the table area's height (0-1). */
+    setDrawerSplit: (split) =>
+      updateLayout((layout) => ({
+        ...layout,
+        drawer: { ...layout.drawer, split: clampDrawerSplit(split) },
+      })),
+    /** Maximises the open drawer over the table, or restores it. */
+    toggleDrawerMaximised: () => {
+      if (!isDrawerOpen(current)) return;
+      updateLayout((layout) => ({
+        ...layout,
+        drawer: { ...layout.drawer, maximised: !layout.drawer.maximised },
+      }));
+    },
+    /** Sets the dock's { width, collapsed }. */
+    setDock,
+    /** The dock's { width, collapsed } as a store with `set`, for Dock.svelte. */
+    dockState: {
+      subscribe: select({ subscribe }, (state) => state.layout.dock).subscribe,
+      set: setDock,
+    },
     clear: () => {
       projectStateVersion++;
       cancelDelay();
@@ -596,7 +776,7 @@ export function createLedgerStore(api) {
       requestBuffer = [];
       responseBuffer = new Map();
       trafficChanged = false;
-      set(initialState(current.query.runID));
+      set(initialState(current.query.runID, current.layout));
     },
     populate,
 
@@ -607,6 +787,9 @@ export function createLedgerStore(api) {
       if (requestBuffer.length > MAX_BUFFERED) flush();
     },
     onResponse: (res) => {
+      if (sameID(current.selection.focus, res.ID)) {
+        setSelection({ ...current.selection, incomingResponse: res });
+      }
       responseBuffer.set(res.ID, res);
       if (responseBuffer.size > MAX_BUFFERED) flush();
     },

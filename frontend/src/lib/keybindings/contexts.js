@@ -13,6 +13,9 @@ const onRoute = (route) => (state) => state.route === route && !state.modal;
 const drawerOpen = (state) => Boolean(state.drawer?.open);
 const requestDrawerOpen = (state) =>
   drawerOpen(state) && state.drawer.id === "request-response";
+// The Ledger's drawer is part of the page, held by the Ledger store; the
+// layout reports it as `state.ledgerDrawer` ({ open, meta }).
+const ledgerDrawerOpen = (state) => Boolean(state.ledgerDrawer?.open);
 
 export const WEBSOCKET_MODAL = "WebsocketStream";
 // The WebSocket modal's tabs, in tab order. The modal publishes the open one
@@ -82,7 +85,7 @@ export const CONTEXTS = [
     label: "Ledger",
     page: "Ledger",
     state: "Drawer closed",
-    isEligible: (state) => onRoute("/ledger")(state) && !drawerOpen(state),
+    isEligible: (state) => onRoute("/ledger")(state) && !ledgerDrawerOpen(state),
   },
   // Listed before ledger.drawer-open: both are drawer-tier and eligible
   // together on a WebSocket upgrade request, and table order breaks the tie.
@@ -95,8 +98,8 @@ export const CONTEXTS = [
     overlaps: ["ledger.drawer-open"],
     isEligible: (state) =>
       onRoute("/ledger")(state) &&
-      drawerOpen(state) &&
-      canOpenDrawerStream(state.drawer.meta),
+      ledgerDrawerOpen(state) &&
+      canOpenDrawerStream(state.ledgerDrawer.meta),
   },
   {
     id: "ledger.drawer-open",
@@ -104,7 +107,7 @@ export const CONTEXTS = [
     label: "Ledger drawer",
     page: "Ledger",
     state: "Drawer open",
-    isEligible: (state) => onRoute("/ledger")(state) && drawerOpen(state),
+    isEligible: (state) => onRoute("/ledger")(state) && ledgerDrawerOpen(state),
   },
   {
     id: "armory.page",

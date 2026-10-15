@@ -28,7 +28,18 @@ function keydown(key, code, mods = {}, target = { tagName: "BODY" }) {
 const cmd = (key, code) => keydown(key, code, { metaKey: true });
 const cmdShift = (key, code) => keydown(key, code, { metaKey: true, shiftKey: true });
 
+// The Ledger's drawer lives in the Ledger store, not Skeleton's drawer, so on
+// the Ledger the layout reports it as `ledgerDrawer`.
 function on(route, drawer = { open: false }) {
+  if (route === "/ledger") {
+    return {
+      route,
+      modal: null,
+      dialogOpen: false,
+      drawer: { open: false },
+      ledgerDrawer: { open: drawer.open, meta: drawer.meta ?? null },
+    };
+  }
   return { route, modal: null, dialogOpen: false, drawer };
 }
 
@@ -44,6 +55,19 @@ test("⌘⇧F filters the Ledger with its drawer closed and creates a finding wi
     dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger", requestDrawer())),
     "ledger.drawer-open.create-finding",
   );
+});
+
+test("⌘\\ toggles the Ledger's sitemap dock with the drawer open or closed", () => {
+  const dispatcher = mac();
+  const press = () => cmd("\\", "Backslash");
+  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
+  assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), "ledger.drawer-open.toggle-sidebar");
+});
+
+test("a Skeleton drawer over the Ledger, such as an extension's, is not the Ledger drawer", () => {
+  const dispatcher = mac();
+  const state = { ...on("/ledger"), drawer: { open: true, id: "extension-drawer", meta: {} } };
+  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), state), "ledger.drawer-closed.focus-exclusion");
 });
 
 test("opening the Ledger drawer replaces the page's actions; closing it restores them", () => {
@@ -413,7 +437,9 @@ test("Launchpad page shortcuts run only on the Launchpad page", () => {
   for (const [event, actionId] of expected) {
     assert.equal(dispatcher.resolve(event, on("/launchpad")), actionId, event.key);
   }
-  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), null);
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/checkpoint")), null);
+  // The Ledger binds the same key to its own dock.
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
 });
 
 test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {

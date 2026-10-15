@@ -28,8 +28,15 @@ import {
 } from "./createLedgerStore.js";
 
 export {
+  canLoadOlder,
+  clampDrawerSplit,
+  drawerKeybindingState,
+  focusedPair,
+  hiddenByTypeCount,
   indexWarning,
+  isDrawerOpen,
   isQueryActive,
+  tableRows,
   ledgerPagination,
   markQueryError,
   matchCountLabel,

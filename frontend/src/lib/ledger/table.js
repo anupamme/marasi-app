@@ -1,0 +1,144 @@
+// The Ledger table's columns, and how a pair's cells, badges and highlight
+// are shown. Plain functions over the store's rows, so they load under node.
+import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presentation.js";
+
+/** Every row's height in px; the windowed list relies on it. */
+export const ROW_HEIGHT = 22;
+
+/** The header row's height in px. */
+export const HEADER_HEIGHT = 24;
+
+/** The table's columns, left to right. `width` is a CSS grid track. */
+export const LEDGER_COLUMNS = Object.freeze([
+  { key: "number", label: "#", width: "52px", align: "right" },
+  { key: "badges", label: "", width: "46px" },
+  { key: "time", label: "Time", width: "70px" },
+  { key: "method", label: "Method", width: "56px" },
+  { key: "host", label: "Host", width: "170px" },
+  { key: "path", label: "Path", width: "minmax(180px,1fr)" },
+  { key: "status", label: "Status", width: "50px", align: "right" },
+  { key: "type", label: "Type", width: "48px" },
+  { key: "size", label: "Size", width: "62px", align: "right" },
+]);
+
+/**
+ * The rows a windowed list renders: those in view and `overscan` more on
+ * either side. `scrollTop` is measured from the first row. `end` is exclusive.
+ */
+export function visibleRange({ scrollTop, height, count, rowHeight, overscan }) {
+  const start = Math.max(0, Math.floor(scrollTop / rowHeight) - overscan);
+  const end = Math.min(count, Math.ceil((scrollTop + height) / rowHeight) + overscan);
+  return { start, end: Math.max(start, end) };
+}
+
+/**
+ * The scroll position, measured from the first row, that shows row `index`
+ * while moving as little as possible.
+ */
+export function scrollToReveal({ scrollTop, height, rowHeight }, index) {
+  const top = index * rowHeight;
+  if (top < scrollTop) return top;
+  if (top + rowHeight > scrollTop + height) return top + rowHeight - height;
+  return scrollTop;
+}
+
+/** The CSS grid template every row and the header share. */
+export function rowTemplate(columns) {
+  return columns.map((column) => column.width).join(" ");
+}
+
+const SHORT_TYPES = {
+  "application/javascript": "js",
+  "text/javascript": "js",
+  "text/plain": "text",
+  "text/event-stream": "sse",
+  "image/jpeg": "jpg",
+  "image/x-icon": "ico",
+  "application/octet-stream": "binary",
+  "application/x-www-form-urlencoded": "form",
+};
+
+/** A short name for a content type: "json" for "application/json; charset=utf-8". */
+export function shortType(contentType) {
+  const type = (contentType ?? "").split(";")[0].trim().toLowerCase();
+  if (!type) return "";
+  return SHORT_TYPES[type] ?? type.split("/")[1] ?? type;
+}
+
+/** A response length for the Size column: "512 B", "2.0 KB", "3.0 MB"; blank for none. */
+export function formatSize(length) {
+  const n = Number(length);
+  if (!n) return "";
+  if (n < 1024) return `${n} B`;
+  if (n < 1024 * 1024) return `${(n / 1024).toFixed(n < 10240 ? 1 : 0)} KB`;
+  return `${(n / 1024 / 1024).toFixed(1)} MB`;
+}
+
+/**
+ * The badges a row shows, in slot order: { key, label, tone?, slashed? }.
+ * `label` is the badge's tooltip and its line in the "+N" list; `tone` is a
+ * text colour class.
+ */
+export function rowBadges(row) {
+  const meta = row?.Metadata ?? {};
+  const upgrade = upgradePresentation(upgradeFromLedgerRow(row));
+  const badges = [];
+  if (upgrade.isUpgrade) {
+    badges.push({
+      key: "websocket",
+      label: upgrade.tooltip || "WebSocket upgrade",
+      tone: upgrade.iconClass,
+      slashed: Boolean(upgrade.slashed),
+    });
+  }
+  if (meta.launchpad) badges.push({ key: "launchpad", label: "In a launchpad" });
+  if (meta.armory_run_id) badges.push({ key: "armory", label: "From Armory" });
+  if (meta.intercepted) {
+    badges.push({ key: "intercepted", label: "Intercepted" });
+    if (meta["original-request"] !== undefined) {
+      badges.push({ key: "edited-request", label: "Request edited in flight" });
+    }
+    if (meta["original-response"] !== undefined) {
+      badges.push({ key: "edited-response", label: "Response edited in flight" });
+    }
+  }
+  if (meta.has_note == 1 || row?.Note) badges.push({ key: "note", label: "Has a note" });
+  if (meta.override_host) {
+    badges.push({ key: "override-host", label: `Host overridden: ${meta.override_host}` });
+  }
+  return badges;
+}
+
+/**
+ * Splits a row's badges over its three slots: all of them when they fit,
+ * otherwise the first two and a "+N" count of the rest.
+ */
+export function badgeSlots(badges, slots = 3) {
+  if (badges.length <= slots) return { visible: badges, more: 0 };
+  const visible = badges.slice(0, slots - 1);
+  return { visible, more: badges.length - visible.length };
+}
+
+// The colours the old context menu wrote to `metadata.highlight`, by the
+// highlight number each becomes (the spec's migration).
+const LEGACY_HIGHLIGHTS = {
+  "#ef4444": 1,
+  "#eab308": 3,
+  "#22c55e": 4,
+  "#3b82f6": 6,
+  "#a855f7": 7,
+};
+
+/**
+ * The colour of a row's highlight, or null. A highlight number (1-8) takes
+ * its palette colour; an old hex highlight in metadata takes the colour of
+ * the number it migrates to, or shows as is when it has none.
+ */
+export function rowHighlight(row, palette) {
+  const number = row?.Highlight;
+  if (number >= 1 && number <= palette.length) return palette[number - 1].color;
+  const hex = row?.Metadata?.highlight;
+  if (typeof hex !== "string" || !hex) return null;
+  const legacy = LEGACY_HIGHLIGHTS[hex.toLowerCase()];
+  return legacy ? palette[legacy - 1].color : hex;
+}

@@ -50,7 +50,7 @@
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
-	import { ledgerStore } from "../stores/ledgerStore";
+	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -193,6 +193,7 @@
 			modal: get(modalStore)[0]?.component ?? null,
 			dialogOpen: Boolean(document.querySelector("dialog[open]")),
 			drawer: get(drawerStore),
+			ledgerDrawer: drawerKeybindingState(get(ledgerStore)),
 			websocketTab: get(websocketTab),
 			capturing: get(keybindingCapture),
 		};

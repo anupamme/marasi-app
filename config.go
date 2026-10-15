@@ -60,6 +60,8 @@ type Config struct {
 	// contentTypeExclusion is the app default content-type exclusion, which
 	// projects without their own list follow (ADR 0004).
 	contentTypeExclusion []string
+	// highlights is the 8 highlight colours and app labels (highlights.go).
+	highlights []Highlight
 }
 
 const appConfigName = "marasi_appconfig"
@@ -158,6 +160,9 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 	if documentValue(doc, contentTypeExclusionConfigKey) == nil {
 		missing[contentTypeExclusionConfigKey] = seededContentTypeExclusion
 	}
+	if documentValue(doc, highlightsKey) == nil {
+		missing[highlightsKey] = defaultHighlights()
+	}
 	if len(missing) > 0 {
 		if err := writeConfigKeys(config.path(), missing); err != nil {
 			return nil, fmt.Errorf("writing config file : %w", err)
@@ -195,6 +200,7 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 		config.contentTypeExclusion = slices.Clone(seededContentTypeExclusion)
 		log.Printf("[!] %s in %s left untouched, using the seeded default: %v", contentTypeExclusionConfigKey, config.path(), err)
 	}
+	config.highlights = parseHighlights(documentValue(doc, highlightsKey))
 
 	if err := loadTestCases(appConfigDir, config); err != nil {
 		return nil, fmt.Errorf("loading test cases: %w", err)

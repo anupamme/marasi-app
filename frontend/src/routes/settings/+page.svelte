@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, Globe, Info, Keyboard, Pencil, Replace, X } from "lucide-svelte";
+	import { Chrome, Globe, Highlighter, Info, Keyboard, Pencil, Replace, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -32,6 +32,12 @@
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
 	import { chromeError } from "../../lib/globalActions.js";
+	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import {
+		highlightPalette,
+		resetHighlights,
+		saveHighlights,
+	} from "../../stores/highlightsStore.js";
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
 
@@ -40,6 +46,7 @@
 		{ id: "listener", name: "Listener", hint: "Default interface and port", icon: Globe },
 		{ id: "waypoints", name: "Waypoints", hint: "Host overrides", icon: Replace },
 		{ id: "browser", name: "Browser", hint: "Chrome paths and profiles", icon: Chrome },
+		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
 		{ id: "about", name: "About", hint: "Version and build", icon: Info },
 	];
 	const syntaxModes = [
@@ -59,9 +66,7 @@
 	let chromeProfiles = [];
 	let buildInfo = null;
 
-	$: primary = $modeCurrent
-		? "variant-ghost-primary ring-0 shadow-none"
-		: "variant-filled-primary";
+	$: primary = primaryVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
 		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
@@ -145,6 +150,34 @@
 				chromeProfiles = profiles;
 			})
 			.catch(chromeError(toastStore, "Error deleting profile"));
+	}
+
+	// Each change saves all 8 app highlights, so the form mirrors the file.
+	function saveHighlight(number, change) {
+		const next = $highlightPalette.map((h) => ({ color: h.color, label: h.appLabel ?? "" }));
+		next[number - 1] = { ...next[number - 1], ...change };
+		saveHighlights(next).catch((error) => {
+			toastStore.trigger({
+				message: `Error saving highlights: ${error}`,
+				background: "variant-filled-error",
+			});
+		});
+	}
+	function confirmResetHighlights() {
+		modalStore.trigger({
+			type: "confirm",
+			title: "Reset highlights?",
+			body: "Restores the default colours and clears every app-wide label. Project labels are kept.",
+			response: (ok) => {
+				if (!ok) return;
+				resetHighlights().catch((error) => {
+					toastStore.trigger({
+						message: `Error resetting highlights: ${error}`,
+						background: "variant-filled-error",
+					});
+				});
+			},
+		});
 	}
 
 	onMount(() => {
@@ -472,6 +505,52 @@
 						</tfoot>
 					</table>
 				</div>
+			{:else if section === "highlights"}
+				<div class="flex items-baseline justify-between gap-4">
+					<h3 class="text-xl font-bold">Highlights</h3>
+					<button
+						type="button"
+						class="btn btn-sm variant-soft"
+						on:click={confirmResetHighlights}>Reset to defaults</button
+					>
+				</div>
+				<p class="text-sm opacity-70">
+					Colours apply to every project. An empty label shows the colour's name. A
+					project can set its own label from the Ledger.
+				</p>
+				{#each $highlightPalette as highlight (highlight.number)}
+					<div class={row} data-highlight={highlight.number}>
+						<div class="flex items-center gap-3">
+							<span
+								class="h-4 w-4 shrink-0 rounded-sm"
+								style="background-color: {highlight.color}"
+							></span>
+							<div>
+								<p>Highlight {highlight.number}</p>
+								<p class="text-sm opacity-70">{highlight.appLabel ?? highlight.name}</p>
+							</div>
+						</div>
+						<div class="{control} items-center gap-2">
+							<input
+								type="color"
+								class="h-9 w-12 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+								aria-label="Highlight {highlight.number} colour"
+								value={highlight.color}
+								on:change={(event) =>
+									saveHighlight(highlight.number, { color: event.currentTarget.value })}
+							/>
+							<input
+								class="input w-full"
+								type="text"
+								aria-label="Highlight {highlight.number} label"
+								placeholder={highlight.name}
+								value={highlight.appLabel ?? ""}
+								on:change={(event) =>
+									saveHighlight(highlight.number, { label: event.currentTarget.value })}
+							/>
+						</div>
+					</div>
+				{/each}
 			{:else}
 				<h3 class="text-xl font-bold">About</h3>
 				<div class={row}>

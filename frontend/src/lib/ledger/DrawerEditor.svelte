@@ -22,6 +22,8 @@
 	const styles = {
 		"&": { height: "100%", fontSize: "12px" },
 		".cm-scroller": { overflow: "auto" },
+		// The first line sits flush against the drawer's top border.
+		".cm-content": { paddingTop: "0" },
 	};
 </script>
 

@@ -6,13 +6,11 @@
 	// store; the page runs the actions the rail dispatches.
 	import { createEventDispatcher } from "svelte";
 	import { javascript } from "@codemirror/lang-javascript";
-	import { X } from "lucide-svelte";
 	import DrawerEditor from "./DrawerEditor.svelte";
 	import DrawerNote from "./DrawerNote.svelte";
 	import DrawerRail from "./DrawerRail.svelte";
 	import { drawerBodies, metadataText, pairTiming, usesSyntax } from "./drawer.js";
 	import { sameID } from "./pairs.js";
-	import { statusText } from "./table.js";
 	import { lineWrap, marasiConfig, prettify } from "../../stores";
 	import { groupBuilding, jobsStore } from "../../stores/jobsStore";
 
@@ -77,6 +75,10 @@
 		});
 		if (sameID(noteFor, id) && !(pane === "note" && note !== null)) note = text ?? "";
 	}
+	// The open note's save state: "saved", "unsaved", "saving" or "failed".
+	// The rail's note button shows it; the note pane has no bar of its own.
+	let noteStatus = "saved";
+	$: if (pane !== "note") noteStatus = "saved";
 	function onNoteEdit(event) {
 		if (sameID(event.detail.id, noteFor)) note = event.detail.text;
 	}
@@ -99,11 +101,8 @@
 
 	$: bodies = drawerBodies(details, { prettify: $prettify, incomingResponse });
 	$: syntaxMode = $marasiConfig.SyntaxMode;
-	$: responseStatus = incomingResponse?.StatusCode ?? pair.StatusCode;
 	$: hasResponse = Boolean(bodies.response);
 
-	const label =
-		"pointer-events-none absolute right-4 top-1 z-10 bg-surface-500/20 px-1.5 text-[10px] font-semibold uppercase tracking-wide opacity-70";
 	const message = "p-3 text-[12px] opacity-50";
 </script>
 
@@ -118,6 +117,7 @@
 		{maximised}
 		{palette}
 		{note}
+		{noteStatus}
 		{findings}
 		{testCases}
 		{pane}
@@ -144,7 +144,6 @@
 		{/if}
 		<div class="flex min-h-0 flex-1">
 			<div class="ledger-drawer-request relative min-w-0 flex-1">
-				<span class={label}>Request</span>
 				{#if details === undefined}
 					<p class={message}>Loading…</p>
 				{:else if details === null}
@@ -165,28 +164,14 @@
 						{#key noteFor}
 							<DrawerNote
 								id={noteFor}
-								{number}
 								text={note}
 								save={store.saveNote}
 								on:edit={onNoteEdit}
-								on:close={() => (pane = null)}
+								on:status={(e) => (noteStatus = e.detail)}
 							/>
 						{/key}
 					{/if}
 				{:else if pane === "metadata"}
-					<div
-						class="flex h-7 flex-none items-center gap-2 whitespace-nowrap border-b border-primary-500 bg-surface-100 px-3 text-[11px] dark:bg-surface-800"
-					>
-						<span class="font-semibold uppercase tracking-wide">Metadata</span>
-						<span class="opacity-60">Request {number}</span>
-						<span class="flex-1"></span>
-						<button
-							class="flex h-5 w-5 items-center justify-center hover:bg-surface-200-700-token"
-							title="Back to the response"
-							aria-label="Back to the response"
-							on:click={() => (pane = null)}><X size={12} /></button
-						>
-					</div>
 					<div class="ledger-drawer-metadata min-h-0 flex-1">
 						{#if metadata === null}
 							<p class={message}>Loading…</p>
@@ -195,7 +180,6 @@
 						{/if}
 					</div>
 				{:else}
-					<span class={label}>Response{Number(responseStatus) > 0 ? ` ${statusText(responseStatus)}` : ""}</span>
 					{#if details === undefined}
 						<p class={message}>Loading…</p>
 					{:else if hasResponse}

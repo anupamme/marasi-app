@@ -2,17 +2,17 @@
 	// The focused pair's note, edited in place of the response pane. Edits
 	// save themselves a moment after typing stops, and whatever is unsaved
 	// when the pane closes (or the drawer moves to another pair) is saved
-	// then. Saves run one at a time, in order. Each edit is dispatched as
-	// `edit` ({ id, text }) so the details column's preview follows it.
+	// then. Saves run one at a time, in order; after a failed save the next
+	// edit tries again. Each edit is dispatched as `edit` ({ id, text }) so
+	// the details column's preview follows it, and the save state as
+	// `status` so the rail can show it.
 	import { createEventDispatcher, onDestroy } from "svelte";
-	import { X } from "lucide-svelte";
 	import DrawerEditor from "./DrawerEditor.svelte";
 
 	/** Saves the note: (id, text) => Promise. */
 	export let save;
-	/** The pair's ID and number. */
+	/** The pair's ID. */
 	export let id;
-	export let number;
 	/** The note's text, as loaded. */
 	export let text = "";
 
@@ -61,39 +61,9 @@
 
 	onDestroy(saveNow);
 
-	const STATUS = { saved: "Saved", unsaved: "Edited", saving: "Saving…", failed: "Not saved" };
+	$: dispatch("status", status);
 </script>
 
-<div class="ledger-drawer-note flex h-full min-h-0 flex-col">
-	<div
-		class="flex h-7 flex-none items-center gap-2 whitespace-nowrap border-b border-primary-500 bg-surface-100 px-3 text-[11px] dark:bg-surface-800"
-	>
-		<span class="font-semibold uppercase tracking-wide">Note</span>
-		<span class="opacity-60">Request {number}</span>
-		<span class="flex-1"></span>
-		{#if status === "failed"}
-			<button
-				class="ledger-note-status text-error-500 hover:underline"
-				title="Marasi failed to save the note. Try again"
-				on:click={saveNow}>{STATUS.failed} · Retry</button
-			>
-		{:else}
-			<span class="ledger-note-status opacity-60" role="status">{STATUS[status]}</span>
-		{/if}
-		<button
-			class="flex h-5 w-5 items-center justify-center hover:bg-surface-200-700-token"
-			title="Back to the response"
-			aria-label="Back to the response"
-			on:click={() => dispatch("close")}><X size={12} /></button
-		>
-	</div>
-	<div class="min-h-0 flex-1">
-		<DrawerEditor
-			{value}
-			readonly={false}
-			wrap
-			placeholder="Write a note for this request…"
-			on:change={onChange}
-		/>
-	</div>
+<div class="ledger-drawer-note h-full min-h-0" data-status={status}>
+	<DrawerEditor {value} readonly={false} wrap placeholder="Write a note for this request…" on:change={onChange} />
 </div>

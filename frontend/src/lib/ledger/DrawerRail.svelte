@@ -44,6 +44,8 @@
 	export let palette = [];
 	/** The pair's note, or null while it loads. */
 	export let note = null;
+	/** The open note's save state: "saved", "unsaved", "saving" or "failed". */
+	export let noteStatus = "saved";
 	/** The findings and test cases that list the pair. */
 	export let findings = [];
 	export let testCases = [];
@@ -84,6 +86,29 @@
 	$: ExpandIcon = expanded ? PanelLeftClose : PanelLeftOpen;
 	$: hasResponse = Number(pair.StatusCode) > 0;
 
+	// The note button's dot: the primary colour when the pair has a note,
+	// amber while an edit is unsaved or saving, red when a save failed
+	// (closing the note, or the next edit, tries again).
+	$: noteDot =
+		noteStatus === "failed"
+			? "bg-error-500"
+			: noteStatus !== "saved"
+				? "bg-warning-500"
+				: hasNote
+					? "bg-primary-500"
+					: "";
+	$: noteTitle =
+		noteStatus === "failed"
+			? "Note not saved: close it or keep typing to try again"
+			: noteStatus === "saving"
+				? "Saving the note…"
+				: noteStatus === "unsaved"
+					? "Note edited"
+					: hasNote
+						? "Note"
+						: "Add a note";
+	const STATUS = { unsaved: "Edited", saving: "Saving…", failed: "Not saved" };
+
 	const togglePane = (which) => dispatch("pane", pane === which ? null : which);
 	const run = (actionId) => dispatch("action", actionId);
 	const highlightLabel = (h) => (pair.Highlight === h.number ? `${h.label} (click to clear)` : h.label);
@@ -100,7 +125,7 @@
 		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-100 text-[12px] dark:bg-surface-800"
 		aria-label="Request details"
 	>
-		<div class="flex flex-none flex-nowrap items-center gap-0.5 border-b border-surface-300-600-token px-2 py-1">
+		<div class="flex h-7 flex-none flex-nowrap items-center gap-0.5 border-b border-surface-300-600-token px-2">
 			<button
 				class="ledger-drawer-expand {headerButton}"
 				title="Collapse the details to the rail"
@@ -167,8 +192,15 @@
 			{/each}
 		</div>
 
-		<div class="flex items-center justify-between {heading}">
+		<div class="flex items-center gap-2 {heading}">
 			Note
+			{#if pane === "note" && STATUS[noteStatus]}
+				<span
+					class="ledger-note-status normal-case tracking-normal {noteStatus === 'failed' ? 'text-error-500' : ''}"
+					role="status">{STATUS[noteStatus]}</span
+				>
+			{/if}
+			<span class="flex-1"></span>
 			<button
 				class="ledger-drawer-note-edit flex items-center gap-1 normal-case tracking-normal text-primary-500 hover:underline"
 				on:click={() => dispatch("pane", "note")}><Pencil size={10} />{hasNote ? "Edit" : "Add"}</button
@@ -233,7 +265,7 @@
 	</aside>
 {:else}
 	<nav
-		class="ledger-drawer-rail flex w-9 flex-none flex-col items-center border-r border-surface-300-600-token bg-surface-100 py-0.5 dark:bg-surface-800"
+		class="ledger-drawer-rail flex w-9 flex-none flex-col items-center border-r border-surface-300-600-token bg-surface-100 pb-0.5 dark:bg-surface-800"
 		aria-label="Request actions"
 	>
 		<button
@@ -284,13 +316,14 @@
 			<div class={divider}></div>
 			<button
 				class="ledger-drawer-note-toggle relative {railButton} {pane === 'note' ? 'text-primary-500' : ''}"
-				title={tip(hasNote ? "Note" : "Add a note", `${DRAWER}.view-note`, keymap)}
+				title={tip(noteTitle, `${DRAWER}.view-note`, keymap)}
 				aria-label="Note"
+				data-status={noteStatus}
 				aria-pressed={pane === "note"}
 				on:click={() => togglePane("note")}
 			>
 				<StickyNote size={14} />
-				{#if hasNote}<span class="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-primary-500"></span>{/if}
+				{#if noteDot}<span class="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full {noteDot}"></span>{/if}
 			</button>
 			<button
 				class="{railButton} {pane === 'metadata' ? 'text-primary-500' : ''}"

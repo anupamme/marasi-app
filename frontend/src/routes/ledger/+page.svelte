@@ -1233,14 +1233,21 @@
 			{/if}
 			{#if drawerOpen}
 				{#if !$drawerLayout.maximised}
-					<!-- svelte-ignore a11y-no-static-element-interactions -->
-					<div
-						class="ledger-drawer-resize h-1 flex-none cursor-row-resize border-t border-primary-500 hover:bg-primary-500/50"
-						title="Drag to resize the drawer"
-						on:pointerdown={startDrawerResize}
-					></div>
+					<!-- The handle takes no room: it draws over the border, so the
+					     drawer's content sits flush against it. -->
+					<div class="relative h-0 flex-none">
+						<!-- svelte-ignore a11y-no-static-element-interactions -->
+						<div
+							class="ledger-drawer-resize absolute inset-x-0 -top-1 z-30 h-2 cursor-row-resize hover:bg-primary-500/50"
+							title="Drag to resize the drawer"
+							on:pointerdown={startDrawerResize}
+						></div>
+					</div>
 				{/if}
-				<div class="min-h-0" style="flex: {$drawerLayout.maximised ? 1 : $drawerLayout.split} 1 0">
+				<div
+					class="min-h-0 {$drawerLayout.maximised ? '' : 'border-t border-primary-500'}"
+					style="flex: {$drawerLayout.maximised ? 1 : $drawerLayout.split} 1 0"
+				>
 					<LedgerDrawer
 						store={ledgerStore}
 						pair={$focused}

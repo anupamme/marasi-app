@@ -137,6 +137,10 @@ function emptySelection() {
     // The focused pair's response when it arrived after the pair was
     // selected, so the drawer can show it without reloading.
     incomingResponse: null,
+    // After ⌘A, the whole query instead of listed pairs: { text, exclusion,
+    // asOf, count }, where `count` is { count, capped } once counted. `ids`
+    // then holds the loaded rows it covers. null otherwise.
+    query: null,
   };
 }
 
@@ -249,6 +253,59 @@ export function focusedPair(state) {
 /** True when the pair with this ID is selected. */
 export function isSelected(state, id) {
   return id != null && state.selection.ids.has(String(id));
+}
+
+/** True when the selection is the whole query (⌘A), not listed pairs. */
+export function isAllSelected(state) {
+  return state.selection.query != null;
+}
+
+/**
+ * The selection as Marasi takes it (ADR-0033): { ids }, or after ⌘A
+ * { query, exclusion, as_of }, which never lists ids. null when nothing is
+ * selected.
+ */
+export function selectionSpec(state) {
+  const { ids, query } = state.selection;
+  if (query) return { query: query.text, exclusion: [...query.exclusion], as_of: query.asOf };
+  if (ids.size === 0) return null;
+  return { ids: [...ids] };
+}
+
+/** How many pairs are selected; null while a ⌘A selection is being counted. */
+export function selectionSize(state) {
+  const { ids, query } = state.selection;
+  return query ? query.count?.count ?? null : ids.size;
+}
+
+/**
+ * The matches a ⌘A selection leaves out because they arrived after its
+ * as_of: new matches not shown yet, and any shown since.
+ */
+export function newMatchesNotSelected(state) {
+  const query = state.selection.query;
+  if (!query) return 0;
+  const { asOf, count, newCount } = state.results;
+  let shown = 0;
+  if (asOf !== query.asOf && count && query.count && !count.capped && !query.count.capped) {
+    shown = Math.max(0, count.count - query.count.count);
+  }
+  return shown + newCount;
+}
+
+/**
+ * The status bar's "All N matching selected", plus "· M new matches not
+ * included" when there are new matches; "" without a ⌘A selection.
+ */
+export function allSelectedLabel(state) {
+  const query = state.selection.query;
+  if (!query) return "";
+  const n = query.count
+    ? `${query.count.count.toLocaleString("en-US")}${query.count.capped ? "+" : ""}`
+    : "…";
+  const left = newMatchesNotSelected(state);
+  const note = left ? ` · ${left.toLocaleString("en-US")} new ${matchNoun(left)} not included` : "";
+  return `All ${n} matching selected${note}`;
 }
 
 /** The selected pairs, in table order. */
@@ -391,6 +448,11 @@ export function createLedgerStore(api) {
     if (next.results.reset !== current.results.reset) {
       next = { ...next, selection: prunedSelection(next) };
     }
+    // A ⌘A selection covers every loaded row up to its as_of.
+    if (next.selection.query) {
+      const selection = withQueryRows(next);
+      if (selection !== next.selection) next = { ...next, selection };
+    }
     // The drawer keeps the focused pair's row while its page is out of the
     // window, and follows the row while it is in it. Focusing a pair the
     // table doesn't hold clears the selection.
@@ -415,6 +477,15 @@ export function createLedgerStore(api) {
   // with none left the drawer closes.
   function prunedSelection(state) {
     const selection = state.selection;
+    // A ⌘A selection lasts while the query and exclusion it was made under do.
+    if (selection.query) {
+      const { text, exclusion } = selection.query;
+      const same =
+        text === state.query.ranQuery &&
+        exclusion.length === state.exclusion.length &&
+        exclusion.every((type, i) => type === state.exclusion[i]);
+      return same ? selection : emptySelection();
+    }
     if (selection.ids.size === 0) return selection;
     const shown = pairIDSet(tableRows(state));
     if (![...selection.ids].some((id) => !shown.has(id))) return selection;
@@ -426,7 +497,25 @@ export function createLedgerStore(api) {
       anchor: ids.has(selection.anchor) ? selection.anchor : focus,
       focus,
       incomingResponse: focus === selection.focus ? selection.incomingResponse : null,
+      query: null,
     };
+  }
+
+  // The ⌘A selection with `ids` set to the loaded rows up to its as_of, or
+  // the same selection when they haven't changed. Pair IDs sort by capture
+  // time.
+  function withQueryRows(state) {
+    const selection = state.selection;
+    const ids = coveredRows(state, selection.query.asOf);
+    if (ids.length === selection.ids.size && ids.every((id) => selection.ids.has(id))) return selection;
+    return { ...selection, ids: new Set(ids) };
+  }
+
+  // The IDs of the loaded rows captured up to `asOf`.
+  function coveredRows(state, asOf) {
+    const ids = [];
+    for (const row of tableRows(state)) if (String(row.ID) <= asOf) ids.push(String(row.ID));
+    return ids;
   }
   function update(fn) {
     set(fn(current));
@@ -731,7 +820,27 @@ export function createLedgerStore(api) {
    * stays in the window (the table keeps it at the top). The rows above
    * load backward as the researcher scrolls up.
    */
-  async function showNewMatches() {
+  function showNewMatches() {
+    return readInPlace({ asOf: "" });
+  }
+
+  /**
+   * Reads the rows again in place under the same as_of, as after a bulk
+   * change Marasi reports no event for: rows a change removed from the
+   * results go, and the view stays where it is. Falls back to a reload.
+   */
+  async function refresh() {
+    const r = current.results;
+    if (r.loading || r.failed || !r.asOf) return reload();
+    const ok = await track(readInPlace({ asOf: r.asOf, keepNew: true }));
+    if (!ok) await reload();
+  }
+
+  // Reads the results again from the nearest cursor above the top row in
+  // view, under `asOf` ("" for a new one). `keepNew` keeps the new-match
+  // count, which a read under the same as_of leaves as it was. Returns false
+  // when the read failed.
+  async function readInPlace({ asOf, keepNew = false }) {
     const r = current.results;
     const rows = tableRows(current);
     const top = Math.min(Math.max(viewport.first, 0), Math.max(rows.length - 1, 0));
@@ -752,19 +861,24 @@ export function createLedgerStore(api) {
     let page;
     try {
       page = await api.queryTraffic(
-        pageRequest(current.query.ranQuery, current.sort, { Cursor: cursor, Limit: limit }),
+        pageRequest(current.query.ranQuery, current.sort, { Cursor: cursor, Limit: limit, AsOf: asOf }),
       );
       if (page.QueryError) throw new Error(page.QueryError.Message);
     } catch (err) {
-      console.error("Showing new matches failed:", err);
+      console.error("Reading the rows again failed:", err);
       if (gen === generation) reading = false;
-      return;
+      return false;
     }
-    if (gen !== generation) return;
+    if (gen !== generation) return true;
     reading = false;
     viewport = { ...viewport, first: top - from, last: viewport.last - from };
-    updateResults((r) => ({ ...resultsFromPage(page, cursor), reset: r.reset }));
+    updateResults((r) => ({
+      ...resultsFromPage(page, cursor),
+      reset: r.reset,
+      ...(keepNew ? { newCount: r.newCount, newCapped: r.newCapped } : {}),
+    }));
     await loadCount(gen);
+    return true;
   }
 
   /**
@@ -978,6 +1092,7 @@ export function createLedgerStore(api) {
       anchor: anchor == null ? null : String(anchor),
       focus: focusID,
       incomingResponse: sameID(previous.focus, focusID) ? previous.incomingResponse : null,
+      query: null,
     });
   }
 
@@ -1045,11 +1160,48 @@ export function createLedgerStore(api) {
     else selectPair(id);
   }
 
-  /** Selects every row the table lists; the top one is focused. */
+  /**
+   * ⌘A: selects the whole query, not just the loaded rows: its text, the
+   * exclusion and the results' as_of, so new matches stay out. The top row
+   * is focused. The selection's count arrives after.
+   */
   function selectAll() {
     const rows = tableRows(current);
-    if (rows.length === 0) return;
-    selectIDs(rows.map((row) => String(row.ID)), rows.at(-1).ID, rows[0].ID);
+    const { asOf, count } = current.results;
+    if (rows.length === 0 || !asOf) return;
+    const query = {
+      text: current.query.ranQuery,
+      exclusion: [...current.exclusion],
+      asOf,
+      count: count ?? null,
+    };
+    const focus = String(rows[0].ID);
+    const previous = current.selection;
+    setSelection({
+      ids: new Set(),
+      anchor: String(rows.at(-1).ID),
+      focus,
+      incomingResponse: sameID(previous.focus, focus) ? previous.incomingResponse : null,
+      query,
+    });
+    track(countSelection(query));
+  }
+
+  // Counts a ⌘A selection's pairs; dropped when the selection has changed.
+  async function countSelection(query) {
+    let counted;
+    try {
+      counted = await api.countTraffic(query.text, "", { AsOf: query.asOf });
+    } catch (err) {
+      console.error("Counting the selection failed:", err);
+      return;
+    }
+    const now = current.selection.query;
+    if (counted.QueryError || now?.asOf !== query.asOf || now.text !== query.text) return;
+    setSelection({
+      ...current.selection,
+      query: { ...now, count: { count: counted.Count, capped: counted.Capped } },
+    });
   }
 
   /**
@@ -1069,8 +1221,9 @@ export function createLedgerStore(api) {
    */
   function focusPair(id) {
     if (!isSelected(current, id)) return selectPair(id);
-    const { ids, anchor } = current.selection;
+    const { ids, anchor, query } = current.selection;
     selectIDs(ids, anchor, id);
+    if (query) setSelection({ ...current.selection, query });
   }
 
   /**
@@ -1304,21 +1457,24 @@ export function createLedgerStore(api) {
     getNote: (id) => api.getNote(id),
     setHighlight,
 
-    // Actions on selected pairs, one call per pair (ticket 11 moves them to
-    // Marasi's bulk operations). Each reports how many pairs it changed
-    // (`done`) and how many calls failed (`failed`).
+    refresh,
+
+    // Bulk actions on a selection in Marasi's shape (selectionSpec): one
+    // call each, which resolves to how many pairs Marasi changed. Marasi
+    // emits no event for them, so the rows are read again in place.
     sendToNewLaunchpad,
     sendToLaunchpadsEach,
-    addToLaunchpad: (ids, launchpadId) =>
-      linkEach(ids, (id) => api.linkToLaunchpad(id, launchpadId)),
-    linkToFinding: (ids, findingId) =>
-      linkEach(ids, (id) => api.linkToFinding(id, findingId)),
-    unlinkFromFinding: (ids, findingId) =>
-      linkEach(ids, (id) => api.unlinkFromFinding(id, findingId)),
-    linkToTestCase: (ids, testCaseId) =>
-      linkEach(ids, (id) => api.linkToTestCase(id, testCaseId)),
-    unlinkFromTestCase: (ids, testCaseId) =>
-      linkEach(ids, (id) => api.unlinkFromTestCase(id, testCaseId)),
+    addToLaunchpad: (selection, id) => link(selection, "launchpad", id),
+    removeFromLaunchpad: (selection, id) => unlink(selection, "launchpad", id),
+    linkToFinding: (selection, id) => link(selection, "finding", id),
+    unlinkFromFinding: (selection, id) => unlink(selection, "finding", id),
+    linkToTestCase: (selection, id) => link(selection, "test_case", id),
+    unlinkFromTestCase: (selection, id) => unlink(selection, "test_case", id),
+    /** Adds `text` to each pair's note, after a blank line when it has one. */
+    appendNote: (selection, text) => changed(api.appendNote(selection, text)),
+    clearNotes: (selection) => changed(api.clearNotes(selection)),
+    deleteFromProject,
+    findingEvidence,
     /** One Armory template per pair; `results` holds the templates made. */
     sendToArmory: (ids) => eachPair(ids, (id) => api.sendToArmory(id)),
     /** A draft finding with these pairs as its requests. */
@@ -1334,13 +1490,14 @@ export function createLedgerStore(api) {
    * when they no longer match the query. Resolves to the number of pairs
    * Marasi changed.
    */
-  async function setHighlight(ids, number) {
-    const selection = { ids: ids.map(String) };
+  async function setHighlight(target, number) {
+    // A selection (selectionSpec), or the IDs of listed pairs.
+    const selection = Array.isArray(target) ? { ids: target.map(String) } : target;
     const changed =
       number == null
         ? await api.clearHighlight(selection)
         : await api.setHighlight(selection, number);
-    const wanted = new Set(selection.ids);
+    const wanted = new Set(loadedIn(selection));
     updateResults((r) => ({
       ...r,
       chunks: mapChunks(r.chunks, (item) =>
@@ -1368,10 +1525,56 @@ export function createLedgerStore(api) {
     return { done: results.length, failed, results };
   }
 
-  // Links or unlinks pairs. A link can change what the query matches.
-  async function linkEach(ids, fn) {
-    const { done, failed } = await eachPair(ids, fn);
-    return { done, failed };
+  // The IDs of the loaded rows a selection covers.
+  function loadedIn(selection) {
+    if (selection.ids) return selection.ids.map(String);
+    const sameResults =
+      selection.query === current.query.ranQuery &&
+      selection.exclusion.join() === current.exclusion.join();
+    return sameResults ? coveredRows(current, selection.as_of) : [];
+  }
+
+  // Waits for a bulk operation's count, then reads the rows again in place
+  // so they show the change.
+  async function changed(operation) {
+    const count = await operation;
+    await refresh();
+    return count;
+  }
+
+  // Links or unlinks the selection and a launchpad, finding or test case. A
+  // link can change what the query matches.
+  function link(selection, kind, id) {
+    return changed(api.linkTraffic(selection, { Kind: kind, ID: id }));
+  }
+  function unlink(selection, kind, id) {
+    return changed(api.unlinkTraffic(selection, { Kind: kind, ID: id }));
+  }
+
+  /**
+   * Deletes the selection from the project, with its notes, links and
+   * WebSocket messages, then clears the selection and reads the rows again.
+   */
+  async function deleteFromProject(selection) {
+    const count = await api.deleteTraffic(selection);
+    clearSelection();
+    await refresh();
+    return count;
+  }
+
+  /**
+   * How many of the selection's pairs are evidence in a finding: for listed
+   * pairs from `findings` (each with Requests), for ⌘A by counting the
+   * query's pairs linked to a finding.
+   */
+  async function findingEvidence(selection, findings = []) {
+    if (selection.ids) {
+      const linked = new Set(findings.flatMap((finding) => (finding.Requests ?? []).map(String)));
+      return selection.ids.filter((id) => linked.has(String(id))).length;
+    }
+    const text = selection.query.trim() ? `(${selection.query}) AND finding:*` : "finding:*";
+    const counted = await api.countTraffic(text, "", { AsOf: selection.as_of });
+    return counted.QueryError ? 0 : counted.Count;
   }
 
   // A launchpad named for its pairs: "Request N", or "N requests".
@@ -1383,11 +1586,19 @@ export function createLedgerStore(api) {
     return [`${ids.length} requests`, "Launchpad for Requests " + numbers.join(", ")];
   }
 
-  /** Creates one launchpad and links every pair to it. */
-  async function sendToNewLaunchpad(ids) {
-    const launchpadId = await api.createLaunchpad(...launchpadName(ids));
-    const { done, failed } = await linkEach(ids, (id) => api.linkToLaunchpad(id, launchpadId));
-    return { launchpadId, done, failed };
+  /**
+   * Creates one launchpad and links the selection to it. Listed pairs name
+   * it after their numbers; a ⌘A selection after `count`.
+   */
+  async function sendToNewLaunchpad(selection, count = null) {
+    const name = selection.ids
+      ? launchpadName(selection.ids)
+      : count == null
+        ? ["Matching requests", "Launchpad for the matching requests"]
+        : [`${count.toLocaleString("en-US")} requests`, `Launchpad for ${count.toLocaleString("en-US")} requests`];
+    const launchpadId = await api.createLaunchpad(...name);
+    const linked = await link(selection, "launchpad", launchpadId);
+    return { launchpadId, count: linked };
   }
 
   /** Creates a launchpad for each pair, up to LAUNCHPADS_EACH_MAX. */
@@ -1397,9 +1608,10 @@ export function createLedgerStore(api) {
     }
     const { results, failed } = await eachPair(ids, async (id) => {
       const launchpadId = await api.createLaunchpad(...launchpadName([id]));
-      await api.linkToLaunchpad(id, launchpadId);
+      await api.linkTraffic({ ids: [String(id)] }, { Kind: "launchpad", ID: launchpadId });
       return launchpadId;
     });
+    await refresh();
     return { launchpadIds: results, done: results.length, failed };
   }
 }

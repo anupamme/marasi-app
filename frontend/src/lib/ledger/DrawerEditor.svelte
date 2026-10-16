@@ -1,6 +1,6 @@
 <script>
 	// One of the Ledger drawer's CodeMirror editors: the app's light and dark
-	// themes and Vim setting, 12px text like the drawer's chrome, filling its
+	// themes and Vim setting, 11px text like the table's rows and the drawer's chrome, filling its
 	// pane and scrolling inside it.
 	import CodeMirror from "svelte-codemirror-editor";
 	import { StreamLanguage } from "@codemirror/language";
@@ -20,7 +20,7 @@
 
 	const httpLanguage = StreamLanguage.define(http);
 	const styles = {
-		"&": { height: "100%", fontSize: "12px" },
+		"&": { height: "100%", fontSize: "11px" },
 		".cm-scroller": { overflow: "auto" },
 		// The first line sits flush against the drawer's top border.
 		".cm-content": { paddingTop: "0" },

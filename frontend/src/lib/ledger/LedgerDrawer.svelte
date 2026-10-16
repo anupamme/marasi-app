@@ -39,7 +39,8 @@
 	const dispatch = createEventDispatcher();
 	const jsonLanguage = javascript();
 
-	// Marasi is still moving older pairs' prettified copies out of metadata.
+	// Marasi is still moving older pairs' prettified copies out of metadata;
+	// the rail's Prettify button shows it as an amber dot.
 	$: prettifiedMoving = groupBuilding($jobsStore, "prettified");
 
 	// The full pair (GetRawDetails): undefined while it loads, null when the
@@ -103,10 +104,10 @@
 	$: syntaxMode = $marasiConfig.SyntaxMode;
 	$: hasResponse = Boolean(bodies.response);
 
-	const message = "p-3 text-[12px] opacity-50";
+	const message = "p-3 text-[11px] opacity-50";
 </script>
 
-<div class="ledger-drawer flex h-full min-h-0 bg-surface-50 text-[12px] dark:bg-surface-900">
+<div class="ledger-drawer flex h-full min-h-0 bg-surface-50 text-[11px] dark:bg-surface-900">
 	{#if highlight}
 		<div class="ledger-drawer-highlight w-[3px] flex-none" style="background: {highlight}" title="Highlighted"></div>
 	{/if}
@@ -118,6 +119,7 @@
 		{palette}
 		{note}
 		{noteStatus}
+		indexing={prettifiedMoving}
 		{findings}
 		{testCases}
 		{pane}
@@ -134,14 +136,6 @@
 		on:pane={(e) => (pane = e.detail)}
 	/>
 	<div class="flex min-w-0 flex-1 flex-col">
-		{#if prettifiedMoving}
-			<div
-				class="ledger-prettified-moving flex-none whitespace-nowrap border-b border-surface-300-600-token px-3 py-0.5 text-[11px] text-warning-800 dark:text-warning-400"
-				title="Marasi is still moving older formatted bodies, so some may not show prettified yet"
-			>
-				Some formatted bodies still moving
-			</div>
-		{/if}
 		<div class="flex min-h-0 flex-1">
 			<div class="ledger-drawer-request relative min-w-0 flex-1">
 				{#if details === undefined}

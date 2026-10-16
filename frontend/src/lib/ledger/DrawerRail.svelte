@@ -6,7 +6,7 @@
 	// linked to, the actions with their shortcuts, and the view toggles.
 	// Actions are dispatched as `action` with their catalog action id, for the
 	// page to run with its own handlers.
-	import { createEventDispatcher } from "svelte";
+	import { createEventDispatcher, onDestroy, tick } from "svelte";
 	import {
 		BookCheck,
 		Braces,
@@ -46,6 +46,8 @@
 	export let note = null;
 	/** The open note's save state: "saved", "unsaved", "saving" or "failed". */
 	export let noteStatus = "saved";
+	/** Whether Marasi is still indexing prettified bodies, so some may show raw. */
+	export let indexing = false;
 	/** The findings and test cases that list the pair. */
 	export let findings = [];
 	export let testCases = [];
@@ -108,6 +110,32 @@
 						? "Note"
 						: "Add a note";
 	const STATUS = { unsaved: "Edited", saving: "Saving…", failed: "Not saved" };
+	// The column's Note heading takes the same colour while the note is open.
+	$: noteTint =
+		pane !== "note"
+			? ""
+			: noteStatus === "failed"
+				? "text-error-500 !opacity-100"
+				: noteStatus !== "saved"
+					? "text-warning-500 !opacity-100"
+					: "text-primary-500 !opacity-100";
+	const INDEXING = "Indexing data: some bodies may not show prettified yet";
+	const indexingDot = "absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-warning-500";
+
+	// The rail's action list fades out at whichever edge cuts an action off.
+	let list;
+	let fadeTop = false;
+	let fadeBottom = false;
+	function measureFade() {
+		if (!list) return;
+		fadeTop = list.scrollTop > 0;
+		fadeBottom = list.scrollTop + list.clientHeight < list.scrollHeight - 1;
+	}
+	const resizes = typeof ResizeObserver === "undefined" ? null : new ResizeObserver(measureFade);
+	$: if (list && resizes) resizes.observe(list);
+	$: actions, expanded, tick().then(measureFade);
+	onDestroy(() => resizes?.disconnect());
+	$: fadeMask = `linear-gradient(to bottom, transparent, black ${fadeTop ? 16 : 0}px, black calc(100% - ${fadeBottom ? 16 : 0}px), transparent)`;
 
 	const togglePane = (which) => dispatch("pane", pane === which ? null : which);
 	const run = (actionId) => dispatch("action", actionId);
@@ -122,7 +150,7 @@
 
 {#if expanded}
 	<aside
-		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-100 text-[12px] dark:bg-surface-800"
+		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-100 text-[11px] dark:bg-surface-800"
 		aria-label="Request details"
 	>
 		<div class="flex h-7 flex-none flex-nowrap items-center gap-0.5 border-b border-surface-300-600-token px-2">
@@ -192,13 +220,13 @@
 			{/each}
 		</div>
 
-		<div class="flex items-center gap-2 {heading}">
+		<div
+			class="ledger-drawer-note-heading flex items-center gap-2 {heading} {noteTint}"
+			data-status={pane === "note" ? noteStatus : null}
+		>
 			Note
 			{#if pane === "note" && STATUS[noteStatus]}
-				<span
-					class="ledger-note-status normal-case tracking-normal {noteStatus === 'failed' ? 'text-error-500' : ''}"
-					role="status">{STATUS[noteStatus]}</span
-				>
+				<span class="ledger-note-status normal-case tracking-normal" role="status">{STATUS[noteStatus]}</span>
 			{/if}
 			<span class="flex-1"></span>
 			<button
@@ -208,12 +236,12 @@
 		</div>
 		{#if note}
 			<button
-				class="ledger-drawer-note-preview mx-3 line-clamp-3 flex-none whitespace-pre-line break-words text-left text-[12px] opacity-80 hover:opacity-100"
+				class="ledger-drawer-note-preview mx-3 line-clamp-3 flex-none whitespace-pre-line break-words text-left text-[11px] opacity-80 hover:opacity-100"
 				title="Open the note"
 				on:click={() => dispatch("pane", "note")}>{note}</button
 			>
 		{:else}
-			<p class="mx-3 flex-none text-[12px] opacity-40">{note === null ? "…" : "No note"}</p>
+			<p class="mx-3 flex-none text-[11px] opacity-40">{note === null ? "…" : "No note"}</p>
 		{/if}
 
 		{#if findings.length || testCases.length}
@@ -253,8 +281,12 @@
 		</button>
 
 		<div class={heading}>View</div>
-		<label class={row}>
-			<Sparkles size={13} class="flex-none opacity-70" /><span class="flex-1">Pretty</span>
+		<label class={row} title={indexing ? INDEXING : null}>
+			<span class="relative flex-none"
+				><Sparkles size={13} class="opacity-70" />{#if indexing}<span
+						class="ledger-drawer-indexing absolute -right-1 -top-1 h-1.5 w-1.5 rounded-full bg-warning-500"
+					></span>{/if}</span
+			><span class="flex-1">Pretty</span>
 			<input type="checkbox" class="checkbox h-3 w-3" bind:checked={prettify} />
 		</label>
 		<label class="{row} mb-2">
@@ -300,7 +332,13 @@
 			on:click={() => dispatch("step", 1)}><ChevronDown size={14} /></button
 		>
 		<div class={divider}></div>
-		<div class="flex min-h-0 flex-1 flex-col items-center overflow-y-auto [scrollbar-width:none]">
+		<div
+			class="flex min-h-0 flex-1 flex-col items-center overflow-y-auto [scrollbar-width:none]"
+			style="mask-image: {fadeMask}; -webkit-mask-image: {fadeMask}"
+			data-fade="{fadeTop ? 'top' : ''}{fadeTop && fadeBottom ? ' ' : ''}{fadeBottom ? 'bottom' : ''}"
+			bind:this={list}
+			on:scroll={measureFade}
+		>
 			{#each actions as action}
 				{#if action}
 					<button
@@ -334,11 +372,12 @@
 			>
 			<div class={divider}></div>
 			<button
-				class="{railButton} {prettify ? 'text-primary-500' : ''}"
-				title="Prettify"
+				class="relative {railButton} {prettify ? 'text-primary-500' : ''}"
+				title={indexing ? `Prettify. ${INDEXING}` : "Prettify"}
 				aria-label="Prettify"
 				aria-pressed={prettify}
-				on:click={() => (prettify = !prettify)}><Sparkles size={14} /></button
+				on:click={() => (prettify = !prettify)}
+				><Sparkles size={14} />{#if indexing}<span class="ledger-drawer-indexing {indexingDot}"></span>{/if}</button
 			>
 			<button
 				class="{railButton} {wrap ? 'text-primary-500' : ''}"

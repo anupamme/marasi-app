@@ -8,7 +8,7 @@
 //   listClientSettings(prefix) / getClientSetting(key)            project settings
 //   setClientSetting(key, value) / deleteClientSetting(key)
 //   migrateOldHighlights() -> { Ran, Highlighted, Cleared }
-import { derived, writable } from "svelte/store";
+import { derived, get, writable } from "svelte/store";
 import { DEFAULT_HIGHLIGHTS, effectivePalette } from "../lib/ledger/highlights.js";
 
 /** The project setting that holds highlight `number`'s label. */
@@ -57,18 +57,39 @@ export function createHighlightsStore(api) {
     }
   }
 
+  // Settings writes are optimistic: `store` takes `value` at once, then
+  // `write` runs. A failed write puts the old value back and rejects, so
+  // the caller can say so. Resolves to what `write` resolves to.
+  async function optimistic(store, value, write) {
+    const before = get(store);
+    store.set(value);
+    try {
+      return await write();
+    } catch (error) {
+      store.set(before);
+      throw error;
+    }
+  }
+
   /** Saves all 8 app highlights; resolves to the saved list or rejects. */
   async function save(highlights) {
-    const saved = await api.saveHighlights(highlights);
+    const saved = await optimistic(appHighlights, highlights, () => api.saveHighlights(highlights));
     appHighlights.set(saved);
     return saved;
   }
 
+  /** Puts the app highlights back to the defaults. */
   async function reset() {
-    const saved = await api.resetHighlights();
+    const defaults = DEFAULT_HIGHLIGHTS.map(({ color }) => ({ color, label: "" }));
+    const saved = await optimistic(appHighlights, defaults, () => api.resetHighlights());
     appHighlights.set(saved);
     return saved;
   }
+
+  const withoutLabel = (number) => {
+    const { [number]: _, ...rest } = labels;
+    return rest;
+  };
 
   /**
    * Renames highlight `number`. For this project, the label is the project's
@@ -79,24 +100,23 @@ export function createHighlightsStore(api) {
     const text = String(label ?? "").trim();
     const key = projectLabelKey(number);
     if (allProjects) {
-      const current = DEFAULT_HIGHLIGHTS.map((fallback, i) => ({
+      const next = DEFAULT_HIGHLIGHTS.map((fallback, i) => ({
         color: app?.[i]?.color || fallback.color,
         label: app?.[i]?.label ?? "",
       }));
-      current[number - 1] = { ...current[number - 1], label: text };
-      await save(current);
-      if (number in labels) {
+      next[number - 1] = { ...next[number - 1], label: text };
+      if (!(number in labels)) return save(next).then(() => {});
+      // The project's own label goes with the app label, so the new one shows.
+      await optimistic(projectLabels, withoutLabel(number), async () => {
+        await save(next);
         await api.deleteClientSetting(key);
-        projectLabels.update(({ [number]: _, ...rest }) => rest);
-      }
+      });
       return;
     }
     if (text) {
-      await api.setClientSetting(key, text);
-      projectLabels.update((current) => ({ ...current, [number]: text }));
+      await optimistic(projectLabels, { ...labels, [number]: text }, () => api.setClientSetting(key, text));
     } else {
-      await api.deleteClientSetting(key);
-      projectLabels.update(({ [number]: _, ...rest }) => rest);
+      await optimistic(projectLabels, withoutLabel(number), () => api.deleteClientSetting(key));
     }
   }
 

@@ -87,6 +87,58 @@ test("renaming for all projects writes the app label and drops the project's", a
   assert.equal(labels(store)[3], "Leaks tokens (app)");
 });
 
+// Makes `api[name]` wait until the returned release(), or fail(error).
+function hold(api, name) {
+  const real = api[name];
+  let release;
+  let fail;
+  const gate = new Promise((resolve, reject) => {
+    release = resolve;
+    fail = reject;
+  });
+  api[name] = async (...args) => {
+    await gate;
+    return real(...args);
+  };
+  return { release: () => release(), fail: (error) => fail(error) };
+}
+
+test("a rename shows at once and goes back when the write fails", async () => {
+  const api = fakeApi({ settings: { "ledger.highlight.4": "Old", "ledger.highlight_migrated": true } });
+  const store = createHighlightsStore(api);
+  await store.readApp();
+  await store.openProject();
+
+  let held = hold(api, "setClientSetting");
+  const renaming = store.rename(4, "New");
+  assert.equal(labels(store)[3], "New (project)");
+  held.fail(new Error("locked"));
+  await assert.rejects(renaming, /locked/);
+  assert.equal(labels(store)[3], "Old (project)");
+
+  held = hold(api, "saveHighlights");
+  const renamingAll = store.rename(4, "Everywhere", { allProjects: true });
+  assert.equal(labels(store)[3], "Everywhere (app)");
+  held.release();
+  await renamingAll;
+  assert.equal(labels(store)[3], "Everywhere (app)");
+  assert.equal(api.settings["ledger.highlight.4"], undefined);
+});
+
+test("saving the app highlights shows at once and goes back when the write fails", async () => {
+  const api = fakeApi();
+  const store = createHighlightsStore(api);
+  await store.readApp();
+  const next = DEFAULT_APP.map((h, i) => (i === 0 ? { ...h, label: "Auth" } : h));
+
+  const held = hold(api, "saveHighlights");
+  const saving = store.save(next);
+  assert.equal(get(store.appHighlights)[0].label, "Auth");
+  held.fail(new Error("disk full"));
+  await assert.rejects(saving, /disk full/);
+  assert.equal(get(store.appHighlights)[0].label, "");
+});
+
 test("a blank project label falls back to the app's", async () => {
   const api = fakeApi({ settings: { "ledger.highlight.2": "Mine", "ledger.highlight_migrated": true } });
   const store = createHighlightsStore(api);

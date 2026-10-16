@@ -394,11 +394,13 @@
 								role="menuitemradio"
 								aria-checked={swatch.checked === true ? "true" : swatch.checked === "mixed" ? "mixed" : "false"}
 								aria-label="Highlight: {swatch.label}"
-								title={swatch.label}
+								aria-disabled={swatch.disabled ? "true" : undefined}
+								title={swatch.disabled ? `${swatch.label}: ${swatch.hint}` : swatch.label}
 								class="flex h-4 w-4 flex-none items-center justify-center rounded-full border
 									{swatch.color ? 'border-transparent' : 'border-surface-500'}
 									{swatch.checked === true ? 'ring-2 ring-surface-900 dark:ring-surface-50' : swatch.checked === 'mixed' ? 'ring-1 ring-surface-500' : ''}
-									{active === i && swatchActive === k ? 'outline outline-2 outline-offset-1 outline-primary-500' : ''}"
+									{active === i && swatchActive === k ? 'outline outline-2 outline-offset-1 outline-primary-500' : ''}
+									{swatch.disabled ? 'cursor-not-allowed opacity-30' : ''}"
 								style={swatch.color ? `background: ${swatch.color}` : ""}
 								on:mouseenter={() => (swatchActive = k)}
 								on:mousedown|preventDefault
@@ -408,7 +410,11 @@
 							</button>
 						{/each}
 						<span class="ml-1 min-w-0 flex-1 truncate text-right text-[10px] opacity-70"
-							>{active === i ? item.swatches[swatchActive]?.label ?? "" : item.label}</span
+							>{active === i
+								? (item.swatches[swatchActive]?.disabled
+									? `${item.swatches[swatchActive].label}: ${item.swatches[swatchActive].hint}`
+									: item.swatches[swatchActive]?.label) ?? ""
+								: item.label}</span
 						>
 					</div>
 				{:else}

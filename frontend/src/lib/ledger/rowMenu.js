@@ -66,6 +66,7 @@ function highlightSwatches(pairs, palette) {
 }
 
 const hasResponse = (pair) => Number(pair?.StatusCode) > 0;
+const hasNote = (pair) => pair?.Metadata?.has_note == 1 || Boolean(pair?.Note);
 
 const quote = (value) => JSON.stringify(String(value));
 
@@ -192,6 +193,9 @@ function linkMenu({ key, noun, pairs, one, n, partial, targets, newActionId, new
           label: title(target),
           severity: target.Severity,
           checked,
+          // Linking pairs that are all linked already changes nothing.
+          disabled: checked === true,
+          hint: "Already linked",
           action: { type: linkType, id: target.ID, title: title(target) },
         })),
       },
@@ -389,6 +393,8 @@ export function menuFor(
                 label: "Clear notes…",
                 icon: "eraser",
                 danger: true,
+                disabled: !partial && !pairs.some(hasNote),
+                hint: "No notes to clear",
                 action: { type: "clear-notes" },
               },
             ],
@@ -399,9 +405,16 @@ export function menuFor(
       label: "Highlight",
       icon: "highlighter",
       // Under a partly loaded ⌘A selection, the pairs' own highlights are
-      // unknown.
+      // unknown. Otherwise a swatch every pair already has (None, when none
+      // has one) would change nothing, so it is disabled.
       swatches: highlightSwatches(pairs, palette).map((swatch) =>
-        partial ? { ...swatch, checked: undefined } : swatch,
+        partial
+          ? { ...swatch, checked: undefined, disabled: false }
+          : {
+              ...swatch,
+              disabled: swatch.checked === true,
+              hint: swatch.color ? "Already highlighted" : "Nothing to clear",
+            },
       ),
     },
     "sep",

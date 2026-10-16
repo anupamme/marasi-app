@@ -376,6 +376,8 @@
 			return toastError(`Failed to add ${describeTarget(target)} to "${name}"`, error);
 		}
 		refreshLaunchpads();
+		// A change that touched no pair says nothing.
+		if (!count) return;
 		toastJump(`Added ${requestCount(count)} to "${name}"`, "Jump to Launchpad", "/launchpad?id=" + launchpadId);
 	}
 
@@ -383,6 +385,7 @@
 		try {
 			const count = await ledgerStore.removeFromLaunchpad(target.selection, launchpadId);
 			refreshLaunchpads();
+			if (!count) return;
 			toastStore.trigger({
 				message: `Removed ${requestCount(count)} from "${name || "Untitled launchpad"}"`,
 				background: handoffBackground,
@@ -393,7 +396,7 @@
 	}
 
 	// Links or unlinks the selection and a finding or test case, and says how
-	// many pairs Marasi changed.
+	// many pairs Marasi changed (nothing, when it changed none).
 	async function changeLinks(target, run, verb, noun, title) {
 		let count;
 		try {
@@ -401,6 +404,7 @@
 		} catch (error) {
 			return toastError(`Failed to ${verb.toLowerCase()} ${describeTarget(target)}`, error);
 		}
+		if (!count) return;
 		const preposition = verb === "Linked" ? "to" : "from";
 		toastStore.trigger({
 			message: `${verb} ${requestCount(count)} ${preposition} ${noun} "${title}"`,
@@ -422,7 +426,7 @@
 				if (typeof text !== "string" || !text.trim()) return;
 				try {
 					const count = await ledgerStore.appendNote(target.selection, text);
-					toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
+					if (count) toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
 					toastError("Failed to append the note", error);
 				}
@@ -435,7 +439,7 @@
 		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", async () => {
 			try {
 				const count = await ledgerStore.clearNotes(target.selection);
-				toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
+				if (count) toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
 			} catch (error) {
 				toastError("Failed to clear the notes", error);
 			}
@@ -464,7 +468,7 @@
 					const count = await ledgerStore.deleteFromProject(target.selection);
 					refreshLaunchpads();
 					sitemapStore.reload();
-					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
+					if (count) toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
 					toastError(`Failed to delete ${what}`, error);
 				}
@@ -473,11 +477,12 @@
 	}
 
 	// Gives the pairs highlight `number`, or clears it when null, and says
-	// how many pairs Marasi changed.
+	// how many pairs Marasi changed (nothing, when it changed none).
 	async function highlightPairs(target, number) {
 		const name = number == null ? null : $highlightPalette[number - 1]?.label;
 		try {
 			const changed = await ledgerStore.setHighlight(target.selection, number);
+			if (!changed) return;
 			toastStore.trigger({
 				message:
 					number == null

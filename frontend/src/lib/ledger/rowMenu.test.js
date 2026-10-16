@@ -392,3 +392,30 @@ test("Select offers each highlight the selection has", () => {
   const rows = [pair("a", { Highlight: 3 }), pair("b", { Highlight: 1 }), pair("c", { Highlight: 3 })];
   assert.deepEqual(similarIDs("highlight", rows, rows, 3), ["a", "c"]);
 });
+
+test("actions that would change nothing are disabled, with a reason", () => {
+  const palette = effectivePalette([]);
+  const plain = menuFor([pair("a"), pair("b")], context({ palette }));
+  const swatches = item(plain, "highlight").swatches;
+  assert.equal(swatches[8].disabled, true, "None, with nothing highlighted");
+  assert.equal(swatches[8].hint, "Nothing to clear");
+  assert.equal(swatches[0].disabled, false);
+  assert.equal(item(plain, "n-clear").disabled, true, "Clear notes, with no notes");
+  assert.equal(item(plain, "n-clear").hint, "No notes to clear");
+  assert.equal(item(plain, "f-F1").disabled, true, "a finding every pair is linked to");
+  assert.equal(item(plain, "f-F1").hint, "Already linked");
+  assert.equal(item(plain, "f-F2").disabled, false);
+
+  const red = item(menuFor([pair("a", { Highlight: 1 }), pair("b", { Highlight: 1 })], context({ palette })), "highlight");
+  assert.equal(red.swatches[0].disabled, true, "a highlight every pair already has");
+  assert.equal(red.swatches[8].disabled, false);
+
+  const noted = menuFor([pair("a", { Metadata: { has_note: 1 } }), pair("b")], context());
+  assert.equal(item(noted, "n-clear").disabled, false);
+});
+
+test("under a partly loaded selection nothing is disabled for being a no-op", () => {
+  const menu = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
+  assert.ok(item(menu, "highlight").swatches.every((s) => !s.disabled));
+  assert.equal(item(menu, "n-clear").disabled, false);
+});

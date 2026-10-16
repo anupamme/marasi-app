@@ -10,7 +10,7 @@
 	import { autocompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
 	import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 	import { tags } from "@lezer/highlight";
-	import { fieldNamed, queryErrorRange, querySuggestions } from "../ledgerQueryEditor";
+	import { explicitCompletion, fieldNamed, queryErrorRange, querySuggestions } from "../ledgerQueryEditor";
 
 	export let value = "";
 	/** Marasi's error for `value`: { position (1-based), message }, or null. */
@@ -65,9 +65,17 @@
 		};
 	}
 
+	const explicit = explicitCompletion();
+
+	// Opens the suggestions on request (focus on an empty box, Ctrl-Space).
+	function requestCompletion(v) {
+		explicit.request(v.state.selection.main.head);
+		return startCompletion(v);
+	}
+
 	function completionSource(context) {
 		const before = context.state.sliceDoc(0, context.pos);
-		const result = querySuggestions(before, context.state.doc.length, context.explicit, readyMade);
+		const result = querySuggestions(before, context.state.doc.length, explicit.at(context.explicit, context.pos), readyMade);
 		if (!result) return null;
 		return {
 			from: result.from,
@@ -118,6 +126,12 @@
 					errorField,
 					placeholder("Search traffic…"),
 					EditorView.contentAttributes.of({ id, "aria-label": "Query", spellcheck: "false", autocorrect: "off", autocapitalize: "off" }),
+					// Ahead of the suggestion keymap's own Ctrl-Space, so the
+					// request is recorded as explicit (see explicitCompletion).
+					Prec.highest(keymap.of([
+						{ key: "Ctrl-Space", run: requestCompletion },
+						{ mac: "Alt-`", run: requestCompletion },
+					])),
 					autocompletion({ override: [completionSource], icons: false }),
 					// One line only: line breaks from typing or pasting become spaces.
 					EditorState.transactionFilter.of((tr) =>
@@ -140,7 +154,7 @@
 							return false;
 						},
 						focus: (_event, v) => {
-							if (!v.state.doc.length) setTimeout(() => startCompletion(v));
+							if (!v.state.doc.length) setTimeout(() => requestCompletion(v));
 						},
 					}),
 					EditorView.updateListener.of((update) => {

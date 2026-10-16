@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { queryErrorRange, querySuggestions } from "./ledgerQueryEditor.js";
+import { explicitCompletion, queryErrorRange, querySuggestions } from "./ledgerQueryEditor.js";
 
 // Ticket 06 supplies the real list; any list works here.
 const READY_MADE_QUERIES = [
@@ -150,4 +150,20 @@ test("an error with no position underlines nothing", () => {
 
 test("a dotted metadata path is still a metadata field", () => {
   assert.deepEqual(labels(querySuggestions("metadata.auth.user ", 19)), ["=", "!=", ":"]);
+});
+
+// CodeMirror keeps a completion "explicit" while its list stays open, so the
+// ready-made list opened on focus would make a pasted query offer every field
+// after its closing quote, and Enter would append "host".
+test("a request for suggestions is explicit only where it was made", () => {
+  const explicit = explicitCompletion();
+  assert.equal(explicit.at(true, 0), false);
+  explicit.request(0);
+  assert.equal(explicit.at(true, 0), true);
+  const pasted = 'response_body:"quokka-live"';
+  assert.equal(explicit.at(true, pasted.length), false);
+  assert.equal(querySuggestions(pasted, pasted.length, explicit.at(true, pasted.length)), null);
+  assert.equal(explicit.at(false, 0), false);
+  explicit.request(pasted.length);
+  assert.equal(explicit.at(true, pasted.length), true);
 });

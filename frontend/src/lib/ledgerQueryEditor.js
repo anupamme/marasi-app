@@ -62,6 +62,22 @@ export function queryErrorRange(doc, error) {
  * whole query's length. `readyMade` lists the { label, query } entries
  * offered in an empty box.
  */
+// CodeMirror keeps a completion explicit for as long as its list stays open,
+// so typing or pasting after the ready-made list (opened on focus) or
+// Ctrl-Space would keep offering every field. Count a request as explicit
+// only at the position where it was made.
+export function explicitCompletion() {
+  let requestedAt = -1;
+  return {
+    request(pos) {
+      requestedAt = pos;
+    },
+    at(explicit, pos) {
+      return explicit && pos === requestedAt;
+    },
+  };
+}
+
 export function querySuggestions(before, length, explicit = false, readyMade = []) {
   const pos = before.length;
   if (!before.trim() && readyMade.length) {

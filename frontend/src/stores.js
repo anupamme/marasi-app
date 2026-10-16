@@ -15,7 +15,7 @@ import { findingStore } from "./stores/findingStore";
 import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
-import { readHighlights } from "./stores/highlightsStore";
+import { highlightsStore, readHighlights } from "./stores/highlightsStore";
 import { ledgerStore } from "./stores/ledgerStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
@@ -165,6 +165,9 @@ export async function openProject() {
   // traffic for extensions load in the background.
   ledgerStore.populate();
   recentTraffic.populate();
+  // The project's highlight labels, then its old hex highlights migrated in
+  // the background; the Ledger reloads once they are numbers.
+  highlightsStore.openProject({ onMigrated: () => ledgerStore.reload() });
   await populateLogs();
   await populateScope();
   await populateCheckpoint();

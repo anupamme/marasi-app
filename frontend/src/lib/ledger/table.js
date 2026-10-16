@@ -139,26 +139,13 @@ export function badgeSlots(badges, slots = 3) {
   return { visible, more: badges.length - visible.length };
 }
 
-// The colours the old context menu wrote to `metadata.highlight`, by the
-// highlight number each becomes (the spec's migration).
-const LEGACY_HIGHLIGHTS = {
-  "#ef4444": 1,
-  "#eab308": 3,
-  "#22c55e": 4,
-  "#3b82f6": 6,
-  "#a855f7": 7,
-};
-
 /**
- * The colour of a row's highlight, or null. A highlight number (1-8) takes
- * its palette colour; an old hex highlight in metadata takes the colour of
- * the number it migrates to, or shows as is when it has none.
+ * The colour of a row's highlight (1-8) from the palette, or null. Old hex
+ * highlights in metadata are not drawn: opening the project migrates them
+ * to numbers.
  */
 export function rowHighlight(row, palette) {
   const number = row?.Highlight;
   if (number >= 1 && number <= palette.length) return palette[number - 1].color;
-  const hex = row?.Metadata?.highlight;
-  if (typeof hex !== "string" || !hex) return null;
-  const legacy = LEGACY_HIGHLIGHTS[hex.toLowerCase()];
-  return legacy ? palette[legacy - 1].color : hex;
+  return null;
 }

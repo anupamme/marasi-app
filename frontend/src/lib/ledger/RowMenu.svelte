@@ -4,7 +4,8 @@
 	// keys work as in a native menu: ↑↓ move, → or ↵ open a submenu, ←
 	// goes back, ↵ runs, Esc closes. The items come from rowMenu.js, computed
 	// from the selected pairs; choosing one dispatches `action` with the
-	// item's action for the page to run.
+	// item's action for the page to run. The highlight swatches sit on one
+	// row: ←→ move between them there, and hovering one shows its label.
 	import { createEventDispatcher, tick } from "svelte";
 	import {
 		Braces,
@@ -14,6 +15,7 @@
 		Copy,
 		EyeOff,
 		Filter,
+		Highlighter,
 		Link,
 		ListChecks,
 		Minus,
@@ -28,7 +30,7 @@
 		Unlink,
 		X,
 	} from "lucide-svelte";
-	import { filterMenu, isRunnable, menuFor, selectionSummary } from "./rowMenu.js";
+	import { filterMenu, isRunnable, isSwatchRow, menuFor, selectionSummary } from "./rowMenu.js";
 	import { menuDispatcher } from "../keybindings/app.js";
 	import { formatBinding } from "../keybindings/keys.js";
 	import { statusClass } from "../launchpad/format.js";
@@ -61,6 +63,7 @@
 		link: Link,
 		unlink: Unlink,
 		"eye-off": EyeOff,
+		highlighter: Highlighter,
 	};
 	const METHOD_CLASS = {
 		POST: "text-tertiary-500",
@@ -85,6 +88,8 @@
 	let active = -1;
 	let sub = null;
 	let subActive = -1;
+	// The swatch picked out on the highlight row, by keys or the pointer.
+	let swatchActive = 0;
 	let position = { left: 0, top: 0 };
 	let subPosition = { left: 0, top: 0 };
 
@@ -108,6 +113,7 @@
 		active = -1;
 		sub = null;
 		subActive = -1;
+		swatchActive = 0;
 	}
 
 	// `refocus` is false when the researcher clicked elsewhere, which keeps focus.
@@ -152,6 +158,10 @@
 
 	function choose(item) {
 		if (!isRunnable(item)) return;
+		if (isSwatchRow(item)) {
+			choose(item.swatches[swatchActive]);
+			return;
+		}
 		if (Array.isArray(item.sub)) {
 			openSub(list.indexOf(item));
 			return;
@@ -195,6 +205,10 @@
 				active = step(list, active, d);
 				sub = null;
 			}
+		} else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && !inSub && isSwatchRow(list[active])) {
+			handled();
+			const count = list[active].swatches.length;
+			swatchActive = (swatchActive + (event.key === "ArrowRight" ? 1 : -1) + count) % count;
 		} else if (event.key === "ArrowRight") {
 			if (!inSub && Array.isArray(list[active]?.sub)) {
 				handled();
@@ -304,6 +318,44 @@
 					<div class="my-1 border-t border-surface-300-600-token"></div>
 				{:else if item.heading}
 					<div class="px-3 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide opacity-50">{item.heading}</div>
+				{:else if isSwatchRow(item)}
+					<!-- svelte-ignore a11y-mouse-events-have-key-events -->
+					<div
+						data-menu-index={i}
+						data-menu-item={item.id}
+						class="ledger-highlight-swatches flex items-center gap-1 px-3 py-[5px] {active === i ? 'bg-primary-500/20' : ''}"
+						role="group"
+						aria-label={item.label}
+						on:mouseenter={() => {
+							active = i;
+							sub = null;
+						}}
+					>
+						<span class="w-4 flex-none opacity-70"><Highlighter size={13} /></span>
+						{#each item.swatches as swatch, k (swatch.id)}
+							<button
+								type="button"
+								data-menu-item={swatch.id}
+								role="menuitemradio"
+								aria-checked={swatch.checked === true ? "true" : swatch.checked === "mixed" ? "mixed" : "false"}
+								aria-label="Highlight: {swatch.label}"
+								title={swatch.label}
+								class="flex h-4 w-4 flex-none items-center justify-center rounded-full border
+									{swatch.color ? 'border-transparent' : 'border-surface-500'}
+									{swatch.checked === true ? 'ring-2 ring-surface-900 dark:ring-surface-50' : swatch.checked === 'mixed' ? 'ring-1 ring-surface-500' : ''}
+									{active === i && swatchActive === k ? 'outline outline-2 outline-offset-1 outline-primary-500' : ''}"
+								style={swatch.color ? `background: ${swatch.color}` : ""}
+								on:mouseenter={() => (swatchActive = k)}
+								on:mousedown|preventDefault
+								on:click={() => choose(swatch)}
+							>
+								{#if !swatch.color}<X size={10} class="opacity-70" />{/if}
+							</button>
+						{/each}
+						<span class="ml-1 min-w-0 flex-1 truncate text-right text-[10px] opacity-70"
+							>{active === i ? item.swatches[swatchActive]?.label ?? "" : item.label}</span
+						>
+					</div>
 				{:else}
 					{@const key = shortcut(item, $menuDispatcher)}
 					<button
@@ -327,7 +379,12 @@
 						on:click={() => choose(item)}
 					>
 						<span class="w-4 flex-none opacity-70">
-							{#if ICONS[item.icon]}<svelte:component this={ICONS[item.icon]} size={13} />{/if}
+							{#if item.color !== undefined}
+								<span
+									class="block h-3 w-3 rounded-full border {item.color ? 'border-transparent' : 'border-surface-500'}"
+									style={item.color ? `background: ${item.color}` : ""}
+								></span>
+							{:else if ICONS[item.icon]}<svelte:component this={ICONS[item.icon]} size={13} />{/if}
 						</span>
 						<span class="min-w-0 flex-1 truncate">
 							{#if item.trail?.length}<span class="opacity-50">{item.trail.join(" › ")} › </span>{/if}{item.label}

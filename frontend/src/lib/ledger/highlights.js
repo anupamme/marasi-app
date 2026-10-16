@@ -1,6 +1,7 @@
 // The highlight palette: what each highlight number (1-8) looks like and is
 // called. Colours are app-wide (the app config YAML). A label is the
 // project's label, else the app's, else the colour's own name (ADR 0004).
+import { hasQueryTerm } from "../ledgerQueryFields.js";
 
 /** The spec's default colours; `name` is the label of an unlabelled highlight. */
 export const DEFAULT_HIGHLIGHTS = Object.freeze(
@@ -15,6 +16,19 @@ export const DEFAULT_HIGHLIGHTS = Object.freeze(
     ["Pink", "#ec4899"],
   ].map(([name, color], i) => Object.freeze({ number: i + 1, name, color })),
 );
+
+/** The Highlights menu's "Any highlight" term. */
+export const ANY_HIGHLIGHT_TERM = "highlight:*";
+
+/** The query term for pairs with highlight `number`. */
+export const highlightTerm = (number) => `highlight = ${number}`;
+
+/** How many of the Highlights menu's terms the query has as conditions of their own. */
+export function activeHighlightCount(text) {
+  return [ANY_HIGHLIGHT_TERM, ...DEFAULT_HIGHLIGHTS.map((h) => highlightTerm(h.number))].filter(
+    (term) => hasQueryTerm(text, term),
+  ).length;
+}
 
 const present = (label) => (typeof label === "string" && label.trim() ? label.trim() : null);
 

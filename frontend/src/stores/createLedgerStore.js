@@ -134,9 +134,9 @@ function initialLayout() {
   return {
     // The sitemap dock: its width in px, and whether it is collapsed to a strip.
     dock: { width: LEDGER_DOCK.default, collapsed: false },
-    // The drawer's share of the table area's height, and whether it covers
-    // the table.
-    drawer: { split: DRAWER_SPLIT.default, maximised: false },
+    // The drawer's share of the table area's height, whether it covers the
+    // table, and whether its details column is expanded from the rail.
+    drawer: { split: DRAWER_SPLIT.default, maximised: false, expanded: false },
   };
 }
 
@@ -996,12 +996,30 @@ export function createLedgerStore(api) {
    * Merges `patch` into the Metadata of the loaded pair with this ID.
    */
   function patchMetadata(id, patch) {
-    updateResults((r) => ({
-      ...r,
-      chunks: mapChunks(r.chunks, (item) =>
-        sameID(item.ID, id) ? { ...item, Metadata: { ...(item.Metadata || {}), ...patch } } : item,
-      ),
-    }));
+    patchPairs([String(id)], (item) => ({ ...item, Metadata: { ...(item.Metadata || {}), ...patch } }));
+  }
+
+  // Applies `fn` to the loaded rows with these IDs, and to the drawer's pair
+  // when a jump opened it outside them. `fn` returns the item itself when
+  // nothing changes.
+  function patchPairs(ids, fn) {
+    const wanted = new Set(ids);
+    update((state) => {
+      const chunks = mapChunks(state.results.chunks, (item) => (wanted.has(String(item.ID)) ? fn(item) : item));
+      const outside = state.focusRow;
+      const focusRow = outside && wanted.has(String(outside.ID)) ? fn(outside) : outside;
+      if (chunks === state.results.chunks && focusRow === outside) return state;
+      return { ...state, results: { ...state.results, chunks }, focusRow };
+    });
+  }
+
+  /**
+   * Saves `text` as the pair's note, and marks whether the pair has one.
+   * Rejects, leaving the mark as it was, when Marasi fails to save it.
+   */
+  async function saveNote(id, text) {
+    await api.updateNote(id, text);
+    patchMetadata(id, { has_note: text.length > 0 ? 1 : 0 });
   }
 
   /**
@@ -1429,6 +1447,9 @@ export function createLedgerStore(api) {
         ...layout,
         drawer: { ...layout.drawer, split: clampDrawerSplit(split) },
       })),
+    /** Expands the drawer's details column from its rail, or collapses it. */
+    setDrawerExpanded: (expanded) =>
+      updateLayout((layout) => ({ ...layout, drawer: { ...layout.drawer, expanded: Boolean(expanded) } })),
     /** Maximises the open drawer over the table, or restores it. */
     toggleDrawerMaximised: () => {
       if (!isDrawerOpen(current)) return;
@@ -1584,6 +1605,7 @@ export function createLedgerStore(api) {
     getDetails: (id) => api.getRawDetails(id),
     getMetadata: (id) => api.getMetadata(id),
     getNote: (id) => api.getNote(id),
+    saveNote,
     setHighlight,
 
     refresh,
@@ -1626,15 +1648,9 @@ export function createLedgerStore(api) {
       number == null
         ? await api.clearHighlight(selection)
         : await api.setHighlight(selection, number);
-    const wanted = new Set(loadedIn(selection));
-    updateResults((r) => ({
-      ...r,
-      chunks: mapChunks(r.chunks, (item) =>
-        wanted.has(String(item.ID)) && (item.Highlight ?? null) !== number
-          ? { ...item, Highlight: number }
-          : item,
-      ),
-    }));
+    patchPairs(loadedIn(selection), (item) =>
+      (item.Highlight ?? null) !== number ? { ...item, Highlight: number } : item,
+    );
     return changed;
   }
 

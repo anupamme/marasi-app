@@ -1031,3 +1031,38 @@ test("query results count the pairs the exclusion hides too", async () => {
   const asOf = get(store).results.asOf;
   assert.ok(countCalls(api).some((req) => req.Query === "early" && req.IgnoreExclusion && req.AsOf === asOf));
 });
+
+test("a metadata patch reaches a pair a jump opened outside the loaded rows", async () => {
+  const store = createLedgerStore(fakeApi({ traffic: pairs(1000) }));
+  await store.populate();
+  await store.sortBy("host");
+  const { pair: outside } = await store.goToNumber(201);
+  store.patchMetadata(outside.ID, { has_note: 1 });
+  assert.equal(focusedPair(get(store)).Metadata.has_note, 1);
+});
+
+test("saving a note writes it through the api and marks whether the pair has one", async () => {
+  const api = fakeApi({ traffic: pairs(2) });
+  const saved = [];
+  api.updateNote = async (id, text) => saved.push([id, text]);
+  const store = createLedgerStore(api);
+  await store.populate();
+
+  await store.saveNote(idOf(1), "token leaks here");
+  assert.deepEqual(saved, [[idOf(1), "token leaks here"]]);
+  assert.equal(store.findShownPair(idOf(1)).Metadata.has_note, 1);
+
+  await store.saveNote(idOf(1), "");
+  assert.equal(store.findShownPair(idOf(1)).Metadata.has_note, 0, "an empty note is no note");
+});
+
+test("a failed note save leaves the pair's note mark as it was and rejects", async () => {
+  const api = fakeApi({ traffic: pairs(1) });
+  api.updateNote = async () => {
+    throw new Error("disk full");
+  };
+  const store = createLedgerStore(api);
+  await store.populate();
+  await assert.rejects(store.saveNote(idOf(1), "x"), /disk full/);
+  assert.equal(store.findShownPair(idOf(1)).Metadata?.has_note, undefined);
+});

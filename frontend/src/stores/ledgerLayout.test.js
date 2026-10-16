@@ -185,3 +185,17 @@ test("the keybinding drawer state says whether the drawer is open and what the p
     },
   });
 });
+
+test("the drawer's details column starts collapsed and stays as left across closing, reopening and a project switch", async () => {
+  const store = await storeWith([pair("a"), pair("b")]);
+  assert.equal(get(store).layout.drawer.expanded, false);
+  store.selectPair("a");
+  store.setDrawerExpanded(true);
+  store.clearSelection();
+  store.selectPair("b");
+  assert.equal(get(store).layout.drawer.expanded, true, "closing and reopening keeps it");
+  store.clear();
+  assert.equal(get(store).layout.drawer.expanded, true, "a project switch keeps it");
+  store.setDrawerExpanded(false);
+  assert.equal(get(store).layout.drawer.expanded, false);
+});

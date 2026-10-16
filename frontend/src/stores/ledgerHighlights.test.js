@@ -86,3 +86,17 @@ test("a failed highlight leaves the rows as they were", async () => {
   await assert.rejects(store.setHighlight(["a"], 2), /locked/);
   assert.deepEqual(highlights(store), { a: 4 });
 });
+
+test("highlighting repaints the drawer's pair when a jump opened it outside the loaded rows", async () => {
+  const api = fakeApi({ traffic: [pair("b"), pair("a")], changed: 1 });
+  api.queryTraffic = async (req) => {
+    if (req.Query.startsWith("number")) return { Items: [pair("z", { Number: 9 })], NextCursor: null, AsOf: "p9", IndexComplete: true };
+    return { Items: [pair("b"), pair("a")], NextCursor: null, PrevCursor: null, AsOf: "p9", IndexComplete: true };
+  };
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.sortBy("host");
+  await store.goToNumber(9);
+  await store.setHighlight(["z"], 4);
+  assert.equal(get(store).focusRow.Highlight, 4);
+});

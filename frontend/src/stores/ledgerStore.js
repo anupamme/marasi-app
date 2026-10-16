@@ -21,6 +21,7 @@ import {
   SetDefaultContentTypeExclusion,
   SetHighlight,
   UnlinkTraffic,
+  UpdateNote,
 } from "../lib/wailsjs/go/main/App";
 import { armoryStore } from "./armoryStore";
 import { findingStore } from "./findingStore";
@@ -74,6 +75,7 @@ export const ledgerStore = createLedgerStore({
   getRawDetails: (id) => GetRawDetails(id),
   getMetadata: (id) => GetMetadata(id),
   getNote: (id) => GetNote(id),
+  updateNote: (id, text) => UpdateNote(id, text),
   // A selection is Marasi's: { ids }, or { query, exclusion, as_of } after
   // ⌘A. Each bulk call resolves to how many pairs changed.
   setHighlight: (selection, highlight) => SetHighlight(selection, highlight),

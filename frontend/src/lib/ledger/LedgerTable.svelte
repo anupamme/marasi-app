@@ -195,6 +195,17 @@
 		const selector = `[data-row="${CSS.escape(String(id))}"]`;
 		return viewport?.querySelector(selector)?.getBoundingClientRect() ?? null;
 	}
+
+	// The full content type under the pointer, in one fixed-positioned
+	// tooltip for the whole table so the cell doesn't clip it (as the
+	// badges' "+N" list does). It hangs from the cell's right edge: Type
+	// sits near the window's right side.
+	let typeTip = null;
+	function showTypeTip(event, contentType) {
+		if (!contentType) return;
+		const rect = event.currentTarget.getBoundingClientRect();
+		typeTip = { text: contentType, right: window.innerWidth - rect.right, top: rect.bottom + 4 };
+	}
 </script>
 
 <svelte:window on:pointerup={endSweep} on:blur={endSweep} />
@@ -203,7 +214,10 @@
 <div
 	bind:this={viewport}
 	bind:clientHeight={height}
-	on:scroll={onScroll}
+	on:scroll={(event) => {
+		typeTip = null;
+		onScroll(event);
+	}}
 	on:keydown={onKeydown}
 	tabindex="0"
 	class="ledger-table no-select relative h-full overflow-auto font-mono focus:outline-none"
@@ -270,13 +284,29 @@
 					<span title={row.Host}>{row.Host ?? ""}</span>
 					<span title={row.Path}>{row.Path ?? ""}</span>
 					<span class="text-right {statusClass(row.StatusCode)}">{statusText(row.StatusCode)}</span>
-					<span class="opacity-60" title={row.ContentType}>{shortType(row.ContentType)}</span>
+					<!-- svelte-ignore a11y-no-static-element-interactions -->
+					<span
+						class="ledger-type opacity-60"
+						aria-label={row.ContentType || undefined}
+						on:mouseenter={(event) => showTypeTip(event, row.ContentType)}
+						on:mouseleave={() => (typeTip = null)}>{shortType(row.ContentType)}</span
+					>
 					<span class="text-right opacity-60">{formatSize(row.Length)}</span>
 				</div>
 			{/each}
 		</div>
 	</div>
 </div>
+
+{#if typeTip}
+	<div
+		class="ledger-type-tip pointer-events-none fixed z-[80] max-w-[36rem] break-all border border-surface-300-600-token bg-surface-100-800-token px-2 py-1 font-mono text-[11px] shadow-xl"
+		style="right: {typeTip.right}px; top: {typeTip.top}px"
+		role="tooltip"
+	>
+		{typeTip.text}
+	</div>
+{/if}
 
 <style>
 	.ledger-table {

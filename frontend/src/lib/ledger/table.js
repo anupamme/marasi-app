@@ -17,11 +17,11 @@ export const LEDGER_COLUMNS = Object.freeze([
   { key: "number", label: "#", width: "52px", align: "right", sort: "requested_at" },
   { key: "badges", label: "", width: "46px" },
   { key: "time", label: "Time", width: "70px", sort: "requested_at" },
-  { key: "method", label: "Method", width: "64px", sort: "method" },
+  { key: "method", label: "Method", width: "80px", sort: "method" },
   { key: "host", label: "Host", width: "170px", sort: "host" },
   { key: "path", label: "Path", width: "minmax(180px,1fr)", sort: "path" },
   { key: "status", label: "Status", width: "60px", align: "right", sort: "status_code" },
-  { key: "type", label: "Type", width: "56px", sort: "content_type" },
+  { key: "type", label: "Type", width: "120px", sort: "content_type" },
   { key: "size", label: "Size", width: "62px", align: "right", sort: "length" },
 ]);
 

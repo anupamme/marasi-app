@@ -61,11 +61,12 @@ test("when rows change around it, the top row in view keeps its place", () => {
   assert.equal(keepRowInPlace({ anchorID: null, offset: 0, rows: rows("a"), rowHeight: 22 }), null);
 });
 
-// Method fits OPTIONS, and Status and Type fit their label with the sort arrow.
+// Method fits OPTIONS and its label with the sort arrow; Type fits most
+// subtypes (x-protobuf, javascript) and its tooltip shows the rest.
 test("every row lays its cells out on the same grid; the path takes the spare width", () => {
   assert.equal(
     rowTemplate(LEDGER_COLUMNS),
-    "52px 46px 70px 64px 170px minmax(180px,1fr) 60px 56px 62px",
+    "52px 46px 70px 80px 170px minmax(180px,1fr) 60px 120px 62px",
   );
 });
 

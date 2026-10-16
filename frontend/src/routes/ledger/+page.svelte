@@ -1025,7 +1025,7 @@
 	<div class="flex min-w-0 flex-1 flex-col">
 		<!-- Toolbar: the query box, then the menus. -->
 		<div
-			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-100-800-token"
+			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-50 dark:bg-surface-900"
 		>
 			<div class="flex min-w-0 flex-1 items-center gap-2 pl-3">
 				{#if $queryPending}

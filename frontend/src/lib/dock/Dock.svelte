@@ -82,7 +82,7 @@
 {#if collapsed && !dragging}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<aside
-		class="lp-strip z-30 flex w-11 flex-none flex-col items-center gap-2 border-r border-surface-500/30 bg-surface-100 py-2 dark:bg-surface-800"
+		class="lp-strip z-30 flex w-11 flex-none flex-col items-center gap-2 border-r border-surface-500/30 bg-surface-50 py-2 dark:bg-surface-900"
 		on:mouseenter={() => peek(true, 150)}
 		on:mouseleave={() => peek(false, 250)}
 	>

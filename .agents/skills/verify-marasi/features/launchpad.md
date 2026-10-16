@@ -33,12 +33,12 @@ Seed a short launchpad without the Ledger: create it, turn HTTPS off, and Launch
 
 ## Driving it with Chrome CDP
 
-Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`, which the dock paints on every visit (the dock always mounts expanded). Proven handoff from Ledger:
+Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`, which the dock paints on every visit (the dock always mounts expanded). A `launchpad` drive therefore fails while the dock is collapsed to its strip: expand it (or start the recipe before collapsing) first. Proven handoff from Ledger:
 
 ```json
 {"name":"send-to-launchpad","steps":[
  {"click":".ledger-row","hasText":"/compass-allowed"},{"waitSelector":".ledger-drawer"},
- {"key":"cmd+l"},{"waitText":"sent to a new launchpad"},
+ {"key":"cmd+l"},{"waitText":"to a new launchpad"},
  {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".ledger-drawer"},
  {"waitText":"Group by status"}]}
 ```
@@ -49,7 +49,7 @@ Both Ledger paths, `⌘L` with one row selected and the row menu's `Send to Laun
 
 ```json
 {"name":"right-click-jump","steps":[
- {"click":".ledger-row","hasText":"/seed-7","button":"right"},{"click":"[data-menu-item=launchpad]"},{"click":"[data-menu-item=lp-new]"},{"waitText":"sent to a new launchpad"},
+ {"click":".ledger-row","hasText":"/seed-7","button":"right"},{"click":"[data-menu-item=launchpad]"},{"click":"[data-menu-item=lp-new]"},{"waitText":"to a new launchpad"},
  {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},
  {"waitText":"/seed-7","within":".lp-editor"},{"waitSelector":".lp-entry[aria-current=true]"}]}
 ```

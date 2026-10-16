@@ -2,7 +2,8 @@
 	// The Ledger table: one windowed list with fixed-height rows, so only the
 	// rows in view render however many the table holds. A highlighted row
 	// has a 3px stripe in its colour and a light tint; the stripe stays when
-	// the row is selected.
+	// the row is selected. Selected rows are tinted; the focused one, which
+	// the drawer shows, is also outlined.
 	import { createEventDispatcher } from "svelte";
 	import RowBadges from "./RowBadges.svelte";
 	import {
@@ -23,6 +24,8 @@
 	export let rows = [];
 	/** The focused pair's ID, or null. */
 	export let focusId = null;
+	/** The selected pairs' IDs, as strings. */
+	export let selectedIds = new Set();
 	/** The highlight palette (stores/highlightsStore.js). */
 	export let palette = [];
 	/** A pair's number for the # column. */
@@ -74,14 +77,57 @@
 		viewport?.focus();
 	}
 
+	// ↑/↓ move the selection (⇧ extends it), ⌘A selects every row, and the
+	// menu key or ⇧F10 opens the row menu. Esc belongs to the page.
 	function onKeydown(event) {
-		if (event.metaKey || event.ctrlKey || event.altKey) return;
+		const primary = event.metaKey || event.ctrlKey;
+		if (primary && !event.altKey && !event.shiftKey && event.key.toLowerCase() === "a") {
+			event.preventDefault();
+			dispatch("selectall");
+			return;
+		}
+		if (event.key === "ContextMenu" || (event.key === "F10" && event.shiftKey)) {
+			event.preventDefault();
+			dispatch("menukey");
+			return;
+		}
+		if (primary || event.altKey) return;
 		if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			event.preventDefault();
-			dispatch("step", event.key === "ArrowDown" ? 1 : -1);
+			dispatch("step", { step: event.key === "ArrowDown" ? 1 : -1, extend: event.shiftKey });
 		}
 	}
+
+	// Pressing a row selects it: plain starts a drag sweep, ⌘/Ctrl toggles
+	// and ⇧ selects a range. Right-clicks belong to the menu.
+	let sweeping = false;
+	function onRowPointerDown(event, id) {
+		if (event.button !== 0) return;
+		const toggle = event.metaKey || event.ctrlKey;
+		if (toggle || event.shiftKey) {
+			dispatch("click", { id, toggle, range: event.shiftKey });
+			return;
+		}
+		sweeping = true;
+		dispatch("sweepstart", id);
+	}
+	function onRowPointerEnter(id) {
+		if (sweeping) dispatch("sweep", id);
+	}
+	function endSweep() {
+		if (!sweeping) return;
+		sweeping = false;
+		dispatch("sweepend");
+	}
+
+	/** The on-screen box of the row with this ID, or null when it isn't rendered. */
+	export function rowRect(id) {
+		const selector = `[data-row="${CSS.escape(String(id))}"]`;
+		return viewport?.querySelector(selector)?.getBoundingClientRect() ?? null;
+	}
 </script>
+
+<svelte:window on:pointerup={endSweep} on:blur={endSweep} />
 
 <!-- svelte-ignore a11y-no-noninteractive-tabindex -->
 <div
@@ -93,6 +139,7 @@
 	class="ledger-table no-select relative h-full overflow-auto font-mono focus:outline-none"
 	role="grid"
 	aria-rowcount={rows.length}
+	aria-multiselectable="true"
 >
 	<div
 		class="lg-row sticky top-0 z-10 border-b border-primary-500 bg-surface-100 font-sans text-[11px] font-semibold dark:bg-surface-800"
@@ -108,20 +155,24 @@
 	<div style="height: {rows.length * ROW_HEIGHT}px; position: relative">
 		<div style="position: absolute; left: 0; right: 0; top: {range.start * ROW_HEIGHT}px">
 			{#each shown as row (String(row.ID))}
-				{@const selected = sameID(row.ID, focusId)}
+				{@const selected = selectedIds.has(String(row.ID))}
+				{@const focused = sameID(row.ID, focusId)}
 				{@const color = rowHighlight(row, palette)}
 				<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
 				<div
 					class="lg-row ledger-row border-b border-surface-300/50 dark:border-surface-700/60 {selected
-						? 'bg-primary-500/25 outline outline-1 -outline-offset-1 outline-primary-500'
-						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'}"
+						? 'bg-primary-500/25'
+						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'} {focused
+						? 'outline outline-1 -outline-offset-1 outline-primary-500'
+						: ''}"
 					style="grid-template-columns: {template}; height: {ROW_HEIGHT}px;{color
 						? ` box-shadow: inset 3px 0 0 ${color};`
 						: ''}{color && !selected ? ` background-color: ${color}22;` : ''}"
 					data-row={String(row.ID)}
 					role="row"
 					aria-selected={selected}
-					on:click={() => dispatch("select", row.ID)}
+					on:pointerdown={(event) => onRowPointerDown(event, row.ID)}
+					on:pointerenter={() => onRowPointerEnter(row.ID)}
 					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
 				>
 					<span class="text-right tabular-nums opacity-60">{numberOf(row)}</span>

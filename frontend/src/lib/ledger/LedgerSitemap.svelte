@@ -4,8 +4,8 @@
 	// busiest children with "Show more". Choosing a node narrows the query;
 	// the eye-off button leaves it out. Rows come from the sitemap store
 	// (sitemapRows); this component only renders.
-	import { createEventDispatcher } from "svelte";
 	import { modeCurrent } from "@skeletonlabs/skeleton";
+	import { createEventDispatcher } from "svelte";
 	import {
 		ChevronDown,
 		ChevronRight,
@@ -20,8 +20,8 @@
 		Search,
 		X,
 	} from "lucide-svelte";
-	import { primaryVariant } from "../launchpad/format.js";
 	import { isPlaceholder, sitemapExcludeTerm, sitemapTerm } from "./sitemap.js";
+	import { primaryVariant } from "../launchpad/format.js";
 	import { hostCountLabel, sitemapRows, sitemapScope, STEP } from "../../stores/sitemapStore";
 
 	export let store;
@@ -97,13 +97,14 @@
 			aria-label="Sitemap counts"
 			title={querying ? "" : "Run a query to count only matching traffic"}
 		>
-			{#each [["all", "All traffic"], ["matching", "Matching the query"]] as [key, label], i}
+			{#each [["all", "All", "Count all traffic"], ["matching", "Matching", "Count only traffic matching the query"]] as [key, label, hint]}
 				<button
-					class="flex-1 border border-surface-500/40 px-2 py-0.5 {i === 0 ? 'rounded-l' : '-ml-px rounded-r'} {scope === key
+					class="flex-1 px-2 py-1 {scope === key
 						? primary
-						: 'hover:bg-surface-200 dark:hover:bg-surface-700'} {key === 'matching' && !querying
+						: 'bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600'} {key === 'matching' && !querying
 						? 'cursor-not-allowed opacity-40'
 						: ''}"
+					title={querying || key === "all" ? hint : ""}
 					aria-pressed={scope === key}
 					disabled={key === "matching" && !querying}
 					on:click={() => store.setScope(key)}>{label}</button

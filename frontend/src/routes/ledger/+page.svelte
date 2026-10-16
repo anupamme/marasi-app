@@ -1208,27 +1208,31 @@
 			{/if}
 			{#if $newLabel && !(drawerOpen && $drawerLayout.maximised)}
 				<div class="pointer-events-none absolute left-0 right-0 top-8 z-20 flex justify-center">
-					{#if $newKind === "top"}
-						<button
-							id="ledgerNewMatches"
-							type="button"
-							class="btn btn-sm pointer-events-auto rounded-full py-0.5 text-xs shadow-lg {primary}"
-							title="Back to the top"
-							on:click={showNewAtTop}
-						>
-							{$newLabel}
-						</button>
-					{:else}
-						<button
-							id="ledgerNewMatches"
-							type="button"
-							class="btn btn-sm pointer-events-auto rounded-full py-0.5 text-xs shadow-lg {primary}"
-							title="Show them, keeping your place"
-							on:click={() => ledgerStore.showNewMatches()}
-						>
-							{$newLabel} · Show
-						</button>
-					{/if}
+					<!-- The page colour behind the button keeps light mode's see-through
+					     primary variant readable over the rows. -->
+					<div class="pointer-events-auto bg-surface-50 shadow-lg dark:bg-surface-900">
+						{#if $newKind === "top"}
+							<button
+								id="ledgerNewMatches"
+								type="button"
+								class="btn btn-sm rounded-none py-0.5 text-xs {primary}"
+								title="Back to the top"
+								on:click={showNewAtTop}
+							>
+								{$newLabel}
+							</button>
+						{:else}
+							<button
+								id="ledgerNewMatches"
+								type="button"
+								class="btn btn-sm rounded-none py-0.5 text-xs {primary}"
+								title="Show them, keeping your place"
+								on:click={() => ledgerStore.showNewMatches()}
+							>
+								{$newLabel} · Show
+							</button>
+						{/if}
+					</div>
 				</div>
 			{/if}
 		</div>

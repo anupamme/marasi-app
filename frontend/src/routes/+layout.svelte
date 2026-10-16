@@ -51,6 +51,7 @@
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
+	import { sitemapStore } from "../stores/sitemapStore";
 	import { recentTraffic } from "../stores/recentTrafficStore";
 	import {
 		EventsOn,
@@ -239,6 +240,7 @@
 			}
 			EventsOn("request", (newRequest) => {
 				ledgerStore.onRequest(newRequest);
+				sitemapStore.onRequest(newRequest);
 				recentTraffic.onRequest(newRequest);
 				launchpadStore.onRequest(newRequest);
 			});
@@ -250,6 +252,7 @@
 			);
 			EventsOn("response", (newResponse) => {
 				ledgerStore.onResponse(newResponse);
+				sitemapStore.onResponse(newResponse);
 				recentTraffic.onResponse(newResponse);
 				launchpadStore.onResponse(newResponse);
 				if (

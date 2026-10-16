@@ -19,6 +19,7 @@
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
+import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
@@ -94,8 +95,16 @@ function initialState(runID = 0, layout = initialLayout()) {
     selection: emptySelection(),
     // The live view, oldest first.
     items: [],
-    // Content types the table hides.
+    // Content types the table hides: exact types and major/* values.
     exclusion: [],
+    // True when the project keeps its own exclusion, false when it follows
+    // the app default, null until known.
+    ownExclusion: null,
+    // The app default exclusion, once loaded for Settings.
+    defaultExclusion: null,
+    // The Types menu's pair counts per content type (CountContentTypes'
+    // Counts), loaded when the menu opens. `complete` is the sitemap job's.
+    typeCounts: { counts: [], complete: true, loaded: false },
     // The live view's page, and the rows per page in both modes.
     pagination: DEFAULT_PAGINATION,
     // The text in the query box.
@@ -131,10 +140,10 @@ export function tableRows(state) {
   if (tableRowsCache.items === items && tableRowsCache.exclusion === exclusion) {
     return tableRowsCache.rows;
   }
-  const hidden = new Set(exclusion ?? []);
+  const hidden = exclusion ?? [];
   const rows = [];
   for (let i = items.length - 1; i >= 0; i--) {
-    if (!hidden.has(items[i].ContentType)) rows.push(items[i]);
+    if (!hiddenBy(items[i].ContentType, hidden)) rows.push(items[i]);
   }
   tableRowsCache = { items, exclusion, rows };
   return rows;
@@ -413,7 +422,42 @@ export function createLedgerStore(api) {
           if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
         })
         .catch((err) => console.error("Loading the content-type exclusion failed:", err)),
+      api
+        .hasOwnExclusion()
+        .then((own) => {
+          if (fresh()) update((state) => ({ ...state, ownExclusion: own }));
+        })
+        .catch((err) => console.error("Reading whether the project has its own exclusion failed:", err)),
     ]);
+  }
+
+  // Stores a new exclusion, goes back to the first page and runs the active
+  // query again so its results reflect it.
+  function applyExclusion(exclusion, ownExclusion) {
+    update((state) => ({ ...state, exclusion, ownExclusion }));
+    setPagination((old) => ({ ...old, pageIndex: 0 }));
+  }
+
+  /**
+   * Loads the Types menu's pair counts. Counts for a project that has
+   * since closed are dropped; a failure keeps the last counts.
+   */
+  async function loadTypeCounts() {
+    const version = projectStateVersion;
+    try {
+      const result = await api.countContentTypes();
+      if (version !== projectStateVersion) return;
+      update((state) => ({
+        ...state,
+        typeCounts: {
+          counts: result?.Counts ?? [],
+          complete: result?.Complete?.sitemap ?? true,
+          loaded: true,
+        },
+      }));
+    } catch (err) {
+      console.error("Counting content types failed:", err);
+    }
   }
 
   /**
@@ -776,7 +820,11 @@ export function createLedgerStore(api) {
       requestBuffer = [];
       responseBuffer = new Map();
       trafficChanged = false;
-      set(initialState(current.query.runID, current.layout));
+      // The app default exclusion isn't the project's, so it stays.
+      set({
+        ...initialState(current.query.runID, current.layout),
+        defaultExclusion: current.defaultExclusion,
+      });
     },
     populate,
 
@@ -822,13 +870,37 @@ export function createLedgerStore(api) {
     mergeNewMatches,
     setPagination,
 
-    // Stores the content-type exclusion and goes back to the first page,
-    // then runs the active query again so its results reflect it.
+    // Gives the project its own content-type exclusion, normalised as Marasi
+    // does, and goes back to the first page, then runs the active query
+    // again so its results reflect it.
     saveExclusion: async (types) => {
-      update((state) => ({ ...state, exclusion: [...types] }));
-      setPagination((old) => ({ ...old, pageIndex: 0 }));
-      await api.setExclusion(types);
+      const exclusion = [...new Set(types.map(normalizeContentType))];
+      applyExclusion(exclusion, true);
+      await api.setExclusion(exclusion);
       await rerunQuery();
+    },
+    // Drops the project's own exclusion so it follows the app default again.
+    resetExclusion: async () => {
+      await api.resetExclusion();
+      applyExclusion(await api.getExclusion(), false);
+      await rerunQuery();
+    },
+    loadTypeCounts,
+    // Reads the app default exclusion into `defaultExclusion` and returns it.
+    loadDefaultExclusion: async () => {
+      const defaultExclusion = await api.getDefaultExclusion();
+      update((state) => ({ ...state, defaultExclusion }));
+      return defaultExclusion;
+    },
+    // Replaces the app default exclusion. A project that follows it hides
+    // the new list at once.
+    saveDefaultExclusion: async (types) => {
+      const defaultExclusion = [...new Set(types.map(normalizeContentType))];
+      update((state) => ({ ...state, defaultExclusion }));
+      const follows = current.ownExclusion === false;
+      if (follows) applyExclusion(defaultExclusion, false);
+      await api.setDefaultExclusion(defaultExclusion);
+      if (follows) await rerunQuery();
     },
 
     findShownPair,

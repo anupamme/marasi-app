@@ -744,24 +744,6 @@ func (a *App) GetScopeRules() map[string]interface{} {
 	}
 }
 
-func (a *App) HighlightRow(id uuid.UUID, colorCode int) error {
-	metadata, err := a.Proxy.TrafficRepo.GetMetadata(id)
-	if err != nil {
-		return fmt.Errorf("getting metadata for request %s : %w", id.String(), err)
-	}
-	switch colorCode {
-	case -1:
-		delete(metadata, "highlight")
-	default:
-		metadata["highlight"] = fmt.Sprintf("#%06X", colorCode)
-	}
-	err = a.Proxy.TrafficRepo.UpdateMetadata(metadata, id)
-	if err != nil {
-		return fmt.Errorf("updating metadata for id %s : %w", id.String(), err)
-	}
-	return nil
-}
-
 func (a *App) GetLaunchpads() []*domain.Launchpad {
 	launchpad, err := a.Proxy.LaunchpadRepo.GetLaunchpads()
 	if err != nil {

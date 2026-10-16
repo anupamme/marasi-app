@@ -1229,8 +1229,9 @@
 			{#if $newLabel && !(drawerOpen && $drawerLayout.maximised)}
 				<div class="pointer-events-none absolute left-0 right-0 top-8 z-20 flex justify-center">
 					<!-- The page colour behind the button keeps light mode's see-through
-					     primary variant readable over the rows. -->
-					<div class="pointer-events-auto bg-surface-50 shadow-lg dark:bg-surface-900">
+					     primary variant readable over the rows. A flex box, so it is
+					     exactly the button's size (a block took the 24px line height). -->
+					<div class="pointer-events-auto flex bg-surface-50 shadow-lg dark:bg-surface-900">
 						{#if $newKind === "top"}
 							<button
 								id="ledgerNewMatches"

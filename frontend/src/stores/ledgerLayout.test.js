@@ -70,13 +70,13 @@ test("the table lists the live view newest first without the types the exclusion
   assert.equal(hiddenByTypeCount(get(store)), 1);
 });
 
-test("the table lists query results as marasi returns them, with no hidden count", async () => {
+test("the table lists query results as marasi returns them; with no exclusion none are hidden", async () => {
   const store = await storeWith([pair("a"), pair("b")], {
     results: { x: { Items: [pair("b"), pair("a")], NextCursor: null, IndexComplete: true } },
   });
   await store.runQuery("x");
   assert.deepEqual(ids(tableRows(get(store))), ["b", "a"]);
-  assert.equal(hiddenByTypeCount(get(store)), null);
+  assert.equal(hiddenByTypeCount(get(store)), 0);
 });
 
 test("next and previous move the selection down and up the table and stop at its ends", async () => {

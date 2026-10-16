@@ -1,45 +1,41 @@
-// The highlight palette bound to the Wails backend. The fallback logic lives
-// in lib/ledger/highlights.js, which tests load without bindings.
-import { derived, writable } from "svelte/store";
+// The highlight palette bound to the Wails backend. The logic lives in
+// createHighlightsStore.js and lib/ledger/highlights.js, which tests load
+// without bindings.
 import {
+  DeleteClientSetting,
+  GetClientSetting,
   GetHighlights,
+  ListClientSettings,
+  MigrateOldHighlights,
   ResetHighlights,
   SaveHighlights,
+  SetClientSetting,
 } from "../lib/wailsjs/go/main/App";
-import { effectivePalette } from "../lib/ledger/highlights.js";
+import { createHighlightsStore } from "./createHighlightsStore.js";
+
+export const highlightsStore = createHighlightsStore({
+  getHighlights: () => GetHighlights(),
+  saveHighlights: (list) => SaveHighlights(list),
+  resetHighlights: () => ResetHighlights(),
+  listClientSettings: (prefix) => ListClientSettings(prefix),
+  getClientSetting: (key) => GetClientSetting(key),
+  setClientSetting: (key, value) => SetClientSetting(key, value),
+  deleteClientSetting: (key) => DeleteClientSetting(key),
+  migrateOldHighlights: () => MigrateOldHighlights(),
+});
 
 /** The app config's 8 highlights ({ color, label }); null until loaded. */
-export const appHighlights = writable(null);
-
-/**
- * The open project's highlight labels by number ({ 3: "IDOR candidate" }).
- * Empty until project labels are read from the project's client settings.
- */
-export const projectHighlightLabels = writable({});
-
+export const appHighlights = highlightsStore.appHighlights;
+/** The open project's highlight labels by number ({ 3: "IDOR candidate" }). */
+export const projectHighlightLabels = highlightsStore.projectLabels;
 /** The effective palette; see effectivePalette. */
-export const highlightPalette = derived(
-  [appHighlights, projectHighlightLabels],
-  ([$app, $project]) => effectivePalette($app, $project),
-);
+export const highlightPalette = highlightsStore.palette;
+/** True while the open project's old highlights are being updated. */
+export const highlightMigrating = highlightsStore.migrating;
 
-export async function readHighlights() {
-  try {
-    appHighlights.set(await GetHighlights());
-  } catch (error) {
-    console.error("reading highlights, using defaults:", error);
-  }
-}
-
+export const readHighlights = highlightsStore.readApp;
 /** Saves all 8 app highlights; resolves to the saved list or rejects. */
-export async function saveHighlights(highlights) {
-  const saved = await SaveHighlights(highlights);
-  appHighlights.set(saved);
-  return saved;
-}
-
-export async function resetHighlights() {
-  const saved = await ResetHighlights();
-  appHighlights.set(saved);
-  return saved;
-}
+export const saveHighlights = highlightsStore.save;
+export const resetHighlights = highlightsStore.reset;
+/** Renames highlight n: (n, label, { allProjects }). */
+export const renameHighlight = highlightsStore.rename;

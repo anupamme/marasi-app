@@ -13,9 +13,12 @@
 // `action` is { type, ...arguments } for the page to run on the selection.
 // `actionId` names the keybinding catalog action whose keys the item shows.
 // `icon` is a key into RowMenu.svelte's icon map.
+// The highlight item has `swatches` instead of `sub`: one action item per
+// highlight, then None, each with a `color` (null for None) and `checked`.
 import { LAUNCHPADS_EACH_MAX } from "../../stores/createLedgerStore.js";
 import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presentation.js";
 import { shortType } from "./table.js";
+import { effectivePalette } from "./highlights.js";
 
 const plural = (n, one, many = one + "s") => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const unique = (values) => [...new Set(values)];
@@ -34,11 +37,33 @@ function pathFolder(path) {
   return clean.replace(/\/[^/]+$/, "/*") || "/*";
 }
 
-// A highlight key for comparing pairs: the number, or an older hex colour.
-function highlightKey(pair) {
-  if (pair?.Highlight >= 1) return `n${pair.Highlight}`;
-  const hex = pair?.Metadata?.highlight;
-  return typeof hex === "string" && hex ? hex.toLowerCase() : "";
+// A pair's highlight number, or null.
+const highlightOf = (pair) => (pair?.Highlight >= 1 ? pair.Highlight : null);
+
+// true when every pair has `number` (null: no highlight), "mixed" when some do.
+function shareOf(pairs, number) {
+  const count = pairs.filter((pair) => highlightOf(pair) === number).length;
+  return count === 0 ? false : count === pairs.length ? true : "mixed";
+}
+
+// The context menu's highlight swatches: the palette's 8, then None.
+function highlightSwatches(pairs, palette) {
+  return [
+    ...palette.map((h) => ({
+      id: `h-${h.number}`,
+      label: h.label,
+      color: h.color,
+      checked: shareOf(pairs, h.number),
+      action: { type: "highlight", number: h.number },
+    })),
+    {
+      id: "h-none",
+      label: "None",
+      color: null,
+      checked: shareOf(pairs, null),
+      action: { type: "highlight", number: null },
+    },
+  ];
 }
 
 const hasResponse = (pair) => Number(pair?.StatusCode) > 0;
@@ -85,13 +110,13 @@ export function similarIDs(kind, rows, chosen) {
   const hosts = new Set(chosen.map((pair) => pair.Host));
   const endpoints = new Set(chosen.map((pair) => `${pair.Method} ${pair.Host}${pathOnly(pair.Path)}`));
   const statuses = new Set(chosen.map((pair) => Number(pair.StatusCode) || 0));
-  const highlights = new Set(chosen.map(highlightKey).filter(Boolean));
+  const highlights = new Set(chosen.map(highlightOf).filter(Boolean));
   const chosenIDs = new Set(chosen.map((pair) => String(pair.ID)));
   const test = {
     host: (row) => hosts.has(row.Host),
     endpoint: (row) => endpoints.has(`${row.Method} ${row.Host}${pathOnly(row.Path)}`),
     status: (row) => statuses.has(Number(row.StatusCode) || 0),
-    highlight: (row) => highlights.has(highlightKey(row)),
+    highlight: (row) => highlights.has(highlightOf(row)),
     invert: (row) => !chosenIDs.has(String(row.ID)),
   }[kind];
   return test ? rows.filter(test).map((row) => String(row.ID)) : [];
@@ -180,9 +205,12 @@ function linkMenu({ key, noun, pairs, one, n, targets, newActionId, newType, lin
 /**
  * The menu for `pairs`, the selected pairs in table order. `context` holds
  * what the app already knows: { numberOf(pair), launchpads, findings,
- * testCases }.
+ * testCases, palette } (palette: the effective highlight palette).
  */
-export function menuFor(pairs, { numberOf = () => "", launchpads = [], findings = [], testCases = [] } = {}) {
+export function menuFor(
+  pairs,
+  { numberOf = () => "", launchpads = [], findings = [], testCases = [], palette = effectivePalette() } = {},
+) {
   const n = pairs.length;
   if (n === 0) return [];
   const one = n === 1 ? pairs[0] : null;
@@ -289,6 +317,12 @@ export function menuFor(pairs, { numberOf = () => "", launchpads = [], findings 
           },
         ]
       : []),
+    {
+      id: "highlight",
+      label: "Highlight",
+      icon: "highlighter",
+      swatches: highlightSwatches(pairs, palette),
+    },
     "sep",
     {
       id: "copy",
@@ -390,7 +424,7 @@ export function menuFor(pairs, { numberOf = () => "", launchpads = [], findings 
             statuses.length === 1 ? `All with status ${statuses[0] || "pending"}` : "Same statuses",
           action: { type: "select", kind: "status" },
         },
-        ...(one && highlightKey(one)
+        ...(one && highlightOf(one)
           ? [
               {
                 id: "s-highlight",
@@ -428,7 +462,8 @@ export function filterMenu(items, text) {
   const walk = (list, trail) => {
     for (const item of list) {
       if (!isAction(item)) continue;
-      if (item.sub) walk(item.sub, [...trail, item.label]);
+      const children = item.sub ?? item.swatches;
+      if (children) walk(children, [...trail, item.label]);
       else if ([...trail, item.label].join(" ").toLowerCase().includes(needle)) {
         out.push({ ...item, trail });
       }
@@ -441,6 +476,11 @@ export function filterMenu(items, text) {
 /** Leaves of `items` that can run: not separators, headings or disabled. */
 export function isRunnable(item) {
   return isAction(item) && !item.disabled;
+}
+
+/** True for the row of highlight swatches. */
+export function isSwatchRow(item) {
+  return isAction(item) && Array.isArray(item.swatches);
 }
 
 /** Plural helper for the page's toasts: "1 request", "3 requests". */

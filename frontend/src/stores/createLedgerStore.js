@@ -1302,13 +1302,7 @@ export function createLedgerStore(api) {
     getDetails: (id) => api.getRawDetails(id),
     getMetadata: (id) => api.getMetadata(id),
     getNote: (id) => api.getNote(id),
-    // Highlights the pair with a 0xRRGGBB colour, or clears it with -1.
-    highlight: async (id, color) => {
-      await api.highlight(id, color);
-      patchMetadata(id, {
-        highlight: color < 0 ? "" : "#" + color.toString(16).padStart(6, "0"),
-      });
-    },
+    setHighlight,
 
     // Actions on selected pairs, one call per pair (ticket 11 moves them to
     // Marasi's bulk operations). Each reports how many pairs it changed
@@ -1332,6 +1326,31 @@ export function createLedgerStore(api) {
     /** A draft test case with these pairs as its requests. */
     createTestCase: (ids) => api.createTestCase(ids),
   };
+
+  /**
+   * Gives the pairs with these IDs highlight `number` (1-8), or clears their
+   * highlights when it is null, in one bulk call. Marasi emits no event for
+   * it, so the loaded rows are repainted here, in place: none move, even
+   * when they no longer match the query. Resolves to the number of pairs
+   * Marasi changed.
+   */
+  async function setHighlight(ids, number) {
+    const selection = { ids: ids.map(String) };
+    const changed =
+      number == null
+        ? await api.clearHighlight(selection)
+        : await api.setHighlight(selection, number);
+    const wanted = new Set(selection.ids);
+    updateResults((r) => ({
+      ...r,
+      chunks: mapChunks(r.chunks, (item) =>
+        wanted.has(String(item.ID)) && (item.Highlight ?? null) !== number
+          ? { ...item, Highlight: number }
+          : item,
+      ),
+    }));
+    return changed;
+  }
 
   // Runs `fn` on each pair in turn. A failure is logged and counted, and the
   // rest still run.

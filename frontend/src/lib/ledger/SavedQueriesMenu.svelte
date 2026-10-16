@@ -6,7 +6,7 @@
 	// menu opens.
 	import { createEventDispatcher, onMount } from "svelte";
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
-	import { Bookmark, BookmarkPlus, Check, Eye, EyeOff, Globe, Package, Pencil, Trash2 } from "lucide-svelte";
+	import { Bookmark, BookmarkPlus, Check, Eye, EyeOff, Folder, Globe, Package, Pencil, Trash2 } from "lucide-svelte";
 	import { primaryVariant } from "../launchpad/format.js";
 	import ToolbarMenu from "./ToolbarMenu.svelte";
 	import {
@@ -25,11 +25,12 @@
 	const dispatch = createEventDispatcher();
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
-	const GROUP_ICONS = { app: Globe, builtin: Package };
+	const GROUP_ICONS = { project: Folder, app: Globe, builtin: Package };
 
 	let open = false;
 	let saving = false;
 	let name = "";
+	let keepForAll = false;
 	let editing = null;
 	let editName = "";
 	let showHidden = false;
@@ -67,11 +68,12 @@
 	function startSaving() {
 		saving = true;
 		name = "";
+		keepForAll = false;
 	}
 
 	async function save() {
 		try {
-			await savedQueriesStore.save(name, queryText);
+			await savedQueriesStore.save(name, queryText, keepForAll ? "app" : "project");
 			saving = false;
 			savedQueriesStore.loadCounts();
 		} catch (error) {
@@ -97,9 +99,18 @@
 		modalStore.trigger({
 			type: "confirm",
 			title: "Delete saved query",
-			body: `Delete "${q.name}"? Every project loses it.`,
+			body:
+				q.source === "project"
+					? `Delete "${q.name}" from this project?`
+					: `Delete "${q.name}"? Every project loses it.`,
 			response: (ok) => ok && savedQueriesStore.remove(q).catch((error) => failed("delete the query", error)),
 		});
+	}
+
+	function move(q) {
+		savedQueriesStore
+			.move(q, q.source === "project" ? "app" : "project")
+			.catch((error) => failed("move the query", error));
 	}
 
 	function setHidden(q, hidden) {
@@ -141,6 +152,10 @@
 						on:keydown|stopPropagation={(e) => e.key === "Escape" && (saving = false)}
 					/>
 					<div class="truncate font-mono text-[10px] opacity-60" title={queryText}>{queryText.trim()}</div>
+					<label class="flex cursor-pointer items-center gap-2 text-xs">
+						<input id="ledgerSavedQueryKeepForAll" type="checkbox" class="checkbox" bind:checked={keepForAll} />
+						Keep for all projects
+					</label>
 					<div class="flex items-center justify-end gap-2 text-xs">
 						<button type="button" class="btn btn-sm variant-soft py-0.5" on:click={() => (saving = false)}
 							>Cancel</button
@@ -219,6 +234,23 @@
 										aria-label={`Rename ${q.name}`}
 										on:click={() => startRename(q)}><Pencil size={12} /></button
 									>
+									{#if q.source === "app"}
+										<button
+											type="button"
+											class="opacity-60 hover:opacity-100"
+											title="Move to this project only"
+											aria-label={`Move ${q.name} to this project`}
+											on:click={() => move(q)}><Folder size={12} /></button
+										>
+									{:else}
+										<button
+											type="button"
+											class="opacity-60 hover:opacity-100"
+											title="Keep for all projects"
+											aria-label={`Move ${q.name} to all projects`}
+											on:click={() => move(q)}><Globe size={12} /></button
+										>
+									{/if}
 									<button
 										type="button"
 										class="opacity-60 hover:text-error-500 hover:opacity-100"

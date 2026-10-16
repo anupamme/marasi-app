@@ -64,7 +64,7 @@
 		pairURL,
 		similarIDs,
 	} from "../../lib/ledger/rowMenu.js";
-	import { plural, requestCount } from "../../lib/ledger/counts.js";
+	import { plural, requestCount, unchangedText } from "../../lib/ledger/counts.js";
 	import { LAUNCHPADS_EACH_MAX, sameID } from "../../lib/ledger/pairs.js";
 	import { select } from "../../lib/storeSelect.js";
 	import { toastError as showError } from "../../lib/toasts.js";
@@ -291,6 +291,14 @@
 		return target.count == null ? "all matching requests" : `all ${requestCount(target.count)}`;
 	}
 
+	// A change Marasi says touched no pair. A listed selection's menu already
+	// disables what it knows would change nothing, so it says nothing; a ⌘A
+	// selection's pairs aren't all loaded, so it says why.
+	function unchanged(target, change) {
+		if (!target.all) return;
+		toastStore.trigger({ message: unchangedText(change, target.count), background: handoffBackground });
+	}
+
 	// The row menu's confirmation modal; `onConfirm` runs only once confirmed.
 	function confirm(title, body, buttonTextConfirm, onConfirm) {
 		modalStore.trigger({
@@ -376,8 +384,7 @@
 			return toastError(`Failed to add ${describeTarget(target)} to "${name}"`, error);
 		}
 		refreshLaunchpads();
-		// A change that touched no pair says nothing.
-		if (!count) return;
+		if (!count) return unchanged(target, { type: "add-to-launchpad", name });
 		toastJump(`Added ${requestCount(count)} to "${name}"`, "Jump to Launchpad", "/launchpad?id=" + launchpadId);
 	}
 
@@ -385,7 +392,7 @@
 		try {
 			const count = await ledgerStore.removeFromLaunchpad(target.selection, launchpadId);
 			refreshLaunchpads();
-			if (!count) return;
+			if (!count) return unchanged(target, { type: "remove-from-launchpad", name: name || "Untitled launchpad" });
 			toastStore.trigger({
 				message: `Removed ${requestCount(count)} from "${name || "Untitled launchpad"}"`,
 				background: handoffBackground,
@@ -404,7 +411,7 @@
 		} catch (error) {
 			return toastError(`Failed to ${verb.toLowerCase()} ${describeTarget(target)}`, error);
 		}
-		if (!count) return;
+		if (!count) return unchanged(target, { type: verb === "Linked" ? "link" : "unlink", noun, name: title });
 		const preposition = verb === "Linked" ? "to" : "from";
 		toastStore.trigger({
 			message: `${verb} ${requestCount(count)} ${preposition} ${noun} "${title}"`,
@@ -426,7 +433,8 @@
 				if (typeof text !== "string" || !text.trim()) return;
 				try {
 					const count = await ledgerStore.appendNote(target.selection, text);
-					if (count) toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
+					if (!count) return unchanged(target, { type: "append-note" });
+					toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
 					toastError("Failed to append the note", error);
 				}
@@ -439,7 +447,8 @@
 		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", async () => {
 			try {
 				const count = await ledgerStore.clearNotes(target.selection);
-				if (count) toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
+				if (!count) return unchanged(target, { type: "clear-notes" });
+				toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
 			} catch (error) {
 				toastError("Failed to clear the notes", error);
 			}
@@ -468,7 +477,8 @@
 					const count = await ledgerStore.deleteFromProject(target.selection);
 					refreshLaunchpads();
 					sitemapStore.reload();
-					if (count) toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
+					if (!count) return unchanged(target, { type: "delete" });
+					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
 					toastError(`Failed to delete ${what}`, error);
 				}
@@ -482,7 +492,7 @@
 		const name = number == null ? null : $highlightPalette[number - 1]?.label;
 		try {
 			const changed = await ledgerStore.setHighlight(target.selection, number);
-			if (!changed) return;
+			if (!changed) return unchanged(target, number == null ? { type: "clear-highlight" } : { type: "highlight", name });
 			toastStore.trigger({
 				message:
 					number == null

@@ -4,7 +4,7 @@
 	// dispatches `toggle` with its query term. The pencil, or a double-click,
 	// renames a label inline: dispatches `rename` with { number, label,
 	// allProjects }. Colours are set in Settings → Highlights.
-	import { createEventDispatcher, tick } from "svelte";
+	import { createEventDispatcher, onDestroy, tick } from "svelte";
 	import { Check, Pencil, X } from "lucide-svelte";
 	import { hasQueryTerm } from "../ledgerQueryFields.js";
 	import { matchCountText } from "./marks.js";
@@ -44,6 +44,22 @@
 			editing = null;
 		}
 	}
+
+	// A click on a highlight toggles it once it is clear no second click
+	// follows, so a double-click renames without toggling (and running the
+	// query) twice. A key press (detail 0) toggles at once.
+	const DOUBLE_CLICK_MS = 250;
+	let clickTimer = null;
+	function onHighlightClick(event, term) {
+		clearTimeout(clickTimer);
+		if (event.detail === 0) dispatch("toggle", term);
+		else if (event.detail === 1) clickTimer = setTimeout(() => dispatch("toggle", term), DOUBLE_CLICK_MS);
+	}
+	function onHighlightDblClick(h) {
+		clearTimeout(clickTimer);
+		startRename(h);
+	}
+	onDestroy(() => clearTimeout(clickTimer));
 
 	const rowClass = (active) =>
 		active ? "border-primary-500 bg-primary-500/20" : "border-transparent hover:bg-surface-200-700-token";
@@ -115,8 +131,8 @@
 					role="menuitemcheckbox"
 					aria-checked={active}
 					title={term}
-					on:click={() => dispatch("toggle", term)}
-					on:dblclick={() => startRename(h)}
+					on:click={(event) => onHighlightClick(event, term)}
+					on:dblclick={() => onHighlightDblClick(h)}
 				>
 					<span class="h-3 w-3 flex-none rounded-full" style="background: {h.color}"></span>
 					<span class="min-w-0 flex-1 truncate">{h.label}</span>

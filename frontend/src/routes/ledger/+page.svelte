@@ -732,13 +732,13 @@
 			}).then((requestIndex) => {
 				if (!requestIndex) return;
 				const number = parseInt(requestIndex);
-				ledgerStore.goToNumber(number).then(({ pair, reason }) => {
+				ledgerStore.goToNumber(number).then(({ pair }) => {
 					if (pair) return selectAndReveal(pair.ID);
-					const message =
-						reason === "sort"
-							? `Request ${number} isn't loaded. Sort by # to jump to it.`
-							: `No request ${number} in these results`;
-					toastStore.trigger({ message, background: "variant-filled-warning", timeout: 2500 });
+					toastStore.trigger({
+						message: `No request ${number} in these results`,
+						background: "variant-filled-warning",
+						timeout: 2500,
+					});
 				});
 			});
 		},

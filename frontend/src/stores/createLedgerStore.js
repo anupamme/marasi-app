@@ -326,7 +326,11 @@ export function allSelectedLabel(state) {
 export function selectedPairs(state) {
   const ids = state.selection.ids;
   if (ids.size === 0) return [];
-  return tableRows(state).filter((row) => ids.has(String(row.ID)));
+  const rows = tableRows(state).filter((row) => ids.has(String(row.ID)));
+  // The drawer's pair can be one a jump opened outside the loaded rows.
+  const outside = state.focusRow;
+  if (outside && ids.has(String(outside.ID)) && !rows.some((row) => sameID(row.ID, outside.ID))) rows.push(outside);
+  return rows;
 }
 
 // The IDs of the rows from `a` to `b` in table order, both included; just
@@ -1160,9 +1164,12 @@ export function createLedgerStore(api) {
    */
   function stepSelection(step, { extend = false } = {}) {
     const rows = tableRows(current);
-    if (rows.length === 0) return;
     const { focus, anchor } = current.selection;
     const at = focus == null ? -1 : rows.findIndex((row) => sameID(row.ID, focus));
+    // From a pair a jump opened outside the loaded rows, steps go by #: next
+    // is the next pair down, previous the next one up, until one is loaded.
+    if (at === -1 && focus != null && sameID(current.focusRow?.ID, focus)) return stepOutside(step);
+    if (rows.length === 0) return;
     const target =
       at === -1
         ? step > 0
@@ -1172,6 +1179,20 @@ export function createLedgerStore(api) {
     const id = rows[target].ID;
     if (extend && anchor != null) selectIDs(rowRange(rows, anchor, id), anchor, id);
     else selectPair(id);
+  }
+
+  async function stepOutside(step) {
+    const number = current.focusRow.Number;
+    let pair = null;
+    try {
+      pair = step > 0 ? await onePair(`number < ${number}`, "number desc") : await onePair(`number > ${number}`, "number");
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+    }
+    if (!pair) return;
+    const shown = tableRows(current).find((row) => sameID(row.ID, pair.ID));
+    if (shown) selectPair(shown.ID);
+    else focusOutside(pair);
   }
 
   /**
@@ -1278,7 +1299,8 @@ export function createLedgerStore(api) {
    * capture order and never changes, or "?" when the pair isn't loaded.
    */
   function pairNumber(id) {
-    return findShownPair(id)?.Number || "?";
+    const outside = sameID(current.focusRow?.ID, id) ? current.focusRow : null;
+    return (findShownPair(id) ?? outside)?.Number || "?";
   }
 
   /** The loaded pair whose pair number is `number`, or undefined. */
@@ -1286,19 +1308,56 @@ export function createLedgerStore(api) {
     return tableRows(current).find((item) => item.Number === number);
   }
 
+  // The current query with `condition` too.
+  function withinQuery(condition) {
+    const text = current.query.ranQuery;
+    return text ? `(${text}) AND ${condition}` : condition;
+  }
+
+  // The one pair of the current results that `condition` picks first under
+  // `orderBy`, or null.
+  async function onePair(condition, orderBy) {
+    const page = await api.queryTraffic({
+      ...pageRequest(withinQuery(condition), current.sort, { AsOf: current.results.asOf ?? "", Limit: 1 }),
+      OrderBy: orderBy,
+    });
+    return page.QueryError ? null : (page.Items?.[0] ?? null);
+  }
+
+  // Selects only `pair`, which the loaded rows don't hold, and shows it in
+  // the drawer; the table stays as it is.
+  function focusOutside(pair) {
+    const id = String(pair.ID);
+    update((state) => ({
+      ...state,
+      selection: { ids: new Set([id]), anchor: id, focus: id, incomingResponse: null, query: null },
+      focusRow: pair,
+    }));
+  }
+
   /**
-   * A jump to pair `number` in the current results: the loaded pair, else,
+   * A jump to pair `number` in the current results: the loaded pair; else,
    * under a pair-number sort, the rows around it read into a fresh window
-   * with the query, sort and as_of left as they are. Marasi's cursors name
+   * with the query, sort and as_of left as they are (Marasi's cursors name
    * only the sort and the row, so the edges of the two reads keep paging the
-   * same results. Returns { pair }, or { reason } when there is none:
-   * "missing" when the results don't hold it, "sort" when it isn't loaded
-   * and the sort isn't by number.
+   * same results); else the pair alone, selected and in the drawer while
+   * the table stays as it is. Returns { pair }, or { reason: "missing" }
+   * when the results don't hold it.
    */
   async function goToNumber(number) {
     const shown = shownPairAtNumber(number);
     if (shown) return { pair: shown };
-    if (current.sort.field !== "number") return { reason: "sort" };
+    if (current.sort.field !== "number") {
+      let pair = null;
+      try {
+        pair = await onePair(`number = ${number}`, "number");
+      } catch (err) {
+        console.error("Reading traffic failed:", err);
+      }
+      if (!pair) return { reason: "missing" };
+      focusOutside(pair);
+      return { pair };
+    }
     const { desc } = current.sort;
     const text = current.query.ranQuery;
     const within = (condition) => (text ? `(${text}) AND ${condition}` : condition);

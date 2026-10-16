@@ -6,6 +6,7 @@ import {
   createLedgerStore,
   focusedPair,
   hiddenByTypeCount,
+  selectedPairs,
   indexWarning,
   isLiveNewestFirst,
   isQueryActive,
@@ -74,11 +75,11 @@ function fakeApi({
   const predicate = (text) => {
     if (text === "") return () => true;
     if (queries[text]) return queries[text];
-    const m = /^(?:\((.*)\) AND )?number (<=|>=|<|>) (\d+)$/.exec(text);
+    const m = /^(?:\((.*)\) AND )?number (<=|>=|<|>|=) (\d+)$/.exec(text);
     if (!m) return queries[text];
     const base = predicate(m[1] ?? "");
     const n = Number(m[3]);
-    const test = { "<=": (x) => x <= n, ">=": (x) => x >= n, "<": (x) => x < n, ">": (x) => x > n }[m[2]];
+    const test = { "<=": (x) => x <= n, ">=": (x) => x >= n, "<": (x) => x < n, ">": (x) => x > n, "=": (x) => x === n }[m[2]];
     return (p) => base(p) && test(p.Number);
   };
 
@@ -529,15 +530,44 @@ test("a jump to a request the results don't hold leaves them as they were", asyn
   assert.equal(tableRows(get(store)), before);
 });
 
-test("under another sort a jump finds a loaded request, and says why it can't reach others", async () => {
+test("under another sort a jump opens a request that isn't loaded, without touching the table", async () => {
   const api = fakeApi({ traffic: pairs(1000) });
   const store = createLedgerStore(api);
   await store.populate();
   await store.sortBy("host");
   const rows = tableRows(get(store));
-  assert.equal((await store.goToNumber(rows[5].Number)).pair.ID, rows[5].ID);
-  const notLoaded = Array.from({ length: 1000 }, (_, i) => i + 1).find((n) => !rows.some((r) => r.Number === n));
-  assert.deepEqual(await store.goToNumber(notLoaded), { reason: "sort" });
+  assert.equal((await store.goToNumber(rows[5].Number)).pair.ID, rows[5].ID, "a loaded one opens in place");
+
+  // Host ties sort by id, oldest first: 1 to 200 are loaded.
+  assert.equal(store.shownPairAtNumber(201), undefined);
+  const { pair } = await store.goToNumber(201);
+  assert.equal(pair.Number, 201);
+  const state = get(store);
+  assert.equal(focusedPair(state)?.Number, 201, "the drawer shows it");
+  assert.equal(store.pairNumber(pair.ID), 201, "titles name it");
+  assert.deepEqual(selectedPairs(state).map((p) => p.Number), [201], "its actions act on it");
+  assert.equal(tableRows(state), rows, "the table is as it was");
+  assert.equal(state.queryText, "");
+  assert.deepEqual(state.sort, { field: "host", desc: false });
+});
+
+test("next and previous go on from a request that isn't loaded, by #, back into the table", async () => {
+  const api = fakeApi({ traffic: pairs(1000) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.sortBy("host");
+  await store.goToNumber(205);
+  await store.stepSelection(-1);
+  assert.equal(focusedPair(get(store))?.Number, 206, "previous is the next # up");
+  await store.stepSelection(1);
+  await store.stepSelection(1);
+  assert.equal(focusedPair(get(store))?.Number, 204, "next is the next # down");
+  for (let i = 0; i < 4; i++) await store.stepSelection(1);
+  const state = get(store);
+  assert.equal(focusedPair(state)?.Number, 200, "200 is loaded");
+  assert.ok(tableRows(state).some((row) => row.ID === focusedPair(state).ID), "back among the loaded rows");
+  await store.stepSelection(-1);
+  assert.equal(focusedPair(get(store))?.Number, 199, "and steps by the table's order from there");
 });
 
 test("back to the live view clears the query and the sort and reads newest first from the top", async () => {

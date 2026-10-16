@@ -21,6 +21,9 @@ import {
   SetContentTypeExclusion,
   SetDefaultContentTypeExclusion,
 } from "../lib/wailsjs/go/main/App";
+import { armoryStore } from "./armoryStore";
+import { findingStore } from "./findingStore";
+import { testCaseStore } from "./testCaseStore";
 import {
   createLedgerStore,
   FLUSH_INTERVAL_MS,
@@ -37,6 +40,9 @@ export {
   hiddenByTypeCount,
   indexWarning,
   isDrawerOpen,
+  isSelected,
+  LAUNCHPADS_EACH_MAX,
+  selectedPairs,
   isQueryActive,
   tableRows,
   ledgerPagination,
@@ -70,6 +76,17 @@ export const ledgerStore = createLedgerStore({
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
   linkToLaunchpad: (requestId, launchpadId) =>
     LinkRequestToLaunchpad(requestId, launchpadId),
+  // Findings, test cases and Armory templates go through their stores, so
+  // the lists they hold stay current.
+  linkToFinding: (requestId, findingId) => findingStore.linkRequest(findingId, requestId),
+  unlinkFromFinding: (requestId, findingId) =>
+    findingStore.unlinkRequest(findingId, requestId),
+  linkToTestCase: (requestId, testCaseId) => testCaseStore.linkRequest(testCaseId, requestId),
+  unlinkFromTestCase: (requestId, testCaseId) =>
+    testCaseStore.unlinkRequest(testCaseId, requestId),
+  createFinding: (requestIds) => findingStore.create(requestIds),
+  createTestCase: (requestIds) => testCaseStore.create(requestIds),
+  sendToArmory: (requestId) => armoryStore.createTemplateFromRequest(requestId),
   // Not called by the store yet; the Ledger's client settings use them.
   getClientSetting: (key) => GetClientSetting(key),
   setClientSetting: (key, value) => SetClientSetting(key, value),

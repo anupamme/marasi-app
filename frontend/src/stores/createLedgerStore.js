@@ -25,6 +25,9 @@ import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
 
+/** The most pairs "one launchpad each" sends at a time. */
+export const LAUNCHPADS_EACH_MAX = 25;
+
 /** How long the query box waits after the last keystroke before running. */
 export const QUERY_DELAY_MS = 700;
 
@@ -82,7 +85,13 @@ function initialLayout() {
 
 function emptySelection() {
   return {
-    // The pair the drawer shows, or null when nothing is selected.
+    // The selected pairs' IDs, as strings. Replaced, never mutated, so a
+    // subscriber can tell a change by identity.
+    ids: new Set(),
+    // Where ⇧-click and ⇧↑/↓ ranges start: the last row clicked without ⇧.
+    anchor: null,
+    // The pair the drawer shows, or null when nothing is selected. Always
+    // one of `ids`.
     focus: null,
     // The focused pair's response when it arrived after the pair was
     // selected, so the drawer can show it without reloading.
@@ -169,6 +178,27 @@ export function focusedPair(state) {
   const focus = state.selection.focus;
   if (focus == null) return undefined;
   return tableRows(state).find((item) => sameID(item.ID, focus));
+}
+
+/** True when the pair with this ID is selected. */
+export function isSelected(state, id) {
+  return id != null && state.selection.ids.has(String(id));
+}
+
+/** The selected pairs, in table order. */
+export function selectedPairs(state) {
+  const ids = state.selection.ids;
+  if (ids.size === 0) return [];
+  return tableRows(state).filter((row) => ids.has(String(row.ID)));
+}
+
+// The IDs of the rows from `a` to `b` in table order, both included; just
+// [b] when either has left the table.
+function rowRange(rows, a, b) {
+  const i = rows.findIndex((row) => sameID(row.ID, a));
+  const j = rows.findIndex((row) => sameID(row.ID, b));
+  if (i < 0 || j < 0) return [String(b)];
+  return rows.slice(Math.min(i, j), Math.max(i, j) + 1).map((row) => String(row.ID));
 }
 
 /**
@@ -327,14 +357,44 @@ export function createLedgerStore(api) {
   const { subscribe, set: setStore } = writable(current);
 
   function set(next) {
-    // The selection only holds pairs the table lists: when a query, an
-    // exclusion or a project switch removes the focused pair, the drawer
-    // closes.
-    if (next.selection.focus != null && !focusedPair(next)) {
-      next = { ...next, selection: emptySelection() };
-    }
+    next = { ...next, selection: prunedSelection(next) };
     current = next;
     setStore(next);
+  }
+
+  // The rows the selection was last checked against, so a change that
+  // leaves the table alone costs nothing.
+  let prunedAgainst = { rows: null, selection: null };
+
+  // The selection only holds pairs the table lists: when a query, an
+  // exclusion or a project switch removes some, they leave the selection.
+  // When the focused pair leaves, the focus moves to the last one left, and
+  // with none left the drawer closes.
+  function prunedSelection(state) {
+    const selection = state.selection;
+    if (selection.ids.size === 0) return selection;
+    const rows = tableRows(state);
+    if (prunedAgainst.rows === rows && prunedAgainst.selection === selection) {
+      return selection;
+    }
+    const shown = pairIDSet(rows);
+    let result = selection;
+    if ([...selection.ids].some((id) => !shown.has(id))) {
+      const ids = new Set([...selection.ids].filter((id) => shown.has(id)));
+      if (ids.size === 0) {
+        result = emptySelection();
+      } else {
+        const focus = ids.has(selection.focus) ? selection.focus : [...ids].at(-1);
+        result = {
+          ids,
+          anchor: ids.has(selection.anchor) ? selection.anchor : focus,
+          focus,
+          incomingResponse: focus === selection.focus ? selection.incomingResponse : null,
+        };
+      }
+    }
+    prunedAgainst = { rows, selection: result };
+    return result;
   }
   function update(fn) {
     set(fn(current));
@@ -744,11 +804,50 @@ export function createLedgerStore(api) {
     update((state) => ({ ...state, selection }));
   }
 
-  /** Selects the pair with this ID; the drawer opens on it. */
+  // Selects `ids` with this anchor and focus. The incoming response stays
+  // only while the focus does.
+  function selectIDs(ids, anchor, focus) {
+    const previous = current.selection;
+    const focusID = focus == null ? null : String(focus);
+    setSelection({
+      ids: new Set(ids),
+      anchor: anchor == null ? null : String(anchor),
+      focus: focusID,
+      incomingResponse: sameID(previous.focus, focusID) ? previous.incomingResponse : null,
+    });
+  }
+
+  /** Selects only the pair with this ID; the drawer opens on it. */
   function selectPair(id) {
     if (id == null) return;
-    if (sameID(current.selection.focus, id)) return;
-    setSelection({ ...emptySelection(), focus: id });
+    const { ids, focus } = current.selection;
+    if (ids.size === 1 && sameID(focus, id)) return;
+    selectIDs([String(id)], id, id);
+  }
+
+  /**
+   * A click on a row. Plain selects only that row. `toggle` (⌘/Ctrl) adds or
+   * removes it. `range` (⇧) selects from the anchor to it, replacing the
+   * selection, or adding to it with `toggle` too. Only ranges keep the
+   * anchor where it was.
+   */
+  function clickRow(id, { toggle = false, range = false } = {}) {
+    if (id == null) return;
+    const { ids, anchor } = current.selection;
+    if (range && anchor != null) {
+      const span = rowRange(tableRows(current), anchor, id);
+      selectIDs(toggle ? [...ids, ...span] : span, anchor, id);
+    } else if (toggle) {
+      const key = String(id);
+      const next = new Set(ids);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      // Removing the focused row moves the focus to the last one selected.
+      const focus = next.has(key) ? key : [...next].at(-1) ?? null;
+      selectIDs(next, id, focus);
+    } else {
+      selectPair(id);
+    }
   }
 
   /** Clears the selection; the drawer closes and stops covering the table. */
@@ -761,14 +860,15 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * Selects the row `step` rows below the focused one (negative steps go
-   * up), stopping at the table's ends. With nothing selected, a step down
+   * Moves the focus `step` rows down (negative steps go up), stopping at the
+   * table's ends, and selects only that row. With `extend` (⇧), selects the
+   * range from the anchor to it instead. With nothing selected, a step down
    * selects the top row and a step up the bottom one.
    */
-  function stepSelection(step) {
+  function stepSelection(step, { extend = false } = {}) {
     const rows = tableRows(current);
     if (rows.length === 0) return;
-    const focus = current.selection.focus;
+    const { focus, anchor } = current.selection;
     const at = focus == null ? -1 : rows.findIndex((row) => sameID(row.ID, focus));
     const target =
       at === -1
@@ -776,7 +876,64 @@ export function createLedgerStore(api) {
           ? 0
           : rows.length - 1
         : Math.min(rows.length - 1, Math.max(0, at + step));
-    selectPair(rows[target].ID);
+    const id = rows[target].ID;
+    if (extend && anchor != null) selectIDs(rowRange(rows, anchor, id), anchor, id);
+    else selectPair(id);
+  }
+
+  /** Selects every row the table lists; the top one is focused. */
+  function selectAll() {
+    const rows = tableRows(current);
+    if (rows.length === 0) return;
+    selectIDs(rows.map((row) => String(row.ID)), rows.at(-1).ID, rows[0].ID);
+  }
+
+  /**
+   * Selects the pairs with these IDs that the table lists, focusing the
+   * topmost. With none listed, clears the selection.
+   */
+  function selectListed(ids) {
+    const wanted = new Set([...ids].map(String));
+    const rows = tableRows(current).filter((row) => wanted.has(String(row.ID)));
+    if (rows.length === 0) return clearSelection();
+    selectIDs(rows.map((row) => String(row.ID)), rows[0].ID, rows[0].ID);
+  }
+
+  /**
+   * Shows a selected pair in the drawer, keeping the selection. Any other
+   * pair is selected alone.
+   */
+  function focusPair(id) {
+    if (!isSelected(current, id)) return selectPair(id);
+    const { ids, anchor } = current.selection;
+    selectIDs(ids, anchor, id);
+  }
+
+  /**
+   * Right-click on a row: a selected row keeps the selection, so the menu
+   * acts on all of it; any other row is selected alone.
+   */
+  function contextRow(id) {
+    if (!isSelected(current, id)) selectPair(id);
+  }
+
+  // A drag across rows: the row it started on, or null when none is under way.
+  let sweepFrom = null;
+
+  /** Pressing a row starts a sweep: the row is selected alone. */
+  function startSweep(id) {
+    sweepFrom = String(id);
+    selectPair(id);
+  }
+
+  /** Dragging over a row selects the range from where the sweep started. */
+  function sweepTo(id) {
+    if (sweepFrom == null) return;
+    selectIDs(rowRange(tableRows(current), sweepFrom, id), sweepFrom, id);
+  }
+
+  function endSweep() {
+    sweepFrom = null;
   }
 
   function updateLayout(fn) {
@@ -790,8 +947,16 @@ export function createLedgerStore(api) {
   return {
     subscribe,
     selectPair,
+    clickRow,
     clearSelection,
     stepSelection,
+    selectAll,
+    selectIDs: selectListed,
+    contextRow,
+    focusPair,
+    startSweep,
+    sweepTo,
+    endSweep,
 
     /** Sets the drawer's share of the table area's height (0-1). */
     setDrawerSplit: (split) =>
@@ -821,6 +986,7 @@ export function createLedgerStore(api) {
       requestBuffer = [];
       responseBuffer = new Map();
       trafficChanged = false;
+      sweepFrom = null;
       // The app default exclusion isn't the project's, so it stays.
       set({
         ...initialState(current.query.runID, current.layout),
@@ -948,18 +1114,80 @@ export function createLedgerStore(api) {
         highlight: color < 0 ? "" : "#" + color.toString(16).padStart(6, "0"),
       });
     },
-    // Creates a launchpad named after the pair's request number and links
-    // the pair to it. Returns the launchpad's id.
-    sendToLaunchpad: async (id) => {
-      const index = pairNumber(id);
-      const launchpadId = await api.createLaunchpad(
-        "Request " + index,
-        "Launchpad for Request " + index,
-      );
-      await api.linkToLaunchpad(id, launchpadId);
-      // Linking edits the pair's metadata.
-      trafficChanged = true;
-      return launchpadId;
-    },
+
+    // Actions on selected pairs, one call per pair (ticket 11 moves them to
+    // Marasi's bulk operations). Each reports how many pairs it changed
+    // (`done`) and how many calls failed (`failed`).
+    sendToNewLaunchpad,
+    sendToLaunchpadsEach,
+    addToLaunchpad: (ids, launchpadId) =>
+      linkEach(ids, (id) => api.linkToLaunchpad(id, launchpadId)),
+    linkToFinding: (ids, findingId) =>
+      linkEach(ids, (id) => api.linkToFinding(id, findingId)),
+    unlinkFromFinding: (ids, findingId) =>
+      linkEach(ids, (id) => api.unlinkFromFinding(id, findingId)),
+    linkToTestCase: (ids, testCaseId) =>
+      linkEach(ids, (id) => api.linkToTestCase(id, testCaseId)),
+    unlinkFromTestCase: (ids, testCaseId) =>
+      linkEach(ids, (id) => api.unlinkFromTestCase(id, testCaseId)),
+    /** One Armory template per pair; `results` holds the templates made. */
+    sendToArmory: (ids) => eachPair(ids, (id) => api.sendToArmory(id)),
+    /** A draft finding with these pairs as its requests. */
+    createFinding: (ids) => api.createFinding(ids),
+    /** A draft test case with these pairs as its requests. */
+    createTestCase: (ids) => api.createTestCase(ids),
   };
+
+  // Runs `fn` on each pair in turn. A failure is logged and counted, and the
+  // rest still run.
+  async function eachPair(ids, fn) {
+    const results = [];
+    let failed = 0;
+    for (const id of ids) {
+      try {
+        results.push(await fn(id));
+      } catch (err) {
+        console.error(`Acting on pair ${id} failed:`, err);
+        failed += 1;
+      }
+    }
+    return { done: results.length, failed, results };
+  }
+
+  // Links or unlinks pairs. A link can change what the query matches.
+  async function linkEach(ids, fn) {
+    const { done, failed } = await eachPair(ids, fn);
+    trafficChanged = true;
+    return { done, failed };
+  }
+
+  // A launchpad named for its pairs: "Request N", or "N requests".
+  function launchpadName(ids) {
+    const numbers = ids.map(pairNumber);
+    if (ids.length === 1) {
+      return ["Request " + numbers[0], "Launchpad for Request " + numbers[0]];
+    }
+    return [`${ids.length} requests`, "Launchpad for Requests " + numbers.join(", ")];
+  }
+
+  /** Creates one launchpad and links every pair to it. */
+  async function sendToNewLaunchpad(ids) {
+    const launchpadId = await api.createLaunchpad(...launchpadName(ids));
+    const { done, failed } = await linkEach(ids, (id) => api.linkToLaunchpad(id, launchpadId));
+    return { launchpadId, done, failed };
+  }
+
+  /** Creates a launchpad for each pair, up to LAUNCHPADS_EACH_MAX. */
+  async function sendToLaunchpadsEach(ids) {
+    if (ids.length > LAUNCHPADS_EACH_MAX) {
+      throw new Error(`One launchpad each works on up to ${LAUNCHPADS_EACH_MAX} requests`);
+    }
+    const { results, failed } = await eachPair(ids, async (id) => {
+      const launchpadId = await api.createLaunchpad(...launchpadName([id]));
+      await api.linkToLaunchpad(id, launchpadId);
+      return launchpadId;
+    });
+    trafficChanged = true;
+    return { launchpadIds: results, done: results.length, failed };
+  }
 }

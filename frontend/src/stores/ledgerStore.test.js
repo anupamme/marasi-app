@@ -861,6 +861,23 @@ test("new-match counts wait for traffic to pause, but no longer than the max wai
   assert.equal(counted(), 2);
 });
 
+test("the store says once the project's exclusion has loaded", async () => {
+  const api = fakeApi({ traffic: pairs(1), exclusion: ["image/*"] });
+  let release;
+  const read = api.getExclusion;
+  api.getExclusion = () => new Promise((resolve) => (release = () => resolve(read())));
+  const store = createLedgerStore(api);
+  const loading = store.populate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(get(store).exclusionLoaded, false);
+  release();
+  await loading;
+  assert.equal(get(store).exclusionLoaded, true);
+  assert.deepEqual(get(store).exclusion, ["image/*"]);
+  store.clear();
+  assert.equal(get(store).exclusionLoaded, false);
+});
+
 test("query results count the pairs the exclusion hides too", async () => {
   const api = fakeApi({
     traffic: [pair(1), pair(2, { ContentType: "image/png" }), pair(3), pair(4, { ContentType: "image/png" })],

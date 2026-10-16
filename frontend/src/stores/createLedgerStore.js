@@ -164,6 +164,8 @@ function initialState(runID = 0, layout = initialLayout(), sort = DEFAULT_SORT) 
     focusRow: null,
     // Content types the table hides: exact types and major/* values.
     exclusion: [],
+    // True once the project's exclusion has loaded (or failed to).
+    exclusionLoaded: false,
     // True when the project keeps its own exclusion, false when it follows
     // the app default, null until known.
     ownExclusion: null,
@@ -934,9 +936,12 @@ export function createLedgerStore(api) {
     exclusionLoaded = api
       .getExclusion()
       .then((exclusion) => {
-        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
+        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [], exclusionLoaded: true }));
       })
-      .catch((err) => console.error("Loading the content-type exclusion failed:", err));
+      .catch((err) => {
+        console.error("Loading the content-type exclusion failed:", err);
+        if (fresh()) update((state) => ({ ...state, exclusionLoaded: true }));
+      });
     await Promise.all([
       reload(),
       exclusionLoaded,

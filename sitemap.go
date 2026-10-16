@@ -35,6 +35,10 @@ type SitemapChildrenRequest struct {
 	// mode). Without it the counts are All traffic, and a Query adds each
 	// child's matching count.
 	Matching bool
+	// Exclusion is the content-type exclusion to leave out, as the ledger
+	// shows it; it can be ahead of the stored one while a save is in
+	// flight. nil uses the project's stored exclusion.
+	Exclusion []string
 }
 
 // SitemapNodeCount is one child of a sitemap node.
@@ -85,8 +89,12 @@ func (a *App) listSitemapChildren(req SitemapChildrenRequest) (SitemapChildrenRe
 	if err != nil {
 		return SitemapChildrenResult{}, err
 	}
-	exclusion, err := a.GetContentTypeExclusion()
-	if err != nil {
+	exclusion := req.Exclusion
+	if exclusion == nil {
+		if exclusion, err = a.GetContentTypeExclusion(); err != nil {
+			return SitemapChildrenResult{}, err
+		}
+	} else if exclusion, err = normalizeExclusion(exclusion); err != nil {
 		return SitemapChildrenResult{}, err
 	}
 	var selection *domain.SelectionQuery

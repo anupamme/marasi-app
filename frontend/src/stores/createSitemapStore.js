@@ -158,7 +158,7 @@ export function createSitemapStore(api) {
   let pending = new Map();
 
   function request(node, cursor) {
-    const { query, asOf } = current.context;
+    const { query, asOf, exclusion } = current.context;
     const matching = sitemapScope(current) === "matching";
     return {
       Node: node,
@@ -167,6 +167,9 @@ export function createSitemapStore(api) {
       Query: query,
       AsOf: query ? (asOf ?? "") : "",
       Matching: matching,
+      // The ledger's exclusion goes with each read, so a read never sees
+      // an older one while the ledger is still saving it.
+      Exclusion: [...exclusion],
     };
   }
 

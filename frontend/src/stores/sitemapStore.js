@@ -9,19 +9,20 @@ import { ledgerStore } from "./ledgerStore";
 export { hostCountLabel, sitemapRows, sitemapScope, STEP, WINDOW } from "./createSitemapStore.js";
 
 export const sitemapStore = createSitemapStore({
-  // { Node, Cursor, Limit, Query, AsOf, Matching } →
+  // { Node, Cursor, Limit, Query, AsOf, Matching, Exclusion } →
   // { Children, NextCursor, Complete, Missing, QueryError }.
   listSitemapChildren: (request) => ListSitemapChildren(request),
 });
 
-// The running query, its results' as_of and the exclusion. The sitemap
-// waits for the ledger's first rows, so it never delays them.
+// The running query, its results' as_of and the exclusion, which each read
+// passes along. The sitemap waits for the ledger's first rows, so it never
+// delays them, and for the project's exclusion.
 ledgerStore.subscribe((state) =>
   sitemapStore.setContext({
     query: state.query.ranQuery,
     asOf: state.results.asOf,
     exclusion: state.exclusion,
-    ready: !state.results.loading,
+    ready: !state.results.loading && state.exclusionLoaded,
   }),
 );
 

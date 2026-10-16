@@ -19,6 +19,7 @@
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
+import { toggleQueryTerm } from "../lib/ledgerQueryFields.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
@@ -821,6 +822,36 @@ export function createLedgerStore(api) {
     checkForNewMatches,
     mergeNewMatches,
     setPagination,
+
+    /**
+     * Adds `term` to the query box, or removes it when the query has it as a
+     * condition of its own, and runs the result at once (a menu's choice).
+     */
+    toggleQueryTerm: (term) => {
+      const text = toggleQueryTerm(current.queryText, term);
+      update((state) => ({ ...state, queryText: text }));
+      return runQuery(text);
+    },
+
+    /**
+     * Counts the pairs each query matches, minus the content-type exclusion:
+     * { [query]: { count, capped } }, or null for a query that failed. Counts
+     * stop at marasi's cap, 100,000; `capped` means more matched.
+     */
+    countQueries: async (queries) => {
+      const counts = await Promise.all(
+        queries.map(async (query) => {
+          try {
+            const result = await api.countTraffic(query, "");
+            return result.QueryError ? null : { count: result.Count, capped: result.Capped };
+          } catch (err) {
+            console.error(`Counting matches for ${query} failed:`, err);
+            return null;
+          }
+        }),
+      );
+      return Object.fromEntries(queries.map((query, i) => [query, counts[i]]));
+    },
 
     // Stores the content-type exclusion and goes back to the first page,
     // then runs the active query again so its results reflect it.

@@ -41,6 +41,7 @@
 		TriangleAlert,
 		PanelLeftIcon,
 		FileType,
+		Tags,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
 	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
@@ -52,6 +53,9 @@
 	import { LEDGER_DOCK } from "../../lib/dock/dock.js";
 	import LedgerTable from "../../lib/ledger/LedgerTable.svelte";
 	import LedgerDrawer from "../../lib/ledger/LedgerDrawer.svelte";
+	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
+	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
+	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
 	import { rowHighlight } from "../../lib/ledger/table.js";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
 	import { highlightPalette } from "../../stores/highlightsStore";
@@ -593,6 +597,17 @@
 		return ledgerStore.saveExclusion(exclusionDraft);
 	}
 
+	// The Marks menu's counts, read each time it opens.
+	let markCounts = {};
+	let markCountsRead = 0;
+	async function loadMarkCounts() {
+		const read = ++markCountsRead;
+		markCounts = {};
+		const counts = await ledgerStore.countQueries(MARKS.map((mark) => mark.term));
+		if (read === markCountsRead) markCounts = counts;
+	}
+	$: activeMarks = activeMarkCount($queryText);
+
 	// Closes the toolbar's panels on a click outside them.
 	function onWindowPointerDown(event) {
 		if (typesOpen && !event.target.closest?.(".ledger-types")) typesOpen = false;
@@ -625,8 +640,8 @@
 	</Dock>
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		<!-- Toolbar: the query box, then the menus. Saved queries, Highlights
-		     and Marks join it before Types. -->
+		<!-- Toolbar: the query box, then the menus. Saved queries and
+		     Highlights join it before Marks. -->
 		<div
 			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-100-800-token"
 		>
@@ -691,6 +706,21 @@
 					<CircleHelp size={15} />
 				</button>
 			</div>
+			<ToolbarMenu
+				id="ledgerMarks"
+				label="Marks"
+				icon={Tags}
+				title="Pairs with a note or a link"
+				badge={activeMarks ? String(activeMarks) : ""}
+				panelClass="w-64"
+				on:open={loadMarkCounts}
+			>
+				<MarksMenu
+					queryText={$queryText}
+					counts={markCounts}
+					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
+				/>
+			</ToolbarMenu>
 			<div class="ledger-types relative flex items-stretch border-l border-surface-300-600-token">
 				<button
 					type="button"

@@ -57,7 +57,7 @@
 	{#if slots.more}
 		<!-- svelte-ignore a11y-no-static-element-interactions -->
 		<span
-			class="ledger-badges-more inline-flex w-[14px] cursor-default justify-center text-[9px] opacity-60 hover:opacity-100"
+			class="ledger-badges-more inline-flex w-[14px] cursor-default justify-center text-[9px] opacity-60 [text-box:trim-both_cap_alphabetic] hover:opacity-100"
 			on:mouseenter={showTip}
 			on:mouseleave={() => (tip = null)}>+{slots.more}</span
 		>

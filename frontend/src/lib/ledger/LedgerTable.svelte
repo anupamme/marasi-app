@@ -278,7 +278,7 @@
 					<span class="text-right tabular-nums opacity-60"
 						>{firstNumber == null ? "" : firstNumber + range.start + i}</span
 					>
-					<span class="!overflow-visible !pl-1"><RowBadges {row} /></span>
+					<span class="flex items-center !overflow-visible !pl-1"><RowBadges {row} /></span>
 					<span class="opacity-60">{shortTime(row.RequestedAt)}</span>
 					<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>
 					<span title={row.Host}>{row.Host ?? ""}</span>
@@ -320,9 +320,15 @@
 		white-space: nowrap;
 		min-width: 734px;
 	}
+	/* Each cell's box is trimmed to its capitals, so the row centres the
+	   text itself rather than a line box whose glyph position depends on
+	   the engine's font metrics (WebKit drew it ~2px low). Clipping only
+	   sideways keeps the ellipsis and lets descenders show. */
 	.lg-row > :global(*) {
-		overflow: hidden;
+		overflow-x: clip;
+		overflow-y: visible;
 		text-overflow: ellipsis;
+		text-box: trim-both cap alphabetic;
 		padding: 0 6px;
 	}
 	/* Skeleton's [data-sort]::after gives every sortable header a hidden

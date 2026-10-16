@@ -197,14 +197,106 @@ test("a failed write leaves the menu as it was and rejects", async () => {
   assert.deepEqual(names(savedQueryGroups(get(store))[0].items), ["Third-party noise"]);
 });
 
-test("the active saved query is the visible one whose query is the box's text", async () => {
+test("the active saved query is the one whose query is the box's text, hidden built-ins included", async () => {
   const store = await loadedStore(fakeApi({ queries: [noise], hidden: ["server-errors"] }));
   const state = get(store);
 
   assert.equal(activeSavedQuery(state, ' host != "*.acme.test" ')?.name, "Third-party noise");
   assert.equal(activeSavedQuery(state, "status_code >= 400 AND status_code < 500")?.name, "Client errors");
-  assert.equal(activeSavedQuery(state, "status_code >= 500"), null, "hidden built-ins aren't active");
+  assert.equal(activeSavedQuery(state, "status_code >= 500")?.name, "Server errors", "a hidden built-in is still saved");
   assert.equal(activeSavedQuery(state, ""), null);
+  assert.equal(canSaveQuery(state, "status_code >= 500", true), false);
+});
+
+// A write that waits until `release()`, or fails with `fail(error)`.
+function heldWrite() {
+  let release;
+  let fail;
+  const promise = new Promise((resolve, reject) => {
+    release = resolve;
+    fail = reject;
+  });
+  return { promise, release: (value) => release(value), fail: (error) => fail(error) };
+}
+
+test("saving, renaming and deleting show in the menu before the write lands", async () => {
+  const api = fakeApi({ queries: [noise], settings: projectSetting("p1", "Login", 'path = "/login"', 0) });
+  const store = await loadedStore(api);
+  const save = api.saveAppSavedQueries;
+  let held = heldWrite();
+  api.saveAppSavedQueries = async (list) => {
+    await held.promise;
+    return save(list);
+  };
+
+  const saving = store.save("Notes", "note:*", "app");
+  assert.deepEqual(names(group(store, "app").items), ["Third-party noise", "Notes"]);
+  held.release();
+  await saving;
+  assert.deepEqual(names(group(store, "app").items), ["Third-party noise", "Notes"]);
+
+  held = heldWrite();
+  const renaming = store.rename(group(store, "app").items[0], "Noise");
+  assert.deepEqual(names(group(store, "app").items), ["Noise", "Notes"]);
+  held.release();
+  await renaming;
+
+  const setSetting = api.setClientSetting;
+  const projectHeld = heldWrite();
+  api.setClientSetting = async (key, value) => {
+    await projectHeld.promise;
+    return setSetting(key, value);
+  };
+  const renamingProject = store.rename(group(store, "project").items[0], "Sign in");
+  assert.deepEqual(names(group(store, "project").items), ["Sign in"]);
+  projectHeld.release();
+  await renamingProject;
+  assert.equal(api.settings["ledger.saved_query.p1"].name, "Sign in");
+});
+
+test("a failed write puts the menu back after showing the change at once", async () => {
+  const api = fakeApi({ queries: [noise], settings: projectSetting("p1", "Login", 'path = "/login"', 0) });
+  const store = await loadedStore(api);
+  const held = heldWrite();
+  api.deleteClientSetting = () => held.promise;
+
+  const removing = store.remove(group(store, "project").items[0]);
+  assert.equal(group(store, "project"), undefined, "gone at once");
+  held.fail(new Error("locked"));
+  await assert.rejects(removing, /locked/);
+  assert.deepEqual(names(group(store, "project").items), ["Login"]);
+});
+
+test("hiding a built-in shows at once and comes back when the write fails", async () => {
+  const api = fakeApi();
+  const store = await loadedStore(api);
+  const held = heldWrite();
+  api.setHiddenBuiltins = () => held.promise;
+
+  const hiding = store.setBuiltinHidden("server-errors", true);
+  assert.equal(hiddenBuiltinCount(get(store)), 1);
+  held.fail(new Error("disk full"));
+  await assert.rejects(hiding, /disk full/);
+  assert.equal(hiddenBuiltinCount(get(store)), 0);
+});
+
+test("a move shows one copy at once, in its new place", async () => {
+  const api = fakeApi({ queries: [noise, marked] });
+  const store = await loadedStore(api);
+  const held = heldWrite();
+  const setSetting = api.setClientSetting;
+  api.setClientSetting = async (key, value) => {
+    await held.promise;
+    return setSetting(key, value);
+  };
+
+  const moving = store.move(group(store, "app").items[0], "project");
+  assert.deepEqual(names(group(store, "project").items), ["Third-party noise"]);
+  assert.deepEqual(names(group(store, "app").items), ["Highlighted"]);
+  held.release();
+  await moving;
+  assert.deepEqual(names(group(store, "project").items), ["Third-party noise"]);
+  assert.deepEqual(names(group(store, "app").items), ["Highlighted"]);
 });
 
 test("only a valid query that isn't saved yet can be saved", async () => {

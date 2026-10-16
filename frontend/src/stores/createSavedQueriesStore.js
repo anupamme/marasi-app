@@ -11,8 +11,9 @@
 //   listClientSettings(prefix)  -> [{ key, value }] (the project's settings)
 //   setClientSetting(key, value), deleteClientSetting(key)
 //
-// Each writable source is an adapter in `sources` with add, update and
-// remove; its entries live in state.queries[source].
+// Each writable source has a backend in `backends` with put and remove; its
+// entries live in state.queries[source]. Writes are optimistic: the state
+// changes first, and goes back if the write fails.
 import { writable } from "svelte/store";
 
 /** The client-setting key prefix of the project's saved queries. */
@@ -79,14 +80,18 @@ export function hiddenBuiltinCount(state) {
   return BUILTIN_QUERIES.filter((q) => state.hiddenBuiltins.includes(q.id)).length;
 }
 
-/** The visible saved query whose query is `text`, or null. */
+/**
+ * The saved query whose query is `text`, or null. A hidden built-in still
+ * counts: the query is saved, just not listed.
+ */
 export function activeSavedQuery(state, text) {
   const query = text.trim();
   if (!query) return null;
-  return visibleSavedQueries(state).find((q) => q.query === query) ?? null;
+  const all = savedQueryGroups(state, { showHidden: true }).flatMap((group) => group.items);
+  return all.find((q) => q.query === query) ?? null;
 }
 
-/** True when `text` is a valid query (`valid`) that no visible saved query has. */
+/** True when `text` is a valid query (`valid`) that no saved query has. */
 export function canSaveQuery(state, text, valid) {
   return Boolean(valid && text.trim() && !activeSavedQuery(state, text));
 }
@@ -134,37 +139,64 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
 
   // The app config's list, without the store's own fields.
   const appList = (entries) => entries.map(({ id, name, query, order }) => ({ id, name, query, order }));
+  // One project query per client setting, so a change rewrites only its key.
+  const projectKey = (entry) => `${PROJECT_QUERY_PREFIX}${entry.id}`;
+
+  const byOrder = (entries) => [...entries].sort((a, b) => a.order - b.order);
+  const without = (entries, entry) => entries.filter((q) => q.id !== entry.id);
+
+  // The writable sources' backends. `put` writes `entry` and `remove`
+  // deletes it, given the source's list as it now stands in the menu.
+  const backends = {
+    project: {
+      put: (entry) => {
+        const { name, query, order } = entry;
+        return api.setClientSetting(projectKey(entry), { name, query, order });
+      },
+      remove: (entry) => api.deleteClientSetting(projectKey(entry)),
+    },
+    app: {
+      put: (entry, entries) => writeApp(entries),
+      remove: (entry, entries) => writeApp(entries),
+    },
+  };
   async function writeApp(entries) {
     const saved = await api.saveAppSavedQueries(appList(entries));
     setSource("app", saved ?? []);
   }
 
-  // One project query per client setting, so a change rewrites only its key.
-  const projectKey = (entry) => `${PROJECT_QUERY_PREFIX}${entry.id}`;
-  async function writeProject(entry) {
-    const { name, query, order } = entry;
-    await api.setClientSetting(projectKey(entry), { name, query, order });
-    const others = current.queries.project.filter((q) => q.id !== entry.id);
-    setSource("project", [...others, entry].sort((a, b) => a.order - b.order));
+  // Settings writes are optimistic: the menu changes at once, then the
+  // backend is written. A failed write puts the source's list back and
+  // rejects, so the caller can say so.
+  async function change(source, entries, write) {
+    const before = current.queries[source];
+    setSource(source, entries);
+    try {
+      await write(entries);
+    } catch (error) {
+      setSource(source, before);
+      throw error;
+    }
   }
 
-  // The writable sources. Each change goes to the backend first; the menu
-  // changes only once the write succeeds.
-  const sources = {
-    project: {
-      add: writeProject,
-      update: writeProject,
-      remove: async (entry) => {
-        await api.deleteClientSetting(projectKey(entry));
-        setSource("project", current.queries.project.filter((q) => q.id !== entry.id));
-      },
-    },
-    app: {
-      add: (entry) => writeApp([...current.queries.app, entry]),
-      update: (entry) => writeApp(current.queries.app.map((q) => (q.id === entry.id ? entry : q))),
-      remove: (entry) => writeApp(current.queries.app.filter((q) => q.id !== entry.id)),
-    },
-  };
+  // Adds, updates or removes one entry of `entry.source`.
+  function addEntry(entry) {
+    const { source } = entry;
+    return change(source, byOrder([...current.queries[source], entry]), (entries) =>
+      backends[source].put(entry, entries),
+    );
+  }
+  function updateEntry(entry) {
+    const { source } = entry;
+    const entries = current.queries[source].map((q) => (q.id === entry.id ? entry : q));
+    return change(source, entries, (entries) => backends[source].put(entry, entries));
+  }
+  function removeEntry(entry) {
+    const { source } = entry;
+    return change(source, without(current.queries[source], entry), (entries) =>
+      backends[source].remove(entry, entries),
+    );
+  }
 
   let projectRun = 0;
   /**
@@ -212,7 +244,7 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
       order: nextOrder(source),
       source,
     };
-    await sources[source].add(entry);
+    await addEntry(entry);
     return entry;
   }
 
@@ -220,18 +252,29 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
 
   /**
    * Moves a saved query to `target` ("project" or "app"), after its
-   * queries: writes the new copy, then deletes the old one. If the delete
-   * fails the new copy is taken back, so one copy remains, and it rejects.
+   * queries. The menu shows it in its new place at once; then the new copy
+   * is written and the old one deleted. If either write fails the query
+   * goes back where it was, with the new copy taken back, so one copy
+   * remains, and it rejects.
    */
   async function move(entry, target) {
-    if (entry.source === target || !sources[target]) return;
+    if (entry.source === target || !backends[target]) return;
     const { hidden, ...stored } = entry;
+    const from = stored.source;
     const moved = { ...stored, order: nextOrder(target), source: target };
-    await sources[target].add(moved);
+    const putBack = () => setSource(from, byOrder([...without(current.queries[from], stored), stored]));
+    setSource(from, without(current.queries[from], stored));
     try {
-      await sources[entry.source].remove(entry);
+      await addEntry(moved);
     } catch (error) {
-      await sources[target].remove(moved).catch((undo) => console.error("taking back a moved query:", undo));
+      putBack();
+      throw error;
+    }
+    try {
+      await backends[from].remove(stored, current.queries[from]);
+    } catch (error) {
+      putBack();
+      await removeEntry(moved).catch((undo) => console.error("taking back a moved query:", undo));
       throw error;
     }
   }
@@ -241,18 +284,27 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
     const trimmed = name.trim();
     if (!trimmed || trimmed === entry.name) return;
     const { hidden, ...stored } = entry;
-    await sources[entry.source].update({ ...stored, name: trimmed });
+    await updateEntry({ ...stored, name: trimmed });
   }
 
   async function remove(entry) {
-    await sources[entry.source].remove(entry);
+    const { hidden, ...stored } = entry;
+    await removeEntry(stored);
   }
 
-  /** Hides a built-in, or shows it again. */
+  /** Hides a built-in, or shows it again; at once, put back if the write fails. */
   async function setBuiltinHidden(id, hidden) {
-    const others = current.hiddenBuiltins.filter((h) => h !== id);
-    const saved = await api.setHiddenBuiltins(hidden ? [...others, id] : others);
-    update((state) => ({ ...state, hiddenBuiltins: saved ?? [] }));
+    const before = current.hiddenBuiltins;
+    const others = before.filter((h) => h !== id);
+    const next = hidden ? [...others, id] : others;
+    update((state) => ({ ...state, hiddenBuiltins: next }));
+    try {
+      const saved = await api.setHiddenBuiltins(next);
+      update((state) => ({ ...state, hiddenBuiltins: saved ?? [] }));
+    } catch (error) {
+      update((state) => ({ ...state, hiddenBuiltins: before }));
+      throw error;
+    }
   }
 
   let countRun = 0;

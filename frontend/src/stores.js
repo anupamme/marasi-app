@@ -17,6 +17,7 @@ import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
 import { readHighlights } from "./stores/highlightsStore";
 import { ledgerStore } from "./stores/ledgerStore";
+import { sitemapStore } from "./stores/sitemapStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 
 // Startup
@@ -144,6 +145,7 @@ export async function openProject() {
   workshopCode.set("");
   waypoints.set({});
   ledgerStore.clear();
+  sitemapStore.clear();
   recentTraffic.clear();
   extensions.set([]);
   extensions_ui.set({});

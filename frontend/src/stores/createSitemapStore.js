@@ -241,12 +241,16 @@ export function createSitemapStore(api) {
 
   /**
    * Follows the ledger: { query, asOf, exclusion, ready }. `query` is the
-   * running query ("" in the live view) and `asOf` its results' as_of. The
-   * sitemap reads again when any of them changes, except the live view's
-   * as_of, which moves with every new pair.
+   * running query ("" in the live view) and `asOf` its results' as_of;
+   * `ready` is whether the ledger's first rows have loaded since the
+   * project opened. The sitemap reads again when any of them changes,
+   * except the live view's as_of, which moves with every new pair.
    */
   function setContext(context) {
     const next = { ...emptyContext(), ...context, exclusion: context.exclusion ?? [] };
+    // Once the project's first rows have loaded, later reads of the table
+    // don't hold the sitemap back.
+    next.ready = current.context.ready || !!next.ready;
     if (sameContext(current.context, next)) {
       if (current.context.asOf !== next.asOf) update((state) => ({ ...state, context: next }));
       return;

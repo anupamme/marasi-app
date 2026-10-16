@@ -80,6 +80,12 @@ test("the origins load once the ledger's first rows have", async () => {
   assert.deepEqual(nodeRows(get(store)), [API, "https://www.acme.test"]);
   assert.deepEqual(api.calls, [{ Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "", AsOf: "", Matching: false }]);
   assert.equal(hostCountLabel(get(store)), "2 hosts");
+
+  // Later reads of the table, such as a new sort, don't read it again.
+  store.setContext({ ...LIVE, ready: false });
+  store.setContext(LIVE);
+  await store.settled();
+  assert.equal(api.calls.length, 1);
 });
 
 test("each level shows its busiest 10 children, then N more, 50 at a time", async () => {

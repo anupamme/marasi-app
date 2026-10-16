@@ -46,6 +46,9 @@
 	import Dock from "../../lib/dock/Dock.svelte";
 	import { LEDGER_DOCK } from "../../lib/dock/dock.js";
 	import LedgerTable from "../../lib/ledger/LedgerTable.svelte";
+	import LedgerSitemap from "../../lib/ledger/LedgerSitemap.svelte";
+	import { activeSitemapNode, chooseSitemapNode, excludeSitemapNode, stripLabel } from "../../lib/ledger/sitemap.js";
+	import { sitemapStore } from "../../stores/sitemapStore";
 	import LedgerDrawer from "../../lib/ledger/LedgerDrawer.svelte";
 	import RowMenu from "../../lib/ledger/RowMenu.svelte";
 	import {
@@ -107,6 +110,7 @@
 	const toastStore = getToastStore();
 
 	let dock;
+	let sitemapFind;
 	let table;
 	let tableArea;
 	let queryFieldsOpen = false;
@@ -116,6 +120,7 @@
 	let typesMenu;
 
 	$: primary = primaryVariant($modeCurrent);
+	$: sitemapNode = activeSitemapNode($queryText);
 	$: drawerOpen = Boolean($focused);
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
@@ -796,6 +801,14 @@
 	}
 	$: activeMarks = activeMarkCount($queryText);
 
+	// Runs the query after a sitemap choice: choosing a node narrows to it
+	// (again removes it), the eye-off button leaves it out.
+	function applySitemapChoice(text) {
+		if (!text.trim()) return ledgerStore.clearQuery();
+		ledgerStore.setQueryText(text);
+		ledgerStore.runQuery(text);
+	}
+
 	// Runs a saved query the menu chose, or returns to the live view for "".
 	function applySavedQuery(text) {
 		if (!text) return ledgerStore.clearQuery();
@@ -819,18 +832,19 @@
 		bind:this={dock}
 		state={ledgerStore.dockState}
 		limits={LEDGER_DOCK}
-		stripLabel="Sitemap"
+		stripLabel={stripLabel(sitemapNode)}
 		expandLabel="Show the sitemap"
 		searchLabel="Search the sitemap"
 		collapseLabel="Collapse the sitemap"
+		searchInput={sitemapFind}
 	>
-		<!-- The sitemap arrives with ticket 12. -->
-		<div class="ledger-sitemap flex h-full flex-col">
-			<div class="border-b border-surface-500/30 px-3 py-2 text-xs font-semibold">Sitemap</div>
-			<div class="flex flex-1 items-center justify-center p-4 text-center text-xs opacity-50">
-				The sitemap will appear here.
-			</div>
-		</div>
+		<LedgerSitemap
+			store={sitemapStore}
+			activeNode={sitemapNode}
+			bind:findInput={sitemapFind}
+			on:choose={(e) => applySitemapChoice(chooseSitemapNode($queryText, e.detail))}
+			on:exclude={(e) => applySitemapChoice(excludeSitemapNode($queryText, e.detail))}
+		/>
 	</Dock>
 
 	<div class="flex min-w-0 flex-1 flex-col">

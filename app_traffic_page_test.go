@@ -153,6 +153,9 @@ func TestCountNotesCountsEveryRequest(t *testing.T) {
 	if dashboard.Requests != 2 {
 		t.Fatalf("wanted 2 requests, got %d", dashboard.Requests)
 	}
+	if !dashboard.InterceptionsComplete {
+		t.Fatalf("wanted a new project's intercepted count to be complete")
+	}
 }
 
 func captureArmoryPair(t *testing.T, app *App, runID uuid.UUID) uuid.UUID {

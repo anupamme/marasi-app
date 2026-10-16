@@ -467,31 +467,26 @@ type Dashboard struct {
 	Notes         int
 	Launchpads    int
 	Interceptions int
+	// InterceptionsComplete is false while Marasi's intercepted_count job is
+	// still counting the pairs captured before the project kept the count,
+	// so Interceptions can be low; the dashboard shows it as counting.
+	InterceptionsComplete bool
 }
 
+// CountNotes reads the dashboard's four counts in one read.
 func (a *App) CountNotes() (Dashboard, error) {
-	dashboard := Dashboard{}
-	requests, err := a.Proxy.StatsRepo.CountRows()
+	counts, err := a.Proxy.StatsRepo.DashboardCounts()
 	if err != nil {
-		return dashboard, fmt.Errorf("counting requests : %w", err)
+		return Dashboard{}, fmt.Errorf("counting the dashboard : %w", err)
 	}
-	dashboard.Requests = requests
-	count, err := a.Proxy.StatsRepo.CountNotes()
-	if err != nil {
-		return dashboard, fmt.Errorf("counting notes : %w", err)
-	}
-	dashboard.Notes = count
-	launchpads, err := a.Proxy.StatsRepo.CountLaunchpads()
-	if err != nil {
-		return dashboard, fmt.Errorf("counting launchpads : %w", err)
-	}
-	dashboard.Launchpads = launchpads
-	intercepted, err := a.Proxy.StatsRepo.CountIntercepted()
-	if err != nil {
-		return dashboard, fmt.Errorf("counting launchpads : %w", err)
-	}
-	dashboard.Interceptions = intercepted
-	return dashboard, nil
+	complete, known := counts.Complete[domain.JobInterceptedCount]
+	return Dashboard{
+		Requests:              counts.Pairs,
+		Notes:                 counts.Notes,
+		Launchpads:            counts.Launchpads,
+		Interceptions:         counts.Intercepted,
+		InterceptionsComplete: complete || !known,
+	}, nil
 }
 func (a *App) StartBrowser(profile string) error {
 	_, err := a.chrome.Start(context.Background(), profile)

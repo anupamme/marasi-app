@@ -17,12 +17,16 @@
 	} from "lucide-svelte";
 	import { findingStore } from "../../stores/findingStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
+	import { groupBuilding, jobsStore } from "../../stores/jobsStore";
 
 	// Dashboard statistics
 	let totalRequests = 0;
 	let notes = 0;
 	let launchpads = 0;
 	let intercepted = 0;
+	// False while Marasi's intercepted_count job is still counting older
+	// pairs after an upgrade: the figure is a floor until it finishes.
+	let interceptedComplete = true;
 
 	// Scope statistics
 	let defaultAllow = true;
@@ -53,6 +57,14 @@
 	const ghost =
 		"dashboard-ghost inline-block h-7 w-16 animate-pulse rounded-sm bg-surface-300 align-middle dark:bg-surface-600";
 
+	// Once the job finishes, read the exact count.
+	$: interceptedCounting = groupBuilding($jobsStore, "intercepted");
+	let wasCounting = false;
+	$: {
+		if (wasCounting && !interceptedCounting && !interceptedComplete) refreshDashboard();
+		wasCounting = interceptedCounting;
+	}
+
 	// Refresh dashboard data
 	function refreshDashboard() {
 		const run = ++refreshes;
@@ -65,6 +77,8 @@
 				notes = dashboard.Notes;
 				launchpads = dashboard.Launchpads;
 				intercepted = dashboard.Interceptions || 0;
+				interceptedComplete = dashboard.InterceptionsComplete;
+				if (!interceptedComplete) jobsStore.watch("intercepted");
 			})
 			.catch((err) => console.error("Counting the dashboard failed:", err))
 			.finally(() => {
@@ -186,7 +200,11 @@
 							Intercepted
 						</p>
 						<p class="text-3xl font-bold">
-							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted}{/if}
+							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted}{#if !interceptedComplete}<span
+										class="dashboard-counting ml-2 align-middle text-sm font-normal opacity-60"
+										title="Marasi is still counting intercepted requests from before this version"
+										>counting…</span
+									>{/if}{/if}
 						</p>
 					</div>
 				</div>

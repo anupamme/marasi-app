@@ -3,7 +3,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { createJobsStore, jobStatus, groupBuilding } from "./createJobsStore.js";
+import { createJobsStore, jobLabel, jobStatus, groupBuilding } from "./createJobsStore.js";
 
 const job = (Name, Complete, Done = 0, Total = 0, Rebuildable = Name !== "prettified_move") => ({
   Name,
@@ -211,4 +211,10 @@ test("prettified copies are moving while the prettified_move job runs", () => {
   assert.equal(groupBuilding({ jobs: [job("prettified_move", true)] }, "prettified"), false);
   // Before the first read nothing is known, so nothing is shown.
   assert.equal(groupBuilding({ jobs: [] }, "prettified"), false);
+});
+
+test("the dashboard's intercepted count is counting while the intercepted_count job runs", () => {
+  assert.equal(groupBuilding({ jobs: [job("intercepted_count", false)] }, "intercepted"), true);
+  assert.equal(groupBuilding({ jobs: [job("intercepted_count", true)] }, "intercepted"), false);
+  assert.equal(jobLabel("intercepted_count"), "Intercepted count");
 });

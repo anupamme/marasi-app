@@ -1,5 +1,5 @@
 // The open project's Marasi background jobs (search index, sitemap, moving
-// prettified copies), for Settings → Maintenance and the Ledger's notices.
+// prettified copies, the dashboard's intercepted count), for Settings → Maintenance and the Ledger's notices.
 // Marasi emits no in-process job events, so the store polls ListJobs while a
 // job is incomplete and stops once every job is done. Backend calls go
 // through the injected `api`, so tests run against a fake:
@@ -19,6 +19,7 @@ export const JOB_GROUPS = {
   index: ["traffic_index", "annotation_index"],
   sitemap: ["sitemap"],
   prettified: ["prettified_move"],
+  intercepted: ["intercepted_count"],
 };
 
 const JOB_NAMES = {
@@ -26,6 +27,7 @@ const JOB_NAMES = {
   annotation_index: "Search index: notes and metadata",
   sitemap: "Sitemap",
   prettified_move: "Formatted bodies",
+  intercepted_count: "Intercepted count",
 };
 
 /** A job's display name. */

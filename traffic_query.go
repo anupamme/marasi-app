@@ -70,3 +70,33 @@ func asQueryError(err error) (*TrafficQueryError, bool) {
 	}
 	return &TrafficQueryError{Message: queryErr.Message, Position: queryErr.Position}, true
 }
+
+// QueryMatchCount is how many pairs a query matches, minus the project's
+// content-type exclusion. Count stops at domain.MaxTrafficCount, with Capped
+// set past it.
+type QueryMatchCount struct {
+	Count      int
+	Capped     bool
+	QueryError *TrafficQueryError // nil when the query is valid
+}
+
+// CountQueryMatches counts the pairs `query` matches, as QueryTraffic would
+// list them. The Ledger's menus show it beside each saved query or term.
+func (a *App) CountQueryMatches(query string) (QueryMatchCount, error) {
+	traffic, err := a.Proxy.GetTrafficRepo()
+	if err != nil {
+		return QueryMatchCount{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	exclusion, err := a.GetContentTypeExclusion()
+	if err != nil {
+		return QueryMatchCount{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	count, err := traffic.CountTraffic(domain.TrafficCountQuery{Text: query, Exclusion: exclusion})
+	if queryErr, ok := asQueryError(err); ok {
+		return QueryMatchCount{QueryError: queryErr}, nil
+	}
+	if err != nil {
+		return QueryMatchCount{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	return QueryMatchCount{Count: count.Count, Capped: count.Capped}, nil
+}

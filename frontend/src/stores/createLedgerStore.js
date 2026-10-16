@@ -1303,7 +1303,6 @@ export function createLedgerStore(api) {
     getMetadata: (id) => api.getMetadata(id),
     getNote: (id) => api.getNote(id),
     setHighlight,
-    refresh,
 
     // Actions on selected pairs, one call per pair (ticket 11 moves them to
     // Marasi's bulk operations). Each reports how many pairs it changed
@@ -1331,8 +1330,9 @@ export function createLedgerStore(api) {
   /**
    * Gives the pairs with these IDs highlight `number` (1-8), or clears their
    * highlights when it is null, in one bulk call. Marasi emits no event for
-   * it, so the loaded rows are repainted here. Resolves to the number of
-   * pairs Marasi changed.
+   * it, so the loaded rows are repainted here, in place: none move, even
+   * when they no longer match the query. Resolves to the number of pairs
+   * Marasi changed.
    */
   async function setHighlight(ids, number) {
     const selection = { ids: ids.map(String) };
@@ -1341,38 +1341,15 @@ export function createLedgerStore(api) {
         ? await api.clearHighlight(selection)
         : await api.setHighlight(selection, number);
     const wanted = new Set(selection.ids);
-    const repaint = (list) => {
-      let touched = false;
-      const next = list.map((item) => {
-        if (!wanted.has(String(item.ID)) || (item.Highlight ?? null) === number) return item;
-        touched = true;
-        return { ...item, Highlight: number };
-      });
-      return touched ? next : list;
-    };
-    update((state) => ({
-      ...state,
-      items: repaint(state.items),
-      query: {
-        ...state.query,
-        items: repaint(state.query.items),
-        newMatches: repaint(state.query.newMatches),
-      },
+    updateResults((r) => ({
+      ...r,
+      chunks: mapChunks(r.chunks, (item) =>
+        wanted.has(String(item.ID)) && (item.Highlight ?? null) !== number
+          ? { ...item, Highlight: number }
+          : item,
+      ),
     }));
-    trafficChanged = true;
     return changed;
-  }
-
-  /**
-   * Reads the live view again and reruns the active query, after a change
-   * Marasi made without events, such as the highlight migration.
-   */
-  async function refresh() {
-    const version = projectStateVersion;
-    const items = await api.getLiveView();
-    if (version !== projectStateVersion) return;
-    update((state) => ({ ...state, items: items ?? [] }));
-    await rerunQuery();
   }
 
   // Runs `fn` on each pair in turn. A failure is logged and counted, and the

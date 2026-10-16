@@ -9,7 +9,7 @@
 //   "sep"                              a divider
 //   { heading }                        a submenu heading
 //   { id, label, icon, action?, sub?, actionId?, kbd?, disabled?, hint?,
-//     checked?, badge?, severity? }
+//     checked?, badge?, severity?, danger? }
 // `action` is { type, ...arguments } for the page to run on the selection.
 // `actionId` names the keybinding catalog action whose keys the item shows.
 // `icon` is a key into RowMenu.svelte's icon map.
@@ -154,26 +154,31 @@ export function curlCommand(pair, raw) {
 }
 
 // Link state of a finding or test case over the pairs: true when every pair
-// is linked, "mixed" when some are, false when none are.
-function linkState(target, pairs) {
+// is linked, "mixed" when some are, false when none are; undefined when the
+// selection holds pairs the table hasn't loaded, so the state is unknown.
+function linkState(target, pairs, partial) {
+  if (partial) return undefined;
   const linked = new Set((target.Requests ?? []).map(String));
   const count = pairs.filter((pair) => linked.has(String(pair.ID))).length;
   return count === 0 ? false : count === pairs.length ? true : "mixed";
 }
 
 // The Finding and Test case submenus share a shape.
-function linkMenu({ key, noun, pairs, one, n, targets, newActionId, newType, linkType, unlinkType }) {
-  const states = targets.map((target) => [target, linkState(target, pairs)]);
-  const linked = states.filter(([, state]) => state);
+function linkMenu({ key, noun, pairs, one, n, partial, targets, newActionId, newType, linkType, unlinkType }) {
+  const states = targets.map((target) => [target, linkState(target, pairs, partial)]);
+  // With the state unknown, any of them can be unlinked.
+  const linked = partial ? states : states.filter(([, state]) => state);
   const title = (target) => target.Title || `Untitled ${noun}`;
   return {
-    badge: linked.length || null,
+    badge: partial ? null : linked.length || null,
     sub: [
       {
         id: `${key}-new`,
         label: one ? `New ${noun} from this request` : `New ${noun} with ${n} requests`,
         icon: "plus",
         actionId: newActionId,
+        disabled: partial,
+        hint: NOT_FOR_ALL,
         action: { type: newType },
       },
       { heading: `Link to ${noun}` },
@@ -202,17 +207,35 @@ function linkMenu({ key, noun, pairs, one, n, targets, newActionId, newType, lin
   };
 }
 
+// The hint on actions that need every pair loaded, under a ⌘A selection
+// that holds pairs the table hasn't loaded.
+const NOT_FOR_ALL = "Not for all matching";
+
 /**
- * The menu for `pairs`, the selected pairs in table order. `context` holds
- * what the app already knows: { numberOf(pair), launchpads, findings,
- * testCases, palette } (palette: the effective highlight palette).
+ * The menu for `pairs`, the selected pairs the table has loaded, in table
+ * order. `context` holds what the app already knows: { numberOf(pair),
+ * launchpads, findings, testCases, palette (the effective highlight
+ * palette), all, count }. `all` marks a ⌘A selection, whose `count` pairs
+ * (null until counted) can be more than the loaded ones; actions that need
+ * each pair are disabled then.
  */
 export function menuFor(
   pairs,
-  { numberOf = () => "", launchpads = [], findings = [], testCases = [], palette = effectivePalette() } = {},
+  {
+    numberOf = () => "",
+    launchpads = [],
+    findings = [],
+    testCases = [],
+    palette = effectivePalette(),
+    all = false,
+    count = null,
+  } = {},
 ) {
-  const n = pairs.length;
-  if (n === 0) return [];
+  if (pairs.length === 0) return [];
+  // Some selected pairs aren't loaded: only bulk actions can reach them.
+  const partial = all && !(count != null && count <= pairs.length);
+  const n = partial ? count : pairs.length;
+  const many = n == null ? "all" : n.toLocaleString();
   const one = n === 1 ? pairs[0] : null;
   const hosts = unique(pairs.map((pair) => pair.Host));
   const types = unique(pairs.map((pair) => pair.ContentType).filter(Boolean));
@@ -223,7 +246,8 @@ export function menuFor(
     noun: "finding",
     pairs,
     one,
-    n,
+    n: many,
+    partial,
     targets: findings,
     newActionId: "ledger.drawer-open.create-finding",
     newType: "new-finding",
@@ -235,7 +259,8 @@ export function menuFor(
     noun: "test case",
     pairs,
     one,
-    n,
+    n: many,
+    partial,
     targets: testCases,
     newActionId: "ledger.drawer-open.create-test-case",
     newType: "new-test-case",
@@ -270,17 +295,17 @@ export function menuFor(
       sub: [
         {
           id: "lp-new",
-          label: one ? "New launchpad" : `New launchpad with ${n} entries`,
+          label: one ? "New launchpad" : `New launchpad with ${many} entries`,
           icon: "plus",
           actionId: "ledger.drawer-open.send-to-launchpad",
           action: { type: "new-launchpad" },
         },
-        ...(n > 1
+        ...(!one
           ? [
               {
                 id: "lp-each",
-                label: `${n} launchpads, one each`,
-                disabled: n > LAUNCHPADS_EACH_MAX,
+                label: `${many} launchpads, one each`,
+                disabled: partial || n > LAUNCHPADS_EACH_MAX,
                 hint: `Up to ${LAUNCHPADS_EACH_MAX} at a time`,
                 action: { type: "launchpad-each" },
               },
@@ -294,13 +319,28 @@ export function menuFor(
               action: { type: "add-to-launchpad", id: launchpad.ID, name: launchpad.Name },
             }))
           : [{ id: "lp-none", label: "No launchpads yet", disabled: true }]),
+        // The pairs' launchpads aren't loaded with them, so every launchpad
+        // is offered; Marasi reports how many were in it.
+        ...(launchpads.length
+          ? [
+              { heading: "Remove from launchpad" },
+              ...launchpads.map((launchpad) => ({
+                id: `lpu-${launchpad.ID}`,
+                label: launchpad.Name || "Untitled launchpad",
+                icon: "unlink",
+                action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
+              })),
+            ]
+          : []),
       ],
     },
     {
       id: "armory",
-      label: one ? "Send to Armory" : `Send ${n} to Armory`,
+      label: one ? "Send to Armory" : `Send ${many} to Armory`,
       icon: "swords",
       actionId: "ledger.drawer-open.send-to-armory",
+      disabled: partial,
+      hint: NOT_FOR_ALL,
       action: { type: "armory" },
     },
     "sep",
@@ -316,35 +356,62 @@ export function menuFor(
             action: { type: "note", id: one.ID },
           },
         ]
-      : []),
+      : [
+          {
+            id: "note",
+            label: "Note",
+            icon: "pen",
+            sub: [
+              {
+                id: "n-append",
+                label: "Append a note…",
+                icon: "plus",
+                action: { type: "append-note" },
+              },
+              {
+                id: "n-clear",
+                label: "Clear notes…",
+                icon: "eraser",
+                danger: true,
+                action: { type: "clear-notes" },
+              },
+            ],
+          },
+        ]),
     {
       id: "highlight",
       label: "Highlight",
       icon: "highlighter",
-      swatches: highlightSwatches(pairs, palette),
+      // Under a partly loaded ⌘A selection, the pairs' own highlights are
+      // unknown.
+      swatches: highlightSwatches(pairs, palette).map((swatch) =>
+        partial ? { ...swatch, checked: undefined } : swatch,
+      ),
     },
     "sep",
     {
       id: "copy",
       label: "Copy",
       icon: "copy",
+      disabled: partial,
+      hint: NOT_FOR_ALL,
       sub: [
         {
           id: "c-url",
-          label: one ? "URL" : `${n} URLs`,
+          label: one ? "URL" : `${many} URLs`,
           actionId: "ledger.drawer-open.copy-url",
           action: { type: "copy", what: "urls" },
         },
         { id: "c-curl", label: "As cURL", action: { type: "copy", what: "curl" } },
         {
           id: "c-req",
-          label: one ? "Raw request" : `${n} raw requests`,
+          label: one ? "Raw request" : `${many} raw requests`,
           actionId: "ledger.drawer-open.copy-raw-request",
           action: { type: "copy", what: "requests" },
         },
         {
           id: "c-res",
-          label: one ? "Raw response" : `${n} raw responses`,
+          label: one ? "Raw response" : `${many} raw responses`,
           actionId: "ledger.drawer-open.copy-raw-response",
           disabled: !pairs.some(hasResponse),
           hint: "No response yet",
@@ -445,6 +512,13 @@ export function menuFor(
       disabled: !one,
       hint: "One request at a time",
       action: { type: "metadata", id: pairs[0].ID },
+    },
+    {
+      id: "delete",
+      label: one ? "Delete from project…" : `Delete ${many} from project…`,
+      icon: "trash",
+      danger: true,
+      action: { type: "delete" },
     },
   ];
 }

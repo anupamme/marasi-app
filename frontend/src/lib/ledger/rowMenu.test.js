@@ -48,7 +48,7 @@ const item = (items, id) => {
 };
 const ids = (items) => items.filter((it) => it?.id).map((it) => it.id);
 
-test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata", () => {
+test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata, Delete", () => {
   const menu = menuFor([pair("a")], context());
   assert.deepEqual(ids(menu), [
     "open",
@@ -62,6 +62,7 @@ test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Co
     "narrow",
     "select",
     "metadata",
+    "delete",
   ]);
   assert.equal(item(menu, "open").label, "Open in drawer");
   assert.equal(item(menu, "note").label, "Add note…");
@@ -75,13 +76,13 @@ test("a WebSocket upgrade row offers its stream", () => {
   assert.equal(item(menuFor([ws, pair("b")], context()), "websocket"), undefined);
 });
 
-test("several pairs: counts in the labels, no note, metadata disabled", () => {
+test("several pairs: counts in the labels, bulk notes, metadata disabled", () => {
   const menu = menuFor([pair("a"), pair("b")], context());
   assert.equal(item(menu, "open").label, "Open request 1 in drawer");
   assert.equal(item(menu, "lp-new").label, "New launchpad with 2 entries");
   assert.equal(item(menu, "lp-each").label, "2 launchpads, one each");
   assert.equal(item(menu, "armory").label, "Send 2 to Armory");
-  assert.equal(item(menu, "note"), undefined);
+  assert.deepEqual(ids(item(menu, "note").sub), ["n-append", "n-clear"]);
   assert.equal(item(menu, "metadata").disabled, true);
   assert.equal(item(menu, "c-url").label, "2 URLs");
 });
@@ -254,4 +255,60 @@ test("copy formats: URL, Markdown table and cURL", () => {
       "  --data-raw '{\"u\":\"it'\\''s\"}'",
     ].join(" \\\n"),
   );
+});
+
+test("Note: one pair adds or edits it; several append a note or clear them", () => {
+  const menu = menuFor([pair("a"), pair("b")], context());
+  assert.equal(item(menu, "note").label, "Note");
+  assert.equal(item(menu, "n-append").label, "Append a note…");
+  assert.deepEqual(item(menu, "n-append").action, { type: "append-note" });
+  assert.equal(item(menu, "n-clear").label, "Clear notes…");
+  assert.deepEqual(item(menu, "n-clear").action, { type: "clear-notes" });
+  assert.equal(item(menu, "n-clear").danger, true);
+  assert.equal(item(menuFor([pair("a", { Metadata: { has_note: 1 } })], context()), "note").label, "Edit note…");
+});
+
+test("Remove from launchpad lists the launchpads", () => {
+  const menu = menuFor([pair("a")], context({ launchpads: [{ ID: "L1", Name: "Login" }, { ID: "L2", Name: "" }] }));
+  const sub = item(menu, "launchpad").sub;
+  assert.ok(sub.some((it) => it.heading === "Remove from launchpad"));
+  assert.deepEqual(item(menu, "lpu-L1").action, { type: "remove-from-launchpad", id: "L1", name: "Login" });
+  assert.equal(item(menu, "lpu-L2").label, "Untitled launchpad");
+  const none = menuFor([pair("a")], context({ launchpads: [] }));
+  assert.equal(item(none, "launchpad").sub.some((it) => it.heading === "Remove from launchpad"), false);
+});
+
+test("Delete from project comes last and names the count", () => {
+  const one = menuFor([pair("a")], context());
+  assert.equal(ids(one).at(-1), "delete");
+  assert.equal(item(one, "delete").label, "Delete from project…");
+  assert.deepEqual(item(one, "delete").action, { type: "delete" });
+  assert.equal(item(one, "delete").danger, true);
+  assert.equal(item(menuFor([pair("a"), pair("b")], context()), "delete").label, "Delete 2 from project…");
+});
+
+test("a ⌘A selection names its count, and actions that need each pair wait for them all", () => {
+  const menu = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
+  assert.equal(item(menu, "lp-new").label, "New launchpad with 1,200 entries");
+  assert.equal(item(menu, "delete").label, "Delete 1,200 from project…");
+  assert.equal(item(menu, "lp-each").disabled, true);
+  assert.equal(item(menu, "armory").disabled, true);
+  assert.equal(item(menu, "copy").disabled, true);
+  assert.equal(item(menu, "f-new").disabled, true);
+  assert.equal(item(menu, "t-new").disabled, true);
+  assert.equal(item(menu, "lp-L1").disabled, undefined, "bulk links still run");
+  assert.equal(item(menu, "f-F3").checked, undefined, "link states are unknown");
+  assert.deepEqual(
+    ids(item(menu, "finding").sub).filter((id) => id.startsWith("fu-")),
+    ["fu-F1", "fu-F2", "fu-F3"],
+    "any finding can be unlinked",
+  );
+  assert.ok(item(menu, "highlight").swatches.every((swatch) => swatch.checked === undefined));
+
+  const counting = menuFor([pair("a"), pair("b")], context({ all: true, count: null }));
+  assert.equal(item(counting, "lp-new").label, "New launchpad with all entries");
+
+  const loaded = menuFor([pair("a"), pair("b")], context({ all: true, count: 2 }));
+  assert.equal(item(loaded, "armory").disabled, false, "every pair is loaded");
+  assert.equal(item(loaded, "f-F1").checked, true);
 });

@@ -1,6 +1,7 @@
 // The Ledger's multi-row selection: click, ⌘-click, ⇧-click, ⌘⇧-click,
 // drag sweeps, ⇧↑/↓, select all and right-click, and the actions the context
-// menu runs on the selected pairs, one call per pair.
+// menu runs on the selected pairs one at a time. Bulk actions on a
+// selection are in ledgerBulk.test.js.
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
@@ -161,7 +162,7 @@ test("⇧↑/↓ extend the selection from the anchor; plain ↑/↓ select one 
   assert.deepEqual(selected(store), ["c"]);
 });
 
-test("⌘A selects every row the table lists", async () => {
+test("⌘A shows every row the table lists as selected", async () => {
   const { store } = await storeWith(
     [pair("a"), pair("b", { ContentType: "image/png" }), pair("c")],
     { exclusion: ["image/png"] },
@@ -197,54 +198,6 @@ test("selectIDs selects the listed rows that the table shows", async () => {
   store.selectIDs(["b", "zzz", "d"]);
   assert.deepEqual(selected(store), ["b", "d"]);
   assert.equal(get(store).selection.focus, "d", "the focus is the topmost");
-});
-
-test("a new launchpad takes every pair; one pair names it after its request number", async () => {
-  const { store, api } = await storeWith();
-  const one = await store.sendToNewLaunchpad(["b"]);
-  assert.deepEqual(one, { launchpadId: "lp1", done: 1, failed: 0 });
-  const many = await store.sendToNewLaunchpad(["b", "d"]);
-  assert.deepEqual(many, { launchpadId: "lp2", done: 2, failed: 0 });
-  assert.deepEqual(api.calls, [
-    ["createLaunchpad", "Request 4", "Launchpad for Request 4"],
-    ["linkToLaunchpad", "b", "lp1"],
-    ["createLaunchpad", "2 requests", "Launchpad for Requests 4, 2"],
-    ["linkToLaunchpad", "b", "lp2"],
-    ["linkToLaunchpad", "d", "lp2"],
-  ]);
-});
-
-test("one launchpad each, up to 25 pairs", async () => {
-  const { store, api } = await storeWith();
-  const result = await store.sendToLaunchpadsEach(["a", "c"]);
-  assert.deepEqual(result, { launchpadIds: ["lp1", "lp2"], done: 2, failed: 0 });
-  assert.deepEqual(api.calls, [
-    ["createLaunchpad", "Request 5", "Launchpad for Request 5"],
-    ["linkToLaunchpad", "a", "lp1"],
-    ["createLaunchpad", "Request 3", "Launchpad for Request 3"],
-    ["linkToLaunchpad", "c", "lp2"],
-  ]);
-  const tooMany = Array.from({ length: 26 }, (_, i) => `p${i}`);
-  await assert.rejects(store.sendToLaunchpadsEach(tooMany), /25/);
-});
-
-test("adding to a launchpad, linking and unlinking make one call per pair and count failures", async () => {
-  const { store, api } = await storeWith(undefined, { fail: new Set(["c"]) });
-  assert.deepEqual(await store.addToLaunchpad(["a", "c"], "L"), { done: 1, failed: 1 });
-  assert.deepEqual(await store.linkToFinding(["a", "b"], "F"), { done: 2, failed: 0 });
-  assert.deepEqual(await store.unlinkFromFinding(["a"], "F"), { done: 1, failed: 0 });
-  assert.deepEqual(await store.linkToTestCase(["b"], "T"), { done: 1, failed: 0 });
-  assert.deepEqual(await store.unlinkFromTestCase(["b", "c"], "T"), { done: 1, failed: 1 });
-  assert.deepEqual(api.calls, [
-    ["linkToLaunchpad", "a", "L"],
-    ["linkToLaunchpad", "c", "L"],
-    ["linkToFinding", "a", "F"],
-    ["linkToFinding", "b", "F"],
-    ["unlinkFromFinding", "a", "F"],
-    ["linkToTestCase", "b", "T"],
-    ["unlinkFromTestCase", "b", "T"],
-    ["unlinkFromTestCase", "c", "T"],
-  ]);
 });
 
 test("sending to Armory makes one template per pair", async () => {

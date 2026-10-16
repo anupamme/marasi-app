@@ -41,6 +41,8 @@
 	$: scope = sitemapScope(state);
 	$: querying = !!state.context.query;
 	$: rows = sitemapRows(state, find);
+	// The ghost rows' bars, as in the table's ghost rows.
+	const ghostBar = "block h-2 animate-pulse rounded-sm bg-surface-300 dark:bg-surface-600";
 	$: hosts = hostCountLabel(state);
 	$: roots = state.levels[""];
 
@@ -129,7 +131,13 @@
 					>
 				</div>
 			{:else if row.kind === "loading"}
-				<p class="py-[3px] font-sans opacity-50" style="padding-left:{pad(row.depth) + 14}px">Loading…</p>
+				<div
+					class="ledger-sitemap-ghost flex h-[19px] items-center"
+					style="padding-left:{pad(row.depth) + 14}px"
+					aria-label="Loading"
+				>
+					<span class="{ghostBar} w-1/2"></span>
+				</div>
 			{:else if row.kind === "failed"}
 				<p class="flex items-center gap-1 py-[3px] font-sans text-error-500" style="padding-left:{pad(row.depth) + 14}px">
 					<CircleAlert size={11} /> Couldn't read this level.
@@ -218,7 +226,16 @@
 				{#if find}Nothing loaded matches "{find}".{:else if scope === "matching"}No pairs match the query.{:else}No traffic yet.{/if}
 			</p>
 		{:else if !roots || (roots.loading && rows.length === 0)}
-			<p class="p-4 text-center font-sans text-xs opacity-50">Loading…</p>
+			<!-- Ghost hosts while the first level reads. -->
+			<div class="ledger-sitemap-ghost" aria-label="Loading the sitemap">
+				{#each [0.6, 0.45, 0.7, 0.5, 0.4] as width, i}
+					<div class="flex h-[26px] items-center gap-2 border-l-4 border-transparent pl-3 pr-2">
+						<span class={ghostBar} style="width: {width * 100}%; animation-delay: {i * 120}ms"></span>
+						<span class="flex-1"></span>
+						<span class="{ghostBar} w-6"></span>
+					</div>
+				{/each}
+			</div>
 		{/if}
 	</div>
 </div>

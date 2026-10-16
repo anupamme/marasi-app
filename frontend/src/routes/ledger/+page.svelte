@@ -123,6 +123,10 @@
 		ghost = false;
 	}
 	onDestroy(() => clearTimeout(ghostTimer));
+	// An empty table has nothing to flash, so it shows them at once: the
+	// first visit lands on the shell with ghost rows while the rows read,
+	// or before the read starts while the project is still opening.
+	$: ghostRows = ghost || (($querying || $results.loading) && $rows.length === 0);
 	const queryActive = select(ledgerStore, (state) => isQueryActive(state.query));
 	// The row menu's Hide type adds to it.
 	const exclusion = select(ledgerStore, (state) => state.exclusion);
@@ -1107,7 +1111,7 @@
 					>
 				{:else if $queryActive}
 					<span id="ledgerQueryMatchCount" class="whitespace-nowrap text-xs opacity-70"
-						>{ghost ? "Querying…" : $statusCount}</span
+						>{ghostRows ? "Querying…" : $statusCount}</span
 					>
 					{#if $indexNote}
 						<span
@@ -1234,7 +1238,7 @@
 						sort={$sort}
 						pinTop={$newKind === "top" && !$results.hasBefore}
 						resetKey={$results.reset}
-						{ghost}
+						ghost={ghostRows}
 						on:click={(e) => ledgerStore.clickRow(e.detail.id, e.detail)}
 						on:sweepstart={(e) => ledgerStore.startSweep(e.detail)}
 						on:sweep={(e) => ledgerStore.sweepTo(e.detail)}
@@ -1330,7 +1334,7 @@
 			class="ledger-status flex h-6 flex-none items-center gap-4 border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
 		>
 			<span id="ledgerCount" class="opacity-80"
-				>{#if ghost}Querying Marasi…{:else}{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70"
+				>{#if ghostRows}Querying Marasi…{:else}{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70"
 							>{` · ${position}`}</span
 						>{/if}{/if}</span
 			>

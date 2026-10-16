@@ -48,3 +48,78 @@ export function appendToQuery(text, example) {
   if (!text) return example;
   return /\s$/.test(text) ? text + example : `${text} ${example}`;
 }
+
+// Splits query text into words with their offsets: whitespace separates
+// words, a quoted string stays inside its word, and each parenthesis is a
+// word of its own. `depth` is the number of open parentheses around a word.
+function queryWords(text) {
+  const words = [];
+  let depth = 0;
+  let i = 0;
+  while (i < text.length) {
+    const ch = text[i];
+    if (/\s/.test(ch)) {
+      i++;
+    } else if (ch === "(" || ch === ")") {
+      if (ch === ")") depth = Math.max(depth - 1, 0);
+      words.push({ text: ch, start: i, end: i + 1, depth });
+      if (ch === "(") depth++;
+      i++;
+    } else {
+      const start = i;
+      while (i < text.length && !/[\s()]/.test(text[i])) {
+        if (text[i] === '"') {
+          i++;
+          while (i < text.length && text[i] !== '"') i += text[i] === "\\" ? 2 : 1;
+        }
+        i++;
+      }
+      i = Math.min(i, text.length);
+      words.push({ text: text.slice(start, i), start, end: i, depth });
+    }
+  }
+  return words;
+}
+
+// The index of the first word of `term` in `words` where it stands as a
+// condition of its own: outside parentheses, not negated and not joined by
+// OR. -1 when it doesn't.
+function findTerm(words, term) {
+  const want = queryWords(term).map((word) => word.text);
+  for (let i = 0; i + want.length <= words.length; i++) {
+    if (!want.every((text, k) => words[i + k].text === text && words[i + k].depth === 0)) continue;
+    const before = words[i - 1]?.text;
+    const after = words[i + want.length]?.text;
+    if (before === "NOT" || before === "OR" || after === "OR") continue;
+    return i;
+  }
+  return -1;
+}
+
+/**
+ * True when the query has `term` as a condition of its own, so the
+ * researcher can toggle it off: outside parentheses, not negated and not
+ * joined by OR.
+ */
+export function hasQueryTerm(text, term) {
+  return findTerm(queryWords(text), term) !== -1;
+}
+
+/**
+ * Returns the query text with `term` removed when it has it as a condition
+ * of its own (with the AND that joined it), else with `term` appended. The
+ * rest of the text stays as typed.
+ */
+export function toggleQueryTerm(text, term) {
+  const words = queryWords(text);
+  const at = findTerm(words, term);
+  if (at === -1) return appendToQuery(text.trimEnd(), term);
+  let first = at;
+  let last = at + queryWords(term).length - 1;
+  if (words[first - 1]?.text === "AND") first--;
+  else if (words[last + 1]?.text === "AND") last++;
+  const next = words[last + 1];
+  const from = next ? words[first].start : (words[first - 1]?.end ?? 0);
+  const to = next ? next.start : text.length;
+  return (text.slice(0, from) + text.slice(to)).trim();
+}

@@ -17,13 +17,14 @@ import {
 // An in-memory backend: the live view, the stored content-type exclusion and
 // query results by query text. Writes are recorded in `api.calls`.
 // The project keeps its own exclusion once `ownExclusion` is set; until then
-// it follows `defaultExclusion`.
+// it follows `defaultExclusion`. `counts` holds CountTraffic results by query.
 function fakeApi({
   liveView = [],
   exclusion = undefined,
   defaultExclusion = [],
   results = {},
   typeCounts = { Counts: [], Complete: { sitemap: true } },
+  counts = {},
 } = {}) {
   const calls = [];
   let ownExclusion = exclusion;
@@ -54,6 +55,12 @@ function fakeApi({
       const pages = results[query];
       if (typeof pages === "function") return pages(cursor);
       return pages ?? { Items: [], NextCursor: null, IndexComplete: true };
+    },
+    countTraffic: async (query, after) => {
+      calls.push(["countTraffic", query, after]);
+      const count = counts[query];
+      if (count instanceof Error) throw count;
+      return count ?? { Count: 0, Capped: false, IndexComplete: true };
     },
   };
   return api;
@@ -478,4 +485,47 @@ test("clearing for another project drops a live view still loading", async () =>
   release([pair("old")]);
   await loading;
   assert.deepEqual(get(store).items, []);
+});
+
+test("toggling a query term adds it to the query box and runs the query", async () => {
+  const api = fakeApi({
+    results: { "host = x note:*": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
+  });
+  const store = createLedgerStore(api);
+  store.setQueryText("host = x");
+  await store.toggleQueryTerm("note:*");
+  const state = get(store);
+  assert.equal(state.queryText, "host = x note:*");
+  assert.equal(state.query.ranQuery, "host = x note:*");
+  assert.deepEqual(shownRows(state).map((row) => row.ID), ["a"]);
+});
+
+test("toggling the query's only term off returns to the live view", async () => {
+  const store = createLedgerStore(fakeApi({ liveView: [pair("a"), pair("b")] }));
+  await store.populate();
+  await store.toggleQueryTerm("finding:*");
+  await store.toggleQueryTerm("finding:*");
+  const state = get(store);
+  assert.equal(state.queryText, "");
+  assert.ok(!isQueryActive(state.query));
+});
+
+test("counting queries reads each count, capped, and marks a failed one null", async () => {
+  const api = fakeApi({
+    counts: {
+      "note:*": { Count: 3, Capped: false, IndexComplete: true },
+      "finding:*": { Count: 100000, Capped: true, IndexComplete: true },
+      "test_case:*": { Count: 0, Capped: false, IndexComplete: true, QueryError: { Message: "bad", Position: 1 } },
+      "launchpad:*": new Error("no project"),
+    },
+  });
+  const store = createLedgerStore(api);
+  const counts = await store.countQueries(["note:*", "finding:*", "test_case:*", "launchpad:*"]);
+  assert.deepEqual(counts, {
+    "note:*": { count: 3, capped: false },
+    "finding:*": { count: 100000, capped: true },
+    "test_case:*": null,
+    "launchpad:*": null,
+  });
+  assert.ok(api.calls.some(([name, query, after]) => name === "countTraffic" && query === "note:*" && after === ""));
 });

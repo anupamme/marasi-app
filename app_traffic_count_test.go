@@ -6,9 +6,13 @@ import (
 	"github.com/google/uuid"
 )
 
-func countTraffic(t *testing.T, app *App, query string, after string) TrafficCountResult {
+func countTraffic(t *testing.T, app *App, query string, after string, options ...TrafficCountOptions) TrafficCountResult {
 	t.Helper()
-	result, err := app.CountTraffic(query, after)
+	var opts TrafficCountOptions
+	if len(options) > 0 {
+		opts = options[0]
+	}
+	result, err := app.CountTraffic(query, after, opts)
 	if err != nil {
 		t.Fatalf("counting %q: %v", query, err)
 	}
@@ -99,7 +103,7 @@ func TestCountTrafficCountsInterceptedMark(t *testing.T) {
 func TestCountTrafficReturnsInvalidQueryAsData(t *testing.T) {
 	app := newScratchpadApp(t)
 
-	result, err := app.CountTraffic(`status_code >=`, "")
+	result, err := app.CountTraffic(`status_code >=`, "", TrafficCountOptions{})
 
 	if err != nil {
 		t.Fatalf("wanted the query error as data, got error %v", err)
@@ -112,7 +116,48 @@ func TestCountTrafficReturnsInvalidQueryAsData(t *testing.T) {
 func TestCountTrafficRejectsMalformedAfter(t *testing.T) {
 	app := newScratchpadApp(t)
 
-	if _, err := app.CountTraffic("", "not-a-uuid"); err == nil {
+	if _, err := app.CountTraffic("", "not-a-uuid", TrafficCountOptions{}); err == nil {
 		t.Fatal("wanted an error for a malformed after id")
+	}
+}
+
+func TestCountTrafficCanIgnoreTheExclusion(t *testing.T) {
+	app := newScratchpadApp(t)
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "image/png"})
+	capturePair(t, app, capturedPair{host: "www.acme.test", path: "/c", statusCode: 200, contentType: "application/json"})
+	excludeContentTypes(t, app, "image/png")
+
+	shown := countTraffic(t, app, "", "")
+	all := countTraffic(t, app, "", "", TrafficCountOptions{IgnoreExclusion: true})
+
+	if shown.Count != 2 || all.Count != 3 {
+		t.Fatalf("wanted 2 shown and 3 in all, got %d and %d", shown.Count, all.Count)
+	}
+	if shown.Capped || !shown.IndexComplete {
+		t.Fatalf("wanted an exact count over a complete index, got %+v", shown)
+	}
+}
+
+func TestCountTrafficCountsOnlyPairsUpToAsOf(t *testing.T) {
+	app := newScratchpadApp(t)
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 500, contentType: "text/html"})
+	page := pageTraffic(t, app, TrafficPageRequest{Query: "status_code >= 500"})
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 502, contentType: "text/html"})
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/c", statusCode: 200, contentType: "text/html"})
+
+	fresh := countTraffic(t, app, "status_code >= 500", page.AsOf)
+	snapshot := countTraffic(t, app, "status_code >= 500", "", TrafficCountOptions{AsOf: page.AsOf})
+
+	if fresh.Count != 1 || snapshot.Count != 1 {
+		t.Fatalf("wanted 1 new match and 1 in the snapshot, got %d and %d", fresh.Count, snapshot.Count)
+	}
+}
+
+func TestCountTrafficRejectsMalformedAsOf(t *testing.T) {
+	app := newScratchpadApp(t)
+
+	if _, err := app.CountTraffic("", "", TrafficCountOptions{AsOf: "not-a-uuid"}); err == nil {
+		t.Fatal("wanted an error for a malformed as_of")
 	}
 }

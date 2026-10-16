@@ -11,6 +11,7 @@ import {
   GetArmoryRuns,
   GetArmoryTemplates,
   GetArmoryWordlists,
+  ListArmoryRunTraffic,
   PreviewArmoryWordlist,
   StartArmoryRun,
   UpdateArmoryTemplate,
@@ -141,6 +142,8 @@ function createArmoryStore() {
 
   return {
     subscribe,
+    // The pairs a run sent, oldest first.
+    getRunTraffic: (runId) => ListArmoryRunTraffic(String(runId)),
 
     clear: () => set(initialState(++projectStateVersion)),
     populate,

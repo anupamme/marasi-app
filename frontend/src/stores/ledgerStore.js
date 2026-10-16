@@ -11,7 +11,6 @@ import {
   GetDefaultContentTypeExclusion,
   GetMetadata,
   GetNote,
-  GetProxyItems,
   GetRawDetails,
   LinkRequestToLaunchpad,
   ListClientSettings,
@@ -25,17 +24,11 @@ import {
 import { armoryStore } from "./armoryStore";
 import { findingStore } from "./findingStore";
 import { testCaseStore } from "./testCaseStore";
-import {
-  createLedgerStore,
-  FLUSH_INTERVAL_MS,
-  isQueryActive,
-  NEW_MATCHES_POLL_MS,
-  select,
-} from "./createLedgerStore.js";
+import { createLedgerStore, FLUSH_INTERVAL_MS } from "./createLedgerStore.js";
 
 export {
-  canLoadOlder,
   clampDrawerSplit,
+  countLabel,
   drawerKeybindingState,
   focusedPair,
   hiddenByTypeCount,
@@ -45,22 +38,22 @@ export {
   LAUNCHPADS_EACH_MAX,
   selectedPairs,
   isQueryActive,
-  tableRows,
-  ledgerPagination,
   markQueryError,
-  matchCountLabel,
   matchNoun,
-  needsOlderPage,
-  queryStatusLabel,
+  newMatchesKind,
+  newMatchesLabel,
   select,
   shownRows,
+  tableRows,
 } from "./createLedgerStore.js";
 
 export const ledgerStore = createLedgerStore({
-  getLiveView: () => GetProxyItems(),
-  queryTraffic: (query, cursor) => QueryTraffic(query, cursor),
+  // A page of the live view or of a query's results:
+  // { Query, OrderBy, Cursor, Direction, AsOf, Limit }.
+  queryTraffic: (request) => QueryTraffic(request),
   // after: "" counts every match, else only pairs captured after that id.
-  countTraffic: (query, after) => CountTraffic(query, after),
+  // options: { AsOf, IgnoreExclusion }; AsOf counts only pairs up to it.
+  countTraffic: (query, after, options = {}) => CountTraffic(query, after, options),
   getExclusion: () => GetContentTypeExclusion(),
   setExclusion: (types) => SetContentTypeExclusion(types),
   // ledger.exclusion is the project's own list; without it the project
@@ -97,25 +90,6 @@ export const ledgerStore = createLedgerStore({
   listClientSettings: (prefix) => ListClientSettings(prefix),
 });
 
-/** The live view, for the pages outside the Ledger that read it. */
-export const liveViewItems = select(ledgerStore, (state) => state.items);
-
 if (typeof window !== "undefined") {
   setInterval(ledgerStore.flush, FLUSH_INTERVAL_MS);
-
-  // Polls for new matches only while query mode is active.
-  let pollTimer = null;
-  select(ledgerStore, (state) => isQueryActive(state.query)).subscribe(
-    (active) => {
-      if (active && pollTimer === null) {
-        pollTimer = setInterval(
-          ledgerStore.checkForNewMatches,
-          NEW_MATCHES_POLL_MS,
-        );
-      } else if (!active && pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    },
-  );
 }

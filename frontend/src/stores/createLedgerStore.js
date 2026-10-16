@@ -1,21 +1,27 @@
-// The Ledger store: the live view, the query and its results, the
-// content-type exclusion and the table's pages. Every backend call goes
-// through the injected `api` (see ledgerStore.js for the Wails one), so this
-// module loads under node --test.
+// The Ledger store: the rows the table shows, the query, the sort, the
+// content-type exclusion and new matches. Every backend call goes through
+// the injected `api` (see ledgerStore.js for the Wails one), so this module
+// loads under node --test.
 //
-// The rows the Ledger shows are the query results while a query is active,
-// and the live view otherwise. Anything that acts on a row (the drawer, its
-// next/previous navigation, the context menu, notes, metadata and highlights)
-// must find its pair by ID, never by a row position, because the order and
-// contents of the shown rows depend on the active source.
+// The table shows one set of results: the live view (an empty query) or a
+// query's results, under the sort. It never holds the whole project. Rows
+// arrive in pages from Marasi's ListTraffic, read by cursor in either
+// direction, and the store keeps a window of a few pages around the rows in
+// view, dropping pages far from them. Every page of one set of results
+// passes the same `as_of`, so the pages agree on which pairs they list.
 //
-// A pair's request number ("Request N") is its position in the live view in
-// both modes, so a number always names the same pair.
+// Cursors are opaque, bound to their sort, and point at a page's edge rows;
+// a read starts just past its cursor. A page read from the top has no cursor
+// at its first row.
 //
-// Query mode is active exactly when the last query that ran successfully is
-// non-empty. The content-type exclusion is applied by the queryTraffic call,
-// which reads the project's exclusion itself, so it never appears in the
-// query. Cursors are opaque strings; "" asks for the first page.
+// New pairs: the newest-first live view shows them at the top while the
+// researcher is at the top; anywhere else, and under any other sort or a
+// query, rows never move and the store counts the new matches after `as_of`
+// until the researcher asks for them.
+//
+// A pair's number ("Request N", the # column) is its position in the
+// current results, counted from the top; it is unknown ("?") while the
+// window's position is.
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
@@ -31,44 +37,79 @@ export const LAUNCHPADS_EACH_MAX = 25;
 /** How long the query box waits after the last keystroke before running. */
 export const QUERY_DELAY_MS = 700;
 
-/** How often query mode checks for new matches after traffic changed. */
-export const NEW_MATCHES_POLL_MS = 5000;
+/** How long traffic must settle before new matches are counted again. */
+export const NEW_MATCHES_DELAY_MS = 1000;
 
-/** How often buffered request and response events reach the live view. */
+/** How often buffered request and response events reach the table. */
 export const FLUSH_INTERVAL_MS = 200;
 
-// Past this many buffered events, they reach the live view at once.
+/** Rows per ListTraffic page. */
+export const PAGE_SIZE = 200;
+
+/** The most rows the window keeps; pages far from the rows in view go. */
+export const MAX_WINDOW_ROWS = PAGE_SIZE * 5;
+
+/** Marasi's largest page; a refresh in place reads at most this many. */
+const MAX_PAGE_ROWS = 1000;
+
+/** How close to the window's edge the rows in view get before the next page loads. */
+export const EDGE_ROWS = 60;
+
+/** The default sort: newest first. */
+export const DEFAULT_SORT = Object.freeze({ field: "requested_at", desc: true });
+
+// Past this many buffered events, they reach the table at once.
 const MAX_BUFFERED = 500;
 
-const DEFAULT_PAGINATION = { pageIndex: 0, pageSize: 100 };
+/** Marasi's order_by for a sort. */
+export function orderBy(sort) {
+  return sort.desc ? `${sort.field} desc` : sort.field;
+}
+
+function emptyResults() {
+  return {
+    // Changes each time fresh results load from the top, so the table can
+    // scroll there; a refresh in place keeps it.
+    reset: 0,
+    // The loaded pages, top to bottom: { items, first, last }, where
+    // `first` and `last` are the cursors at the page's first and last rows,
+    // or null when unknown (a page read from the top) or at the end.
+    chunks: [],
+    // Whether rows exist above or below the window.
+    hasBefore: false,
+    hasAfter: false,
+    // The window's first row's position in the results, or null when
+    // unknown (after a refresh in place, until the top is loaded again).
+    start: 0,
+    // The as_of every page of these results passes; null before the first
+    // page, or when the project had no pairs.
+    asOf: null,
+    // True until the first page arrives.
+    loading: true,
+    // True when reading a page failed; pages stop loading until a reload.
+    failed: false,
+    indexComplete: true,
+    // { count, capped } once counted; null until then.
+    count: null,
+    // Pairs the content-type exclusion hides, in the live view; null when
+    // unknown.
+    hidden: null,
+    // Matches captured after `as_of` that the table doesn't show.
+    newCount: 0,
+    newCapped: false,
+  };
+}
 
 function emptyQueryState(runID = 0) {
   return {
     // The last query that ran successfully; "" in the live view.
     ranQuery: "",
-    // Increases each time a query runs successfully, so the ledger can tell a
-    // new run from other changes (for example, to go back to page 1).
+    // Increases each time a query runs successfully.
     runID,
-    // The query results loaded so far, newest first.
-    items: [],
-    // Cursor for the next older page, or null when none exists.
-    nextCursor: null,
-    indexComplete: true,
-    // True while the next older page is being fetched.
-    loadingOlder: false,
-    // True when fetching an older page failed. Older pages stop loading until
-    // the query runs again.
-    olderFailed: false,
     // The last failed query: { query, message, position }, where position is
     // marasi's 1-based character offset into `query`, or null when the failure
     // wasn't in the query text. null when the last query that ran was valid.
     error: null,
-    // Pairs that match the query but aren't loaded yet, newest first. They
-    // join `items` only when merged, so the shown rows don't move.
-    newMatches: [],
-    // The page the table shows in query mode. The live view keeps its own
-    // page in `pagination`, so clearing the query returns to it.
-    pageIndex: 0,
   };
 }
 
@@ -99,12 +140,12 @@ function emptySelection() {
   };
 }
 
-function initialState(runID = 0, layout = initialLayout()) {
+function initialState(runID = 0, layout = initialLayout(), sort = DEFAULT_SORT) {
   return {
     layout,
     selection: emptySelection(),
-    // The live view, oldest first.
-    items: [],
+    // The focused pair's row, kept while its page is out of the window.
+    focusRow: null,
     // Content types the table hides: exact types and major/* values.
     exclusion: [],
     // True when the project keeps its own exclusion, false when it follows
@@ -115,13 +156,14 @@ function initialState(runID = 0, layout = initialLayout()) {
     // The Types menu's pair counts per content type (CountContentTypes'
     // Counts), loaded when the menu opens. `complete` is the sitemap job's.
     typeCounts: { counts: [], complete: true, loaded: false },
-    // The live view's page, and the rows per page in both modes.
-    pagination: DEFAULT_PAGINATION,
+    // The table's sort; it outlasts a project switch.
+    sort,
     // The text in the query box.
     queryText: "",
     // True while the query box's delay timer is waiting to run a query.
     queryPending: false,
     query: emptyQueryState(runID),
+    results: emptyResults(),
   };
 }
 
@@ -130,42 +172,66 @@ export function isQueryActive(q) {
   return q.ranQuery !== "";
 }
 
-/** Rows currently shown in the ledger, in source order. */
-export function shownRows(state) {
-  return isQueryActive(state.query) ? state.query.items : state.items;
+/** True when the table shows the live view newest first. */
+export function isLiveNewestFirst(state) {
+  return (
+    !isQueryActive(state.query) &&
+    state.sort.field === DEFAULT_SORT.field &&
+    state.sort.desc === DEFAULT_SORT.desc
+  );
 }
-
-// tableRows' last result, so the same inputs give the same array and a
-// subscriber can tell an unchanged table by identity.
-let tableRowsCache = { items: null, exclusion: null, rows: [] };
 
 /**
- * The rows the Ledger table lists, newest first: the loaded query results
- * (marasi applies the content-type exclusion to them), or the live view
- * without the pairs the exclusion hides.
+ * How new pairs reach the table: "top" when they appear at the top of the
+ * newest-first live view ("N new" returns there), "pill" when rows never
+ * move and "N new matches · Show" refreshes in place.
  */
-export function tableRows(state) {
-  if (isQueryActive(state.query)) return state.query.items;
-  const { items, exclusion } = state;
-  if (tableRowsCache.items === items && tableRowsCache.exclusion === exclusion) {
-    return tableRowsCache.rows;
-  }
-  const hidden = exclusion ?? [];
-  const rows = [];
-  for (let i = items.length - 1; i >= 0; i--) {
-    if (!hiddenBy(items[i].ContentType, hidden)) rows.push(items[i]);
-  }
-  tableRowsCache = { items, exclusion, rows };
-  return rows;
+export function newMatchesKind(state) {
+  return isLiveNewestFirst(state) ? "top" : "pill";
 }
+
+// tableRows' last result, so the same chunks give the same array and a
+// subscriber can tell an unchanged table by identity.
+let tableRowsCache = { chunks: null, rows: [] };
+
+/** The rows the Ledger table holds, top to bottom: the loaded window. */
+export function tableRows(state) {
+  const chunks = state.results.chunks;
+  if (tableRowsCache.chunks !== chunks) {
+    tableRowsCache = { chunks, rows: chunks.flatMap((chunk) => chunk.items) };
+  }
+  return tableRowsCache.rows;
+}
+
+/** The loaded rows, in display order. */
+export const shownRows = tableRows;
 
 /**
  * How many pairs the content-type exclusion hides from the live view, or
- * null with query results, whose hidden pairs marasi doesn't count.
+ * null when unknown or with query results.
  */
 export function hiddenByTypeCount(state) {
   if (isQueryActive(state.query)) return null;
-  return state.items.length - tableRows(state).length;
+  return state.results.hidden;
+}
+
+/**
+ * The status bar's count: "N in the live view" or "N matching", "…" until
+ * it is counted, "100,000+" past Marasi's cap.
+ */
+export function countLabel(state) {
+  const count = state.results.count;
+  if (!count) return "…";
+  const n = `${count.count.toLocaleString("en-US")}${count.capped ? "+" : ""}`;
+  return isQueryActive(state.query) ? `${n} matching` : `${n} in the live view`;
+}
+
+/** "N new" or "N new matches"; "" when there are none. */
+export function newMatchesLabel(state) {
+  const { newCount, newCapped } = state.results;
+  if (!newCount) return "";
+  const n = `${newCount.toLocaleString("en-US")}${newCapped ? "+" : ""}`;
+  return newMatchesKind(state) === "top" ? `${n} new` : `${n} new ${matchNoun(newCount, newCapped)}`;
 }
 
 /** True while a pair is selected; the drawer shows it. */
@@ -176,8 +242,8 @@ export function isDrawerOpen(state) {
 /** The pair the drawer shows, or undefined. */
 export function focusedPair(state) {
   const focus = state.selection.focus;
-  if (focus == null) return undefined;
-  return tableRows(state).find((item) => sameID(item.ID, focus));
+  if (focus == null || !sameID(state.focusRow?.ID, focus)) return undefined;
+  return state.focusRow;
 }
 
 /** True when the pair with this ID is selected. */
@@ -224,19 +290,6 @@ export function clampDrawerSplit(split) {
   return Math.min(DRAWER_SPLIT.max, Math.max(DRAWER_SPLIT.min, split));
 }
 
-/**
- * The ledger table's pagination: the rows per page are shared, and the page
- * index belongs to the active mode, so each mode keeps its own page.
- */
-export function ledgerPagination(state) {
-  return {
-    pageSize: state.pagination.pageSize,
-    pageIndex: isQueryActive(state.query)
-      ? state.query.pageIndex
-      : state.pagination.pageIndex,
-  };
-}
-
 /** True when both are pair IDs and they name the same pair. */
 export function sameID(a, b) {
   return a != null && b != null && String(a) === String(b);
@@ -252,45 +305,11 @@ export function matchNoun(count, more = false) {
   return count === 1 && !more ? "match" : "matches";
 }
 
-/**
- * "N matches", or "N+ matches" while older pages remain. "" in the live view.
- */
-export function matchCountLabel(q) {
-  if (!isQueryActive(q)) return "";
-  const count = q.items.length;
-  const more = q.nextCursor ? "+" : "";
-  return `${count.toLocaleString()}${more} ${matchNoun(count, !!more)}`;
-}
-
-/** The status line under the query box in query mode; "" in the live view. */
-export function queryStatusLabel(q) {
-  const label = matchCountLabel(q);
-  return label ? `${label} · newest first · column sorting off` : "";
-}
-
 /** Shown while a query is active and older traffic is still being indexed. */
-export function indexWarning(q) {
-  return isQueryActive(q) && !q.indexComplete
+export function indexWarning(state) {
+  return isQueryActive(state.query) && !state.results.indexComplete
     ? "Indexing older traffic — text matches may be incomplete"
     : "";
-}
-
-/**
- * True when an older page of query results can be fetched now: older pages
- * remain, none is loading, and the last fetch didn't fail.
- */
-export function canLoadOlder(q) {
-  return isQueryActive(q) && !!q.nextCursor && !q.loadingOlder && !q.olderFailed;
-}
-
-/**
- * True when the ledger, showing `pageIndex` at `pageSize` rows per page, is on
- * the last loaded page of query results while older pages remain.
- */
-export function needsOlderPage(q, pageIndex, pageSize) {
-  if (!canLoadOlder(q)) return false;
-  const lastLoaded = Math.max(Math.ceil(q.items.length / pageSize) - 1, 0);
-  return pageIndex >= lastLoaded;
 }
 
 /**
@@ -332,87 +351,123 @@ export function select(store, selector) {
   };
 }
 
-// Pair IDs are UUIDv7 strings, so comparing them as strings orders pairs by
-// capture time, the same order marasi returns query results in.
-function newestFirst(a, b) {
-  const x = String(a.ID);
-  const y = String(b.ID);
-  return x < y ? 1 : x > y ? -1 : 0;
+// Applies `fn` to every row of `chunks`; returns `chunks` itself when `fn`
+// replaced none.
+function mapChunks(chunks, fn) {
+  let changed = false;
+  const mapped = chunks.map((chunk) => {
+    let chunkChanged = false;
+    const items = [];
+    for (const item of chunk.items) {
+      const next = fn(item);
+      if (next !== item) chunkChanged = true;
+      if (next) items.push(next);
+    }
+    if (!chunkChanged) return chunk;
+    changed = true;
+    return { ...chunk, items };
+  });
+  return changed ? mapped : chunks;
 }
 
-// Merges `patch` into the Metadata of the pair with this ID in `list`.
-function patchListMetadata(list, id, patch) {
-  let changed = false;
-  const patched = list.map((item) => {
-    if (!sameID(item.ID, id)) return item;
-    changed = true;
-    return { ...item, Metadata: { ...(item.Metadata || {}), ...patch } };
-  });
-  return changed ? patched : list;
+// The chunk holding row `index` of the window, and the row's offset in it.
+function locate(chunks, index) {
+  let start = 0;
+  for (let c = 0; c < chunks.length; c++) {
+    const length = chunks[c].items.length;
+    if (index < start + length) return { c, k: index - start, start };
+    start += length;
+  }
+  return null;
 }
 
 export function createLedgerStore(api) {
-  let projectStateVersion = 0;
   let current = initialState();
   const { subscribe, set: setStore } = writable(current);
 
   function set(next) {
-    next = { ...next, selection: prunedSelection(next) };
+    // A fresh read of the results drops the selected pairs it doesn't list.
+    // Pages leaving the window as the researcher scrolls drop nothing.
+    if (next.results.reset !== current.results.reset) {
+      next = { ...next, selection: prunedSelection(next) };
+    }
+    // The drawer keeps the focused pair's row while its page is out of the
+    // window, and follows the row while it is in it. Focusing a pair the
+    // table doesn't hold clears the selection.
+    const focus = next.selection.focus;
+    if (focus != null) {
+      const row = tableRows(next).find((item) => sameID(item.ID, focus));
+      if (row) {
+        if (next.focusRow !== row) next = { ...next, focusRow: row };
+      } else if (!sameID(next.focusRow?.ID, focus)) {
+        next = { ...next, selection: emptySelection(), focusRow: null };
+      }
+    } else if (next.focusRow) {
+      next = { ...next, focusRow: null };
+    }
     current = next;
     setStore(next);
   }
 
-  // The rows the selection was last checked against, so a change that
-  // leaves the table alone costs nothing.
-  let prunedAgainst = { rows: null, selection: null };
-
-  // The selection only holds pairs the table lists: when a query, an
+  // The selection only holds pairs the results list: when a query, an
   // exclusion or a project switch removes some, they leave the selection.
   // When the focused pair leaves, the focus moves to the last one left, and
   // with none left the drawer closes.
   function prunedSelection(state) {
     const selection = state.selection;
     if (selection.ids.size === 0) return selection;
-    const rows = tableRows(state);
-    if (prunedAgainst.rows === rows && prunedAgainst.selection === selection) {
-      return selection;
-    }
-    const shown = pairIDSet(rows);
-    let result = selection;
-    if ([...selection.ids].some((id) => !shown.has(id))) {
-      const ids = new Set([...selection.ids].filter((id) => shown.has(id)));
-      if (ids.size === 0) {
-        result = emptySelection();
-      } else {
-        const focus = ids.has(selection.focus) ? selection.focus : [...ids].at(-1);
-        result = {
-          ids,
-          anchor: ids.has(selection.anchor) ? selection.anchor : focus,
-          focus,
-          incomingResponse: focus === selection.focus ? selection.incomingResponse : null,
-        };
-      }
-    }
-    prunedAgainst = { rows, selection: result };
-    return result;
+    const shown = pairIDSet(tableRows(state));
+    if (![...selection.ids].some((id) => !shown.has(id))) return selection;
+    const ids = new Set([...selection.ids].filter((id) => shown.has(id)));
+    if (ids.size === 0) return emptySelection();
+    const focus = ids.has(selection.focus) ? selection.focus : [...ids].at(-1);
+    return {
+      ids,
+      anchor: ids.has(selection.anchor) ? selection.anchor : focus,
+      focus,
+      incomingResponse: focus === selection.focus ? selection.incomingResponse : null,
+    };
   }
   function update(fn) {
     set(fn(current));
   }
-  function updateQuery(fn) {
-    update((state) => ({ ...state, query: fn(state.query) }));
+  function updateResults(fn) {
+    update((state) => ({ ...state, results: fn(state.results) }));
   }
 
+  // Counts reads from the top, for `results.reset`.
+  let resets = 0;
+  // Identifies the current set of results. Each reload bumps it, so a page
+  // or count read for older results is dropped.
+  let generation = 0;
+  // Pages and counts in flight, so tests and callers can wait for them.
+  const inflight = new Set();
+  function track(promise) {
+    inflight.add(promise);
+    promise.finally(() => inflight.delete(promise));
+    return promise;
+  }
+
+  // The rows in view, as indexes into the window, and whether the table is
+  // scrolled to its very top. The table reports them as it scrolls.
+  let viewport = { first: 0, last: 0, atTop: true };
+  let loadingForward = false;
+  let loadingBackward = false;
+  // True while a fresh set of results is being read; pages for the old
+  // window don't load meanwhile.
+  let reading = false;
+  // Bumped on a project switch, so the old project's exclusion is dropped.
+  let projectVersion = 0;
+  // Settles once the project's exclusion has loaded; counts wait for it.
+  let exclusionLoaded = Promise.resolve();
+
   // Request and response events wait here until the next flush, so a burst
-  // of traffic updates the live view once.
+  // of traffic updates the table once.
   let requestBuffer = [];
   let responseBuffer = new Map();
 
-  // Set by request and response events and by edits made in the app; cleared
-  // when the newest page of the query is fetched.
-  let trafficChanged = false;
-
   let delayTimer = null;
+  let newMatchesTimer = null;
   // Identifies the newest query request, so a slower, older response can't
   // overwrite a newer one or a cleared query.
   let latestRequest = 0;
@@ -423,66 +478,323 @@ export function createLedgerStore(api) {
     if (current.queryPending) update((state) => ({ ...state, queryPending: false }));
   }
 
-  // Live-view numbers by pair ID, extended as pairs are appended to the live
-  // view and rebuilt when it is replaced, so lookups stay cheap per table cell.
-  const numbering = { items: null, counted: 0, numbers: new Map() };
-
-  function liveViewNumber(id) {
-    const items = current.items;
-    if (items !== numbering.items || items.length < numbering.counted) {
-      numbering.items = items;
-      numbering.counted = 0;
-      numbering.numbers = new Map();
-    }
-    for (let i = numbering.counted; i < items.length; i++) {
-      numbering.numbers.set(String(items[i].ID), i + 1);
-    }
-    numbering.counted = items.length;
-    return numbering.numbers.get(String(id));
+  function pageRequest(query, sort, extra) {
+    return {
+      Query: query,
+      OrderBy: orderBy(sort),
+      Cursor: "",
+      Direction: "forward",
+      AsOf: "",
+      Limit: PAGE_SIZE,
+      ...extra,
+    };
   }
 
-  /** The shown pair with this ID, or undefined. */
-  function findShownPair(id) {
-    return shownRows(current).find((item) => sameID(item.ID, id));
+  // The results of a first page read from `cursor` ("" for the top).
+  function resultsFromPage(page, cursor) {
+    return {
+      ...emptyResults(),
+      chunks: [{ items: page.Items ?? [], first: cursor ? page.PrevCursor ?? null : null, last: page.NextCursor ?? null }],
+      hasBefore: Boolean(cursor),
+      hasAfter: page.NextCursor != null,
+      start: cursor ? null : 0,
+      asOf: page.AsOf || null,
+      loading: false,
+      indexComplete: page.IndexComplete ?? true,
+    };
+  }
+
+  // Counts the results, and in the live view the pairs the exclusion hides.
+  // The count never holds up the rows.
+  async function loadCount(gen) {
+    await exclusionLoaded;
+    if (gen !== generation) return;
+    const { query, results, exclusion } = current;
+    const asOf = results.asOf ?? "";
+    const live = !isQueryActive(query);
+    try {
+      const [counted, all] = await Promise.all([
+        api.countTraffic(query.ranQuery, "", { AsOf: asOf }),
+        live && exclusion.length
+          ? api.countTraffic("", "", { AsOf: asOf, IgnoreExclusion: true })
+          : null,
+      ]);
+      if (gen !== generation || counted.QueryError) return;
+      const hidden =
+        !live ? null : !all ? 0 : all.Capped || counted.Capped ? null : all.Count - counted.Count;
+      updateResults((r) => ({
+        ...r,
+        count: { count: counted.Count, capped: counted.Capped },
+        hidden,
+      }));
+    } catch (err) {
+      console.error("Counting traffic failed:", err);
+    }
   }
 
   /**
-   * The pair's request number as the ledger displays it ("Request N"): its
-   * position in the live view, in both modes. A pair that hasn't reached the
-   * live view yet, such as one captured moments ago, gets "?" rather than a
-   * number that names a different pair.
+   * Reads the first page of `text` under the current sort into a fresh
+   * window, then counts it. Returns the query error, if any, and leaves
+   * the earlier results in place when there is one.
    */
-  function pairNumber(id) {
-    return liveViewNumber(id) ?? "?";
+  async function readFirstPage(text, { onSuccess } = {}) {
+    const gen = ++generation;
+    loadingForward = loadingBackward = false;
+    reading = true;
+    let page;
+    try {
+      page = await api.queryTraffic(pageRequest(text, current.sort));
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+      if (gen === generation) {
+        reading = false;
+        updateResults((r) => ({ ...r, loading: false, failed: true }));
+      }
+      return { message: String(err), position: null };
+    }
+    if (gen !== generation) return null;
+    reading = false;
+    if (page.QueryError) {
+      return { message: page.QueryError.Message, position: page.QueryError.Position };
+    }
+    viewport = { first: 0, last: 0, atTop: true };
+    update((state) => ({
+      ...(onSuccess ? onSuccess(state) : state),
+      results: { ...resultsFromPage(page, ""), reset: ++resets },
+    }));
+    await loadCount(gen);
+    return null;
+  }
+
+  /** Reads the current results again from the top. */
+  function reload() {
+    return track(readFirstPage(current.query.ranQuery));
+  }
+
+  // Drops pages far from the rows in view until the window fits. A page
+  // goes only when its neighbour has the cursor to read it back.
+  function trim(results) {
+    let { chunks, start, hasBefore, hasAfter } = results;
+    let total = chunks.reduce((n, chunk) => n + chunk.items.length, 0);
+    if (total <= MAX_WINDOW_ROWS) return results;
+    chunks = [...chunks];
+    while (total > MAX_WINDOW_ROWS && chunks.length > 1) {
+      const above = viewport.first;
+      const below = total - viewport.last;
+      const canDropTop = chunks[1].first != null && chunks[0].items.length <= above;
+      const lastChunk = chunks.at(-1);
+      const canDropBottom =
+        chunks.at(-2).last != null && lastChunk.items.length <= below;
+      if (canDropTop && (above >= below || !canDropBottom)) {
+        const dropped = chunks.shift().items.length;
+        total -= dropped;
+        start = start == null ? null : start + dropped;
+        hasBefore = true;
+        viewport = { ...viewport, first: viewport.first - dropped, last: viewport.last - dropped };
+      } else if (canDropBottom) {
+        total -= chunks.pop().items.length;
+        hasAfter = true;
+      } else {
+        break;
+      }
+    }
+    return { ...results, chunks, start, hasBefore, hasAfter };
+  }
+
+  /** Loads the page below the window. */
+  async function loadForward() {
+    const r = current.results;
+    const edge = r.chunks.at(-1)?.last;
+    if (!r.hasAfter || !edge || loadingForward || reading || r.failed) return;
+    const gen = generation;
+    loadingForward = true;
+    let page;
+    try {
+      page = await api.queryTraffic(
+        pageRequest(current.query.ranQuery, current.sort, { Cursor: edge, AsOf: r.asOf ?? "" }),
+      );
+      if (page.QueryError) throw new Error(page.QueryError.Message);
+    } catch (err) {
+      console.error("Loading more traffic failed:", err);
+      if (gen === generation) {
+        loadingForward = false;
+        updateResults((r) => ({ ...r, failed: true }));
+      }
+      return;
+    }
+    if (gen !== generation) return;
+    loadingForward = false;
+    updateResults((r) => {
+      const loaded = pairIDSet(tableRows(current));
+      const items = (page.Items ?? []).filter((item) => !loaded.has(String(item.ID)));
+      return trim({
+        ...r,
+        chunks: [...r.chunks, { items, first: page.PrevCursor ?? edge, last: page.NextCursor ?? null }],
+        hasAfter: page.NextCursor != null,
+        indexComplete: page.IndexComplete ?? r.indexComplete,
+      });
+    });
+  }
+
+  /** Loads the page above the window. */
+  async function loadBackward() {
+    const r = current.results;
+    if (!r.hasBefore || loadingBackward || reading || r.failed) return;
+    const edge = r.chunks[0]?.first;
+    // Only a page read from the top lacks its first cursor; the rows above
+    // it are new pairs, so read the top again.
+    if (!edge) return reload();
+    const gen = generation;
+    loadingBackward = true;
+    let page;
+    try {
+      page = await api.queryTraffic(
+        pageRequest(current.query.ranQuery, current.sort, {
+          Cursor: edge,
+          Direction: "backward",
+          AsOf: r.asOf ?? "",
+        }),
+      );
+      if (page.QueryError) throw new Error(page.QueryError.Message);
+    } catch (err) {
+      console.error("Loading earlier traffic failed:", err);
+      if (gen === generation) {
+        loadingBackward = false;
+        updateResults((r) => ({ ...r, failed: true }));
+      }
+      return;
+    }
+    if (gen !== generation) return;
+    loadingBackward = false;
+    const loaded = pairIDSet(tableRows(current));
+    const items = (page.Items ?? []).filter((item) => !loaded.has(String(item.ID)));
+    const hasBefore = page.PrevCursor != null;
+    viewport = { ...viewport, first: viewport.first + items.length, last: viewport.last + items.length };
+    updateResults((r) =>
+      trim({
+        ...r,
+        chunks: [{ items, first: page.PrevCursor ?? null, last: page.NextCursor ?? edge }, ...r.chunks],
+        hasBefore,
+        start: !hasBefore ? 0 : r.start == null ? null : r.start - items.length,
+        indexComplete: page.IndexComplete ?? r.indexComplete,
+      }),
+    );
+  }
+
+  // Loads what the rows in view need: the page past either edge they near,
+  // or, back at the top of the newest-first live view, the new pairs.
+  function loadAround() {
+    const r = current.results;
+    if (r.loading || reading) return;
+    const rows = tableRows(current);
+    if (
+      newMatchesKind(current) === "top" &&
+      viewport.atTop &&
+      !r.hasBefore &&
+      r.newCount > 0
+    ) {
+      reload();
+      return;
+    }
+    if (r.hasAfter && viewport.last >= rows.length - EDGE_ROWS) track(loadForward());
+    if (r.hasBefore && viewport.first < EDGE_ROWS) track(loadBackward());
+  }
+
+  /** Counts the matches captured after the results' as_of. */
+  async function countNewMatches() {
+    clearTimeout(newMatchesTimer);
+    newMatchesTimer = null;
+    const gen = generation;
+    const r = current.results;
+    if (r.loading || reading) return;
+    let counted;
+    try {
+      counted = await api.countTraffic(current.query.ranQuery, r.asOf ?? "");
+    } catch (err) {
+      console.error("Counting new matches failed:", err);
+      return;
+    }
+    if (gen !== generation || counted.QueryError) return;
+    updateResults((r) => ({ ...r, newCount: counted.Count, newCapped: counted.Capped }));
+    loadAround();
+  }
+
+  function scheduleNewMatches() {
+    if (newMatchesTimer) return;
+    newMatchesTimer = setTimeout(() => track(countNewMatches()), NEW_MATCHES_DELAY_MS);
+    newMatchesTimer.unref?.();
   }
 
   /**
-   * The shown pair whose request number is `number`, or undefined when no
-   * pair has that number or the ledger isn't showing it.
+   * Shows the new matches in place: reads the results again under a new
+   * as_of, from the nearest cursor above the top row in view, so that row
+   * stays in the window (the table keeps it at the top). The rows above
+   * load backward as the researcher scrolls up.
    */
-  function shownPairAtNumber(number) {
-    const pair = current.items[number - 1];
-    return pair && findShownPair(pair.ID);
+  async function showNewMatches() {
+    const r = current.results;
+    const rows = tableRows(current);
+    const top = Math.min(Math.max(viewport.first, 0), Math.max(rows.length - 1, 0));
+    const at = locate(r.chunks, top);
+    let cursor = "";
+    let from = 0;
+    if (at && at.k > 0 && r.chunks[at.c].first) {
+      cursor = r.chunks[at.c].first;
+      from = at.start + 1;
+    } else if (at && at.c > 0 && r.chunks[at.c - 1].last) {
+      cursor = r.chunks[at.c - 1].last;
+      from = at.start;
+    }
+    const limit = Math.min(MAX_PAGE_ROWS, top - from + PAGE_SIZE);
+    const gen = ++generation;
+    loadingForward = loadingBackward = false;
+    reading = true;
+    let page;
+    try {
+      page = await api.queryTraffic(
+        pageRequest(current.query.ranQuery, current.sort, { Cursor: cursor, Limit: limit }),
+      );
+      if (page.QueryError) throw new Error(page.QueryError.Message);
+    } catch (err) {
+      console.error("Showing new matches failed:", err);
+      if (gen === generation) reading = false;
+      return;
+    }
+    if (gen !== generation) return;
+    reading = false;
+    viewport = { ...viewport, first: top - from, last: viewport.last - from };
+    updateResults((r) => ({ ...resultsFromPage(page, cursor), reset: r.reset }));
+    await loadCount(gen);
   }
 
-  // Loads the project's live view and content-type exclusion. Each arrives on
-  // its own; a failure leaves the other in place.
+  /**
+   * Back to the top of the newest-first live view with its new pairs: reads
+   * the top again.
+   */
+  function goToTop() {
+    viewport = { first: 0, last: 0, atTop: true };
+    return reload();
+  }
+
+  /** Waits until no page or count is in flight. */
+  async function settled() {
+    while (inflight.size > 0) await Promise.allSettled([...inflight]);
+  }
+
+  // Loads the project's first page and content-type exclusion. Each arrives
+  // on its own; a failure leaves the other in place.
   async function populate() {
-    const version = projectStateVersion;
-    const fresh = () => version === projectStateVersion;
+    const version = projectVersion;
+    const fresh = () => version === projectVersion;
+    exclusionLoaded = api
+      .getExclusion()
+      .then((exclusion) => {
+        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
+      })
+      .catch((err) => console.error("Loading the content-type exclusion failed:", err));
     await Promise.all([
-      api
-        .getLiveView()
-        .then((items) => {
-          if (fresh()) update((state) => ({ ...state, items: items ?? [] }));
-        })
-        .catch((err) => console.error("Loading the live view failed:", err)),
-      api
-        .getExclusion()
-        .then((exclusion) => {
-          if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
-        })
-        .catch((err) => console.error("Loading the content-type exclusion failed:", err)),
+      reload(),
+      exclusionLoaded,
       api
         .hasOwnExclusion()
         .then((own) => {
@@ -492,11 +804,10 @@ export function createLedgerStore(api) {
     ]);
   }
 
-  // Stores a new exclusion, goes back to the first page and runs the active
-  // query again so its results reflect it.
+  // Stores a new exclusion. The caller reads the results again so they
+  // reflect it, which drops the pairs it hides from the selection.
   function applyExclusion(exclusion, ownExclusion) {
     update((state) => ({ ...state, exclusion, ownExclusion }));
-    setPagination((old) => ({ ...old, pageIndex: 0 }));
   }
 
   /**
@@ -504,10 +815,10 @@ export function createLedgerStore(api) {
    * since closed are dropped; a failure keeps the last counts.
    */
   async function loadTypeCounts() {
-    const version = projectStateVersion;
+    const version = projectVersion;
     try {
       const result = await api.countContentTypes();
-      if (version !== projectStateVersion) return;
+      if (version !== projectVersion) return;
       update((state) => ({
         ...state,
         typeCounts: {
@@ -522,8 +833,9 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * Moves buffered requests and responses into the live view, fills in the
-   * responses for loaded query results, and records that traffic changed.
+   * Moves buffered requests and responses into the table. Responses fill in
+   * loaded rows in place. At the top of the newest-first live view, new
+   * pairs join at the top; anywhere else, new matches are counted.
    */
   function flush() {
     if (requestBuffer.length === 0 && responseBuffer.size === 0) return;
@@ -532,69 +844,54 @@ export function createLedgerStore(api) {
     requestBuffer = [];
     responseBuffer = new Map();
 
-    update((state) => {
-      let items = state.items;
-      if (responses.size > 0 && items.length > 0) {
-        items = items.map((item) =>
-          responses.has(item.ID) ? { ...item, ...responses.get(item.ID) } : item,
-        );
+    const r = current.results;
+    const live = newMatchesKind(current) === "top";
+    const showAtTop =
+      live && !r.loading && !r.hasBefore && viewport.atTop && r.newCount === 0;
+    const exclusion = current.exclusion;
+
+    updateResults((r) => {
+      let chunks = r.chunks;
+      if (responses.size > 0) {
+        chunks = mapChunks(chunks, (item) => {
+          const res = responses.get(item.ID);
+          if (!res) return item;
+          const next = { ...item, ...res };
+          // The live view drops a pair once its response shows the
+          // exclusion hides it.
+          return live && hiddenBy(next.ContentType, exclusion) ? null : next;
+        });
       }
-      if (requests.length > 0) {
-        const arrived = requests.map((req) =>
-          responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req,
-        );
-        items = [...items, ...arrived];
-      }
-      return { ...state, items };
+      if (!showAtTop || requests.length === 0) return { ...r, chunks };
+      const loaded = pairIDSet(tableRows({ results: { chunks } }));
+      const arrived = requests
+        .filter((req) => !loaded.has(String(req.ID)))
+        .map((req) => (responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req))
+        .filter((pair) => !hiddenBy(pair.ContentType, exclusion))
+        .sort((a, b) => (String(a.ID) < String(b.ID) ? 1 : -1));
+      if (arrived.length === 0) return { ...r, chunks };
+      const [top, ...rest] = chunks.length ? chunks : [{ items: [], first: null, last: null }];
+      const newest = String(arrived[0].ID);
+      return trim({
+        ...r,
+        chunks: [{ ...top, items: [...arrived, ...top.items] }, ...rest],
+        asOf: r.asOf && r.asOf > newest ? r.asOf : newest,
+        count: r.count && { ...r.count, count: r.count.count + (r.count.capped ? 0 : arrived.length) },
+      });
     });
-
-    // Responses also fill in loaded query results, in place by pair ID. Rows
-    // are never removed, even when they no longer match.
-    if (responses.size > 0 && isQueryActive(current.query)) {
-      patchQueryResults((item) => {
-        const res = responses.get(item.ID);
-        return res ? { ...item, ...res } : item;
-      });
-    }
-    trafficChanged = true;
+    if (!showAtTop) scheduleNewMatches();
   }
 
   /**
-   * Applies `fn(item)` to every loaded query result and new match. `fn`
-   * returns the item itself to leave it alone, or a replacement. Subscribers
-   * are notified only when something was replaced.
-   */
-  function patchQueryResults(fn) {
-    let changed = false;
-    const patchList = (list) =>
-      list.map((item) => {
-        const patched = fn(item);
-        if (patched !== item) changed = true;
-        return patched;
-      });
-    const q = current.query;
-    const items = patchList(q.items);
-    const newMatches = patchList(q.newMatches);
-    if (changed) updateQuery((q) => ({ ...q, items, newMatches }));
-  }
-
-  /**
-   * Merges `patch` into the Metadata of the pair with this ID, in the live
-   * view and in the loaded query results and new matches. A source that
-   * doesn't hold the pair is left alone. The edit can change what the query
-   * matches, so it also marks traffic as changed.
+   * Merges `patch` into the Metadata of the loaded pair with this ID.
    */
   function patchMetadata(id, patch) {
-    update((state) => ({
-      ...state,
-      items: patchListMetadata(state.items, id, patch),
-      query: {
-        ...state.query,
-        items: patchListMetadata(state.query.items, id, patch),
-        newMatches: patchListMetadata(state.query.newMatches, id, patch),
-      },
+    updateResults((r) => ({
+      ...r,
+      chunks: mapChunks(r.chunks, (item) =>
+        sameID(item.ID, id) ? { ...item, Metadata: { ...(item.Metadata || {}), ...patch } } : item,
+      ),
     }));
-    trafficChanged = true;
   }
 
   /**
@@ -604,44 +901,18 @@ export function createLedgerStore(api) {
    */
   async function runQuery(text = current.queryText) {
     cancelDelay();
-    if (text.trim() === "") {
-      clearQuery({ keepText: true });
-      return;
-    }
+    if (text.trim() === "") return clearQuery({ keepText: true });
     const request = ++latestRequest;
-    let result;
-    let failure = null;
-    try {
-      result = await api.queryTraffic(text, "");
-      if (result.QueryError) {
-        failure = {
-          message: result.QueryError.Message,
-          position: result.QueryError.Position,
-        };
-      }
-    } catch (err) {
-      console.error("Querying traffic failed:", err);
-      failure = { message: String(err), position: null };
-    }
-    if (request !== latestRequest) return;
-    if (failure) {
-      updateQuery((q) => ({ ...q, error: { query: text, ...failure } }));
-      return;
-    }
-    trafficChanged = false;
-    updateQuery((q) => ({
-      ...q,
-      ranQuery: text,
-      runID: q.runID + 1,
-      items: result.Items ?? [],
-      nextCursor: result.NextCursor ?? null,
-      indexComplete: result.IndexComplete,
-      loadingOlder: false,
-      olderFailed: false,
-      error: null,
-      newMatches: [],
-      pageIndex: 0,
-    }));
+    const failure = await track(
+      readFirstPage(text, {
+        onSuccess: (state) => ({
+          ...state,
+          query: { ...state.query, ranQuery: text, runID: state.query.runID + 1, error: null },
+        }),
+      }),
+    );
+    if (request !== latestRequest || !failure) return;
+    update((state) => ({ ...state, query: { ...state.query, error: { query: text, ...failure } } }));
   }
 
   /** Runs the query box's text once it has been left alone for the delay. */
@@ -655,149 +926,42 @@ export function createLedgerStore(api) {
     delayTimer = setTimeout(() => runQuery(text), QUERY_DELAY_MS);
   }
 
-  /**
-   * Runs the active query again, for example after the content-type
-   * exclusion changed. Does nothing in the live view.
-   */
+  /** Reads the active results again, for example after the exclusion changed. */
   function rerunQuery() {
-    if (isQueryActive(current.query)) return runQuery(current.query.ranQuery);
+    return reload();
   }
 
   /**
    * Returns to the live view: empties the query box (unless `keepText`),
-   * drops the query results and ignores any query still in flight.
+   * ignores any query still in flight and reads the live view from the top.
    */
   function clearQuery({ keepText = false } = {}) {
     cancelDelay();
     latestRequest++;
+    const wasActive = isQueryActive(current.query);
     update((state) => ({
       ...state,
       queryText: keepText ? state.queryText : "",
-      query: emptyQueryState(state.query.runID),
+      query: { ...emptyQueryState(state.query.runID) },
     }));
+    if (wasActive || current.results.loading) return reload();
+    return Promise.resolve();
   }
 
   /**
-   * Fetches the next older page of query results from the cursor and appends
-   * it. The page can come back short or empty while a cursor remains,
-   * because some content-type exclusions are applied after marasi returns
-   * the page; the caller asks again while `needsOlderPage` holds. A result
-   * that arrives after the query ran again or was cleared is dropped.
+   * Sorts by a Marasi order_by field. The same field again reverses it;
+   * another starts newest first for requested_at and ascending otherwise.
+   * A cursor only works with its sort, so the rows load from the top.
    */
-  async function loadOlderPage() {
-    const start = current.query;
-    if (!isQueryActive(start) || !start.nextCursor || start.loadingOlder) return;
-    const isCurrent = (q) =>
-      q.runID === start.runID &&
-      q.ranQuery === start.ranQuery &&
-      q.nextCursor === start.nextCursor;
-    updateQuery((q) => ({ ...q, loadingOlder: true }));
-    let result;
-    try {
-      result = await api.queryTraffic(start.ranQuery, start.nextCursor);
-      if (result.QueryError) throw new Error(result.QueryError.Message);
-    } catch (err) {
-      console.error("Loading older query results failed:", err);
-      updateQuery((q) =>
-        isCurrent(q) ? { ...q, loadingOlder: false, olderFailed: true } : q,
-      );
-      return;
-    }
-    updateQuery((q) => {
-      if (!isCurrent(q)) return q;
-      const loaded = pairIDSet(q.items);
-      const older = (result.Items ?? []).filter((it) => !loaded.has(String(it.ID)));
-      return {
-        ...q,
-        items: [...q.items, ...older],
-        nextCursor: result.NextCursor ?? null,
-        indexComplete: result.IndexComplete,
-        loadingOlder: false,
-      };
+  function sortBy(field) {
+    update((state) => {
+      const sort =
+        state.sort.field === field
+          ? { field, desc: !state.sort.desc }
+          : { field, desc: field === DEFAULT_SORT.field };
+      return { ...state, sort };
     });
-  }
-
-  /**
-   * Checks for new matches when traffic changed since the last check:
-   * fetches the newest page of the active query and keeps the pairs that
-   * aren't loaded as new matches. Pairs older than the next page's cursor are
-   * left out, because loading older pages brings them in. Does nothing in the
-   * live view or when traffic hasn't changed.
-   */
-  async function checkForNewMatches() {
-    const start = current.query;
-    if (!isQueryActive(start) || !trafficChanged) return;
-    const { ranQuery, runID } = start;
-    trafficChanged = false;
-    let result;
-    try {
-      result = await api.queryTraffic(ranQuery, "");
-    } catch (err) {
-      console.error("Checking for new matches failed:", err);
-      trafficChanged = true;
-      return;
-    }
-    if (result.QueryError) return;
-    updateQuery((q) => {
-      // A different query ran, or the ledger went back to the live view.
-      if (q.ranQuery !== ranQuery || q.runID !== runID) return q;
-      const loaded = pairIDSet(q.items);
-      // The cursor is opaque; the oldest loaded pair marks where the next
-      // page starts. Pair ids are UUIDv7, so they sort by capture time.
-      const oldestLoaded = q.items.length
-        ? q.items.reduce(
-            (min, item) => (String(item.ID) < min ? String(item.ID) : min),
-            String(q.items[0].ID),
-          )
-        : null;
-      const isNew = (item) =>
-        !loaded.has(String(item.ID)) &&
-        (q.nextCursor == null || String(item.ID) > oldestLoaded);
-      const fresh = (result.Items ?? []).filter(isNew);
-      const freshIDs = pairIDSet(fresh);
-      // Earlier new matches can fall off the newest page when a lot of
-      // traffic arrives; keep them.
-      const kept = q.newMatches.filter(
-        (item) => isNew(item) && !freshIDs.has(String(item.ID)),
-      );
-      return {
-        ...q,
-        newMatches: [...fresh, ...kept].sort(newestFirst),
-        indexComplete: result.IndexComplete,
-      };
-    });
-  }
-
-  /**
-   * Merges the new matches into the query results in newest-first order and
-   * goes back to page 1 of the query results.
-   */
-  function mergeNewMatches() {
-    if (current.query.newMatches.length === 0) return;
-    updateQuery((q) => ({
-      ...q,
-      items: [...q.items, ...q.newMatches].sort(newestFirst),
-      newMatches: [],
-      pageIndex: 0,
-    }));
-  }
-
-  /** Changes the ledger table's pagination (a value or TanStack updater). */
-  function setPagination(updater) {
-    const next =
-      updater instanceof Function ? updater(ledgerPagination(current)) : updater;
-    update((state) =>
-      isQueryActive(state.query)
-        ? {
-            ...state,
-            pagination: { ...state.pagination, pageSize: next.pageSize },
-            query: { ...state.query, pageIndex: next.pageIndex },
-          }
-        : {
-            ...state,
-            pagination: { pageIndex: next.pageIndex, pageSize: next.pageSize },
-          },
-    );
+    return reload();
   }
 
   function setSelection(selection) {
@@ -861,7 +1025,7 @@ export function createLedgerStore(api) {
 
   /**
    * Moves the focus `step` rows down (negative steps go up), stopping at the
-   * table's ends, and selects only that row. With `extend` (⇧), selects the
+   * window's ends, and selects only that row. With `extend` (⇧), selects the
    * range from the anchor to it instead. With nothing selected, a step down
    * selects the top row and a step up the bottom one.
    */
@@ -936,6 +1100,28 @@ export function createLedgerStore(api) {
     sweepFrom = null;
   }
 
+  /** The loaded pair with this ID, or undefined. */
+  function findShownPair(id) {
+    return tableRows(current).find((item) => sameID(item.ID, id));
+  }
+
+  /**
+   * The pair's number ("Request N"): its position in the current results,
+   * or "?" when it isn't loaded or the window's position is unknown.
+   */
+  function pairNumber(id) {
+    const start = current.results.start;
+    const index = tableRows(current).findIndex((item) => sameID(item.ID, id));
+    return index < 0 || start == null ? "?" : start + index + 1;
+  }
+
+  /** The loaded pair whose number is `number`, or undefined. */
+  function shownPairAtNumber(number) {
+    const start = current.results.start;
+    if (start == null) return undefined;
+    return tableRows(current)[number - 1 - start];
+  }
+
   function updateLayout(fn) {
     update((state) => ({ ...state, layout: fn(state.layout) }));
   }
@@ -980,22 +1166,43 @@ export function createLedgerStore(api) {
       set: setDock,
     },
     clear: () => {
-      projectStateVersion++;
+      generation++;
+      projectVersion++;
+      reading = false;
+      exclusionLoaded = Promise.resolve();
       cancelDelay();
+      clearTimeout(newMatchesTimer);
+      newMatchesTimer = null;
       latestRequest++;
       requestBuffer = [];
       responseBuffer = new Map();
-      trafficChanged = false;
+      loadingForward = loadingBackward = false;
+      viewport = { first: 0, last: 0, atTop: true };
       sweepFrom = null;
       // The app default exclusion isn't the project's, so it stays.
       set({
-        ...initialState(current.query.runID, current.layout),
+        ...initialState(current.query.runID, current.layout, current.sort),
         defaultExclusion: current.defaultExclusion,
       });
     },
     populate,
+    reload,
+    settled,
 
-    // Traffic events. They reach the live view on the next flush, or at once
+    /**
+     * The table reports the rows in view (window indexes) and whether it is
+     * scrolled to the top; pages load around them.
+     */
+    setViewport: ({ first, last, atTop }) => {
+      viewport = { first, last, atTop };
+      loadAround();
+    },
+    sortBy,
+    countNewMatches,
+    showNewMatches,
+    goToTop,
+
+    // Traffic events. They reach the table on the next flush, or at once
     // when the buffer is full.
     onRequest: (req) => {
       requestBuffer.push(req);
@@ -1018,24 +1225,12 @@ export function createLedgerStore(api) {
       patchMetadata(conn.RequestID, webSocketMetadataPatch(conn));
     },
     patchMetadata,
-    /**
-     * Records that traffic changed: a request or response arrived, or a pair
-     * was edited in the app. The next poll in query mode then checks for new
-     * matches.
-     */
-    markTrafficChanged: () => {
-      trafficChanged = true;
-    },
 
     setQueryText: (queryText) => update((state) => ({ ...state, queryText })),
     runQuery,
     scheduleQuery,
     rerunQuery,
     clearQuery,
-    loadOlderPage,
-    checkForNewMatches,
-    mergeNewMatches,
-    setPagination,
 
     /**
      * Adds `term` to the query box, or removes it when the query has it as a
@@ -1068,8 +1263,8 @@ export function createLedgerStore(api) {
     },
 
     // Gives the project its own content-type exclusion, normalised as Marasi
-    // does, and goes back to the first page, then runs the active query
-    // again so its results reflect it.
+    // does, then reads the results again from the top so they reflect it.
+    // The drawer closes when the exclusion hides its pair.
     saveExclusion: async (types) => {
       const exclusion = [...new Set(types.map(normalizeContentType))];
       applyExclusion(exclusion, true);
@@ -1199,7 +1394,6 @@ export function createLedgerStore(api) {
   // Links or unlinks pairs. A link can change what the query matches.
   async function linkEach(ids, fn) {
     const { done, failed } = await eachPair(ids, fn);
-    trafficChanged = true;
     return { done, failed };
   }
 
@@ -1229,7 +1423,6 @@ export function createLedgerStore(api) {
       await api.linkToLaunchpad(id, launchpadId);
       return launchpadId;
     });
-    trafficChanged = true;
     return { launchpadIds: results, done: results.length, failed };
   }
 }

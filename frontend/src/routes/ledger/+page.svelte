@@ -1286,10 +1286,21 @@
 						></div>
 					</div>
 				{/if}
+				<!-- The red top line is drawn over the drawer, in the drawer's own
+				     stacking context, rather than as a border: CodeMirror's sticky
+				     gutters are composited layers (z-index 200) that WebKit's elastic
+				     scrolling could paint over a border, and a border also made the
+				     page a pixel taller than its box. -->
 				<div
-					class="min-h-0 {$drawerLayout.maximised ? '' : 'border-t border-primary-500'}"
+					class="relative isolate min-h-0"
 					style="flex: {$drawerLayout.maximised ? 1 : $drawerLayout.split} 1 0"
 				>
+					{#if !$drawerLayout.maximised}
+						<div
+							class="ledger-drawer-edge pointer-events-none absolute inset-x-0 top-0 z-[300] h-px bg-primary-500"
+							aria-hidden="true"
+						></div>
+					{/if}
 					<LedgerDrawer
 						store={ledgerStore}
 						pair={$focused}
@@ -1344,9 +1355,11 @@
 			{/if}
 		</div>
 
-		<!-- Status bar -->
+		<!-- Status bar. It clips: its 24px text lines sat 0.5px past its 23px
+		     inside, which made the page scrollable by a pixel (opening the note
+		     pane scrolled it). -->
 		<div
-			class="ledger-status flex h-6 flex-none items-center gap-4 border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
+			class="ledger-status flex h-6 flex-none items-center gap-4 overflow-hidden border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
 		>
 			<span id="ledgerCount" class="opacity-80"
 				>{#if ghostRows}Querying Marasi…{:else}{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70"

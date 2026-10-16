@@ -21,7 +21,9 @@
 	const httpLanguage = StreamLanguage.define(http);
 	const styles = {
 		"&": { height: "100%", fontSize: "11px" },
-		".cm-scroller": { overflow: "auto" },
+		// Scrolling stops at the editor's edges: no bounce past them and no
+		// scroll passed on to the page.
+		".cm-scroller": { overflow: "auto", overscrollBehavior: "contain" },
 		// The first line sits flush against the drawer's top border.
 		".cm-content": { paddingTop: "0" },
 	};

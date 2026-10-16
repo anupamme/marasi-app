@@ -684,7 +684,7 @@ test("the index warning follows the page's completeness", async () => {
   api.queryTraffic = async (req) => ({ ...(await query(req)), IndexComplete: false });
   const store = createLedgerStore(api);
   await store.runQuery("all");
-  assert.match(indexWarning(get(store)), /Indexing older traffic/);
+  assert.equal(indexWarning(get(store)), "Search index still building");
 });
 
 test("clearing for another project drops a page still loading", async () => {

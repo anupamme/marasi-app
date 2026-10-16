@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, X } from "lucide-svelte";
+	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Wrench, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -39,6 +39,7 @@
 		saveHighlights,
 	} from "../../stores/highlightsStore.js";
 	import { ledgerStore, select } from "../../stores/ledgerStore";
+	import { groupBuilding, jobLabel, jobsStore, jobStatus } from "../../stores/jobsStore";
 	import {
 		groupOf,
 		isExclusionValue,
@@ -54,6 +55,7 @@
 		{ id: "browser", name: "Browser", hint: "Chrome paths and profiles", icon: Chrome },
 		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
 		{ id: "content-types", name: "Content Types", hint: "Types the Ledger hides", icon: FileType },
+		{ id: "maintenance", name: "Maintenance", hint: "Background jobs and rebuilds", icon: Wrench },
 		{ id: "about", name: "About", hint: "Version and build", icon: Info },
 	];
 	const syntaxModes = [
@@ -209,6 +211,36 @@
 		saveDefaultExclusion([...$defaultExclusion, newContentTypeValue]);
 		newContentType = "";
 	}
+
+	// Rebuilding resets the job and redoes it over every pair; the notices
+	// show until it finishes.
+	const rebuilds = {
+		index: {
+			title: "Rebuild the search index?",
+			body: "Marasi indexes every pair again, which can take a while on a large project. Text matches may be incomplete until it finishes.",
+		},
+		sitemap: {
+			title: "Rebuild the sitemap?",
+			body: "Marasi places every pair in the sitemap again. Sitemap counts may be low until it finishes.",
+		},
+	};
+	function confirmRebuild(group) {
+		modalStore.trigger({
+			type: "confirm",
+			...rebuilds[group],
+			buttonTextConfirm: "Rebuild",
+			response: (ok) => {
+				if (!ok) return;
+				jobsStore.rebuild(group).catch((error) => {
+					toastStore.trigger({
+						message: `Error starting the rebuild: ${error}`,
+						background: "variant-filled-error",
+					});
+				});
+			},
+		});
+	}
+	$: if (section === "maintenance") jobsStore.refresh();
 
 	onMount(() => {
 		ledgerStore.loadDefaultExclusion().catch((error) => {
@@ -645,6 +677,73 @@
 						</div>
 					</div>
 				{/each}
+			{:else if section === "maintenance"}
+				<h3 class="text-xl font-bold">Maintenance</h3>
+				<p class="mb-4 text-sm opacity-70">
+					Marasi keeps the open project's search index and sitemap up to date in the background.
+					After an upgrade it may still be catching up on older pairs.
+				</p>
+				<div class={row} id="settingsRebuildIndex">
+					<div>
+						<p>Search index</p>
+						<p class="text-sm opacity-70">
+							Rebuild when text matches look wrong. This also makes older compressed bodies
+							searchable.
+						</p>
+					</div>
+					<div class={control}>
+						<button
+							type="button"
+							class="btn w-full variant-soft"
+							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "index")}
+							on:click={() => confirmRebuild("index")}
+							>{groupBuilding($jobsStore, "index") ? "Building…" : "Rebuild"}</button
+						>
+					</div>
+				</div>
+				<div class={row} id="settingsRebuildSitemap">
+					<div>
+						<p>Sitemap</p>
+						<p class="text-sm opacity-70">Rebuild when sitemap counts look wrong.</p>
+					</div>
+					<div class={control}>
+						<button
+							type="button"
+							class="btn w-full variant-soft"
+							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "sitemap")}
+							on:click={() => confirmRebuild("sitemap")}
+							>{groupBuilding($jobsStore, "sitemap") ? "Building…" : "Rebuild"}</button
+						>
+					</div>
+				</div>
+				<h4 class="mt-6 mb-2 font-bold">Background jobs</h4>
+				{#if $jobsStore.error}
+					<p class="mb-2 text-sm text-error-500" role="alert">{$jobsStore.error}</p>
+				{/if}
+				<div class="table-container">
+					<table class="table" id="settingsJobs">
+						<thead>
+							<tr>
+								<th class="w-[60%]">Job</th>
+								<th class="w-[40%]">State</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each $jobsStore.jobs as job (job.Name)}
+								<tr data-job={job.Name}>
+									<td>{jobLabel(job.Name)}</td>
+									<td
+										class={job.Complete
+											? "opacity-70"
+											: "text-warning-600 dark:text-warning-400"}>{jobStatus(job)}</td
+									>
+								</tr>
+							{:else}
+								<tr><td colspan="2" class="opacity-70">{$jobsStore.loaded ? "No jobs" : "Loading…"}</td></tr>
+							{/each}
+						</tbody>
+					</table>
+				</div>
 			{:else}
 				<h3 class="text-xl font-bold">About</h3>
 				<div class={row}>

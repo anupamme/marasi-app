@@ -365,7 +365,7 @@ export function matchNoun(count, more = false) {
 /** Shown while a query is active and older traffic is still being indexed. */
 export function indexWarning(state) {
   return isQueryActive(state.query) && !state.results.indexComplete
-    ? "Indexing older traffic — text matches may be incomplete"
+    ? "Search index still building"
     : "";
 }
 

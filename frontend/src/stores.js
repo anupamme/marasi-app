@@ -18,6 +18,7 @@ import { launchpadStore } from "./stores/launchpadStore";
 import { highlightsStore, readHighlights } from "./stores/highlightsStore";
 import { ledgerStore } from "./stores/ledgerStore";
 import { sitemapStore } from "./stores/sitemapStore";
+import { jobsStore } from "./stores/jobsStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
 
@@ -147,6 +148,7 @@ export async function openProject() {
   waypoints.set({});
   ledgerStore.clear();
   sitemapStore.clear();
+  jobsStore.clear();
   recentTraffic.clear();
   // Project saved queries belong to the project just opened.
   savedQueriesStore.loadProject();
@@ -167,6 +169,8 @@ export async function openProject() {
   // traffic for extensions load in the background.
   ledgerStore.populate();
   recentTraffic.populate();
+  // Marasi's background jobs, polled while one runs.
+  jobsStore.refresh();
   // The project's highlight labels, then its old hex highlights migrated in
   // the background; the Ledger reloads once they are numbers.
   highlightsStore.openProject({ onMigrated: () => ledgerStore.reload() });

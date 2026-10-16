@@ -806,7 +806,7 @@
 />
 <Modal
 	components={modalRegistery}
-	background="bg-surface-50-800-token text-surface-900-50-token"
+	background="bg-surface-50 dark:bg-surface-800 text-surface-900-50-token"
 	buttonPositive={$modeCurrent
 		? "variant-ghost-primary border-0 ring-0"
 		: "variant-filled-primary"}

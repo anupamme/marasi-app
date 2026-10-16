@@ -5,14 +5,7 @@
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
 	import { lineWrap } from "../../stores";
-	import ContextMenu, { Item, Divider } from "svelte-contextmenu";
-	import {
-		getModalStore,
-		getToastStore,
-		ListBoxItem,
-		ListBox,
-		modeCurrent,
-	} from "@skeletonlabs/skeleton";
+	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import {
 		Search,
 		ToggleLeftIcon,
@@ -39,10 +32,13 @@
 		CircleAlert,
 		TriangleAlert,
 		PanelLeftIcon,
+		MenuIcon,
 		Tags,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
 	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
+	import SavedQueriesMenu from "../../lib/ledger/SavedQueriesMenu.svelte";
+	import { readyMadeQueries } from "../../stores/savedQueriesStore";
 	import { appendToQuery } from "../../lib/ledgerQueryFields";
 	import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions } from "../../lib/keybindings/app.js";
@@ -51,16 +47,25 @@
 	import { LEDGER_DOCK } from "../../lib/dock/dock.js";
 	import LedgerTable from "../../lib/ledger/LedgerTable.svelte";
 	import LedgerDrawer from "../../lib/ledger/LedgerDrawer.svelte";
+	import RowMenu from "../../lib/ledger/RowMenu.svelte";
+	import {
+		curlCommand,
+		markdownTable,
+		narrowQuery,
+		pairURL,
+		requestCount,
+		similarIDs,
+	} from "../../lib/ledger/rowMenu.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { rowHighlight } from "../../lib/ledger/table.js";
+	import { launchpadStore } from "../../stores/launchpadStore";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
 	import { highlightPalette } from "../../stores/highlightsStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
-	import { armoryStore } from "../../stores/armoryStore";
 	import {
 		ledgerStore,
 		select,
@@ -70,6 +75,8 @@
 		drawerKeybindingState,
 		isQueryActive,
 		indexWarning,
+		selectedPairs,
+		LAUNCHPADS_EACH_MAX,
 		countLabel,
 		newMatchesKind,
 		newMatchesLabel,
@@ -83,6 +90,8 @@
 	const queryText = select(ledgerStore, (state) => state.queryText);
 	const queryPending = select(ledgerStore, (state) => state.queryPending);
 	const queryActive = select(ledgerStore, (state) => isQueryActive(state.query));
+	// The row menu's Hide type adds to it.
+	const exclusion = select(ledgerStore, (state) => state.exclusion);
 	const selection = select(ledgerStore, (state) => state.selection);
 	const focused = select(ledgerStore, focusedPair);
 	const drawerLayout = select(ledgerStore, (state) => state.layout.drawer);
@@ -100,15 +109,18 @@
 	let dock;
 	let table;
 	let tableArea;
-	let contextMenu;
-	let contextPairID;
 	let queryFieldsOpen = false;
+	// The row menu: whether it shows, where, and the pairs it acts on, taken
+	// from the selection when it opens.
+	let rowMenu = { open: false, x: 0, y: 0, pairs: [] };
 	let typesMenu;
 
 	$: primary = primaryVariant($modeCurrent);
 	$: drawerOpen = Boolean($focused);
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
+	$: selectedCount = $selection.ids.size;
+	$: allSelected = selectedCount > 1 && selectedCount === $rows.length;
 	// Marasi's error for the text in the query box, underlined there; an
 	// error for text since edited is stale.
 	$: queryBoxError = $query.error?.query === $queryText ? $query.error : null;
@@ -168,6 +180,42 @@
 			.catch(() => toastStore.trigger({ message: failed, background: "variant-filled-error" }));
 	}
 
+	function toastError(message, error) {
+		toastStore.trigger({
+			message: error ? `${message}: ${String(error)}` : message,
+			background: "variant-filled-error",
+		});
+	}
+
+	// A toast with a button that leaves for another page.
+	function toastJump(message, label, path) {
+		const toastId = toastStore.trigger({
+			message,
+			background: handoffBackground,
+			action: {
+				label,
+				response: () => {
+					toastStore.close(toastId);
+					goto(path);
+				},
+			},
+		});
+	}
+
+	// "Request 4", or "3 requests".
+	function describe(pairs) {
+		return pairs.length === 1
+			? `Request ${ledgerStore.pairNumber(pairs[0].ID)}`
+			: requestCount(pairs.length);
+	}
+
+	// Adds " (N failed)" when some per-pair calls failed.
+	const failures = ({ failed }) => (failed ? ` (${failed} failed)` : "");
+
+	// The selected pairs, in table order.
+	const selectionPairs = () => selectedPairs(get(ledgerStore));
+	const idsOf = (pairs) => pairs.map((pair) => pair.ID);
+
 	// The focused pair's full request and response.
 	function focusedDetails() {
 		return $focused ? ledgerStore.getDetails($focused.ID) : Promise.reject(new Error("no pair"));
@@ -190,46 +238,238 @@
 		});
 	}
 
-	async function sendFocusedToArmory() {
-		if (!drawerOpen) return;
-		const number = focusNumber;
+	// Each action below works on the pairs it is given: the selection, from
+	// the row menu or a shortcut. They make one call per pair and report
+	// through a toast.
+
+	async function sendToArmory(pairs) {
+		const result = await ledgerStore.sendToArmory(idsOf(pairs));
+		if (result.done === 0) return toastError(`Failed to send ${describe(pairs)} to Armory`);
+		const first = result.results[0];
+		toastJump(`${describe(pairs)} sent to Armory${failures(result)}`, "Jump to Armory", `/armory?id=${first.ID}`);
+	}
+
+	// The launchpad list in the menu learns about launchpads made here.
+	const refreshLaunchpads = () =>
+		launchpadStore.populate().catch((err) => console.error("Refreshing launchpads failed:", err));
+
+	async function sendToNewLaunchpad(pairs) {
 		try {
-			const template = await armoryStore.createTemplateFromRequest($focused.ID);
-			const toastId = toastStore.trigger({
-				message: `Request ${number} sent to Armory`,
-				background: handoffBackground,
-				action: {
-					label: "Jump to Armory",
-					response: () => {
-						toastStore.close(toastId);
-						goto(`/armory?id=${template.ID}`);
-					},
-				},
-			});
+			const result = await ledgerStore.sendToNewLaunchpad(idsOf(pairs));
+			refreshLaunchpads();
+			toastJump(
+				`${describe(pairs)} sent to a new launchpad${failures(result)}`,
+				"Jump to Launchpad",
+				"/launchpad?id=" + result.launchpadId,
+			);
 		} catch (error) {
-			toastStore.trigger({
-				message: `Failed to send request to Armory: ${String(error)}`,
-				background: "variant-filled-error",
-			});
+			toastError("Failed to create a launchpad", error);
 		}
 	}
 
-	function sendToLaunchpad(id) {
-		const number = ledgerStore.pairNumber(id);
-		ledgerStore.sendToLaunchpad(id).then((launchpadId) => {
-			const toastId = toastStore.trigger({
-				message: "Request " + number + " sent to Launchpad",
-				background: handoffBackground,
-				action: {
-					label: "Jump to Launchpad",
-					response: () => {
-						toastStore.close(toastId);
-						goto("/launchpad?id=" + launchpadId);
-					},
-				},
-			});
+	async function sendToLaunchpadsEach(pairs) {
+		if (pairs.length > LAUNCHPADS_EACH_MAX) return;
+		try {
+			const result = await ledgerStore.sendToLaunchpadsEach(idsOf(pairs));
+			refreshLaunchpads();
+			toastJump(
+				`Created ${result.done} ${result.done === 1 ? "launchpad" : "launchpads"}${failures(result)}`,
+				"Jump to Launchpad",
+				"/launchpad?id=" + (result.launchpadIds[0] ?? ""),
+			);
+		} catch (error) {
+			toastError("Failed to create launchpads", error);
+		}
+	}
+
+	async function addToLaunchpad(pairs, launchpadId, name) {
+		const result = await ledgerStore.addToLaunchpad(idsOf(pairs), launchpadId);
+		refreshLaunchpads();
+		toastJump(
+			`Added ${describe(pairs)} to "${name}"${failures(result)}`,
+			"Jump to Launchpad",
+			"/launchpad?id=" + launchpadId,
+		);
+	}
+
+	// Links or unlinks the pairs and a finding or test case.
+	async function changeLinks(pairs, run, verb, noun, title) {
+		const result = await run(idsOf(pairs));
+		if (result.done === 0) return toastError(`Failed to ${verb.toLowerCase()} ${describe(pairs)}`);
+		const preposition = verb === "Linked" ? "to" : "from";
+		toastStore.trigger({
+			message: `${verb} ${describe(pairs)} ${preposition} ${noun} "${title}"${failures(result)}`,
+			background: handoffBackground,
 		});
 	}
+
+	// The context menu's Copy submenu. Raw requests and responses are read
+	// when copied, never when the menu opens.
+	async function copyPairs(pairs, what) {
+		const label = describe(pairs);
+		if (what === "urls") {
+			return copyText(pairs.map(pairURL).join("\n"), `Copied ${pairs.length === 1 ? "URL" : `${pairs.length} URLs`}`, "Failed to copy URLs");
+		}
+		if (what === "markdown") {
+			return copyText(markdownTable(pairs, (pair) => ledgerStore.pairNumber(pair.ID)), "Copied a Markdown table", "Failed to copy");
+		}
+		if (what === "numbers") {
+			return copyText(
+				pairs.map((pair) => ledgerStore.pairNumber(pair.ID)).join(", "),
+				"Copied request numbers",
+				"Failed to copy",
+			);
+		}
+		let details;
+		try {
+			details = await Promise.all(pairs.map((pair) => ledgerStore.getDetails(pair.ID)));
+		} catch (error) {
+			return toastError(`Failed to read ${label}`, error);
+		}
+		if (what === "curl") {
+			const text = pairs.map((pair, i) => curlCommand(pair, details[i]?.Request?.Raw)).join("\n\n");
+			return copyText(text, "Copied as cURL", "Failed to copy");
+		}
+		if (what === "requests") {
+			const text = details.map((d) => d?.Request?.Raw ?? "").join("\n\n");
+			return copyText(text, pairs.length === 1 ? "Request copied to clipboard" : `Copied ${label}`, "Failed to copy request");
+		}
+		if (what === "responses") {
+			const incoming = $selection.incomingResponse;
+			const text = details
+				.map((d, i) => {
+					const live = incoming && String(incoming.ID) === String(pairs[i].ID) ? incoming : null;
+					return (live || d?.Response)?.Raw ?? "";
+				})
+				.filter(Boolean)
+				.join("\n\n");
+			return copyText(text, pairs.length === 1 ? "Response copied to clipboard" : `Copied the responses of ${label}`, "Failed to copy response");
+		}
+	}
+
+	// Adds a term to the query and runs it.
+	function narrow(term) {
+		const text = narrowQuery($queryText, term);
+		ledgerStore.setQueryText(text);
+		ledgerStore.runQuery(text);
+		toastStore.trigger({ message: `Narrowed the query: ${term}`, background: handoffBackground });
+	}
+
+	async function hideType(contentType) {
+		if ($exclusion.includes(contentType)) return;
+		const before = [...$exclusion];
+		await ledgerStore.saveExclusion([...before, contentType]);
+		const toastId = toastStore.trigger({
+			message: `Hid ${contentType}`,
+			background: handoffBackground,
+			action: {
+				label: "Undo",
+				response: () => {
+					toastStore.close(toastId);
+					ledgerStore.saveExclusion(before);
+				},
+			},
+		});
+	}
+
+	function selectSimilar(pairs, kind) {
+		const ids = similarIDs(kind, $rows, pairs);
+		ledgerStore.selectIDs(ids);
+		toastStore.trigger({ message: `Selected ${requestCount(ids.length)}`, background: handoffBackground });
+	}
+
+	function openMetadata(id) {
+		ledgerStore.getMetadata(id).then((metadata) =>
+			toggleModal("Metadata", {
+				type: "component",
+				component: "Metadata",
+				toggleAction: "ledger.drawer-open.view-metadata",
+				content: metadata,
+				title: "Request " + ledgerStore.pairNumber(id) + " Metadata",
+			}),
+		);
+	}
+
+	/** Runs a row menu action (rowMenu.js) on `pairs`. */
+	function runMenuAction(action, pairs) {
+		if (!action || pairs.length === 0) return;
+		const ids = idsOf(pairs);
+		switch (action.type) {
+			case "open":
+				ledgerStore.focusPair(action.id);
+				return;
+			case "websocket":
+				ledgerStore.focusPair(action.id);
+				return openWebSocketStream();
+			case "new-launchpad":
+				return sendToNewLaunchpad(pairs);
+			case "launchpad-each":
+				return sendToLaunchpadsEach(pairs);
+			case "add-to-launchpad":
+				return addToLaunchpad(pairs, action.id, action.name);
+			case "armory":
+				return sendToArmory(pairs);
+			case "new-finding":
+				return createFinding(ids);
+			case "new-test-case":
+				return createTestCase(ids);
+			case "link-finding":
+				return changeLinks(pairs, (ids) => ledgerStore.linkToFinding(ids, action.id), "Linked", "finding", action.title);
+			case "unlink-finding":
+				return changeLinks(pairs, (ids) => ledgerStore.unlinkFromFinding(ids, action.id), "Unlinked", "finding", action.title);
+			case "link-test-case":
+				return changeLinks(pairs, (ids) => ledgerStore.linkToTestCase(ids, action.id), "Linked", "test case", action.title);
+			case "unlink-test-case":
+				return changeLinks(pairs, (ids) => ledgerStore.unlinkFromTestCase(ids, action.id), "Unlinked", "test case", action.title);
+			case "note":
+				return openNote(action.id);
+			case "copy":
+				return copyPairs(pairs, action.what);
+			case "narrow":
+				return narrow(action.term);
+			case "hide-type":
+				return hideType(action.contentType);
+			case "select":
+				return selectSimilar(pairs, action.kind);
+			case "metadata":
+				return openMetadata(action.id);
+		}
+	}
+
+	// Opens the row menu at a point, on the selection.
+	function openRowMenu(x, y) {
+		const pairs = selectionPairs();
+		if (pairs.length === 0) return;
+		rowMenu = { open: true, x, y, pairs };
+	}
+
+	// Opens the row menu under the focused row, as ⌘. and the menu key do.
+	function openRowMenuAtFocus() {
+		if (!drawerOpen || $modalStore[0]) return;
+		if (rowMenu.open) {
+			rowMenu = { ...rowMenu, open: false };
+			return;
+		}
+		table?.reveal(focusID);
+		const rect = table?.rowRect(focusID) ?? tableArea?.getBoundingClientRect();
+		if (!rect) return;
+		openRowMenu(rect.left + 200, rect.bottom);
+	}
+
+	$: rowMenuContext = {
+		numberOf: (pair) => ledgerStore.pairNumber(pair.ID),
+		launchpads: $launchpadStore.launchpads,
+		findings: $findingStore,
+		testCases: $testCaseStore,
+	};
+
+	// A shortcut acts on the selection, as the row menu does.
+	const onSelection = (fn) => () => {
+		if (!drawerOpen) return;
+		rowMenu = { ...rowMenu, open: false };
+		const pairs = selectionPairs();
+		if (pairs.length) fn(pairs);
+	};
 
 	// Opens the modal, or closes it when the same one is already open.
 	function toggleModal(component, modal) {
@@ -250,20 +490,23 @@
 		);
 	}
 
-	function createTestCase(id) {
-		testCaseStore.create([id]).then((testCase) =>
-			modalStore.trigger({
-				type: "component",
-				component: "TestCase",
-				toggleAction: "ledger.drawer-open.create-test-case",
-				meta: { testCase, isNew: true },
-			}),
-		);
+	function createTestCase(ids) {
+		ledgerStore
+			.createTestCase(ids)
+			.then((testCase) =>
+				modalStore.trigger({
+					type: "component",
+					component: "TestCase",
+					toggleAction: "ledger.drawer-open.create-test-case",
+					meta: { testCase, isNew: true },
+				}),
+			)
+			.catch((error) => toastError("Failed to create a test case", error));
 	}
 
-	function createFinding(id) {
-		findingStore
-			.create([id])
+	function createFinding(ids) {
+		ledgerStore
+			.createFinding(ids)
 			.then((finding) =>
 				modalStore.trigger({
 					type: "component",
@@ -272,7 +515,7 @@
 					meta: { finding, isNew: true },
 				}),
 			)
-			.catch((err) => console.log(err));
+			.catch((error) => toastError("Failed to create a finding", error));
 	}
 
 	// Focuses `element`, or blurs it when it already has focus.
@@ -353,7 +596,7 @@
 		{
 			actionId: "ledger.drawer-open.send-to-armory",
 			icon: Swords,
-			handler: sendFocusedToArmory,
+			handler: onSelection(sendToArmory),
 		},
 		{
 			actionId: "ledger.drawer-open.previous-request",
@@ -366,13 +609,13 @@
 		{
 			actionId: "ledger.drawer-open.send-to-launchpad",
 			icon: SendIcon,
-			handler: whenOpen(sendToLaunchpad),
+			handler: onSelection(sendToNewLaunchpad),
 		},
 		{
 			actionId: "ledger.drawer-open.create-test-case",
 			icon: BookCheckIcon,
-			handler: whenOpen((id) => {
-				if (!$modalStore[0]) createTestCase(id);
+			handler: whenOpen(() => {
+				if (!$modalStore[0]) createTestCase(idsOf(selectionPairs()));
 				else if ($modalStore[0].component === "TestCase") modalStore.close();
 			}),
 		},
@@ -425,8 +668,8 @@
 		{
 			actionId: "ledger.drawer-open.create-finding",
 			icon: ShieldAlertIcon,
-			handler: whenOpen((id) => {
-				if (!$modalStore[0]) createFinding(id);
+			handler: whenOpen(() => {
+				if (!$modalStore[0]) createFinding(idsOf(selectionPairs()));
 				else if ($modalStore[0].component === "Finding") modalStore.close();
 			}),
 		},
@@ -484,51 +727,27 @@
 		{
 			actionId: "ledger.drawer-open.view-metadata",
 			icon: BracesIcon,
-			handler: whenOpen((id) => {
-				ledgerStore.getMetadata(id).then((metadata) =>
-					toggleModal("Metadata", {
-						type: "component",
-						component: "Metadata",
-						toggleAction: "ledger.drawer-open.view-metadata",
-						content: metadata,
-						title: "Request " + ledgerStore.pairNumber(id) + " Metadata",
-					}),
-				);
-			}),
+			handler: whenOpen(openMetadata),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-url",
 			icon: CopyIcon,
-			handler: whenOpen(() => {
-				const pair = $focused;
-				copyText(
-					pair.Scheme + "://" + pair.Host + pair.Path,
-					"URL copied to clipboard",
-					"Failed to copy URL",
-				);
-			}),
+			handler: onSelection((pairs) => copyPairs(pairs, "urls")),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-raw-request",
 			icon: CopyIcon,
-			handler: whenOpen(() =>
-				focusedDetails().then((details) =>
-					copyText(details.Request?.Raw, "Request copied to clipboard", "Failed to copy request"),
-				),
-			),
+			handler: onSelection((pairs) => copyPairs(pairs, "requests")),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-raw-response",
 			icon: CopyIcon,
-			handler: whenOpen(() =>
-				focusedDetails().then((details) =>
-					copyText(
-						($selection.incomingResponse || details.Response)?.Raw,
-						"Response copied to clipboard",
-						"Failed to copy response",
-					),
-				),
-			),
+			handler: onSelection((pairs) => copyPairs(pairs, "responses")),
+		},
+		{
+			actionId: "ledger.drawer-open.open-row-menu",
+			icon: MenuIcon,
+			handler: openRowMenuAtFocus,
 		},
 		{
 			actionId: "ledger.drawer-open.toggle-fullscreen",
@@ -577,6 +796,13 @@
 	}
 	$: activeMarks = activeMarkCount($queryText);
 
+	// Runs a saved query the menu chose, or returns to the live view for "".
+	function applySavedQuery(text) {
+		if (!text) return ledgerStore.clearQuery();
+		ledgerStore.setQueryText(text);
+		ledgerStore.runQuery(text);
+	}
+
 	// Closes the toolbar's panels on a click outside them.
 	function onWindowPointerDown(event) {
 		if (queryFieldsOpen && !event.target.closest?.(".ledger-query-fields, #ledgerQueryFieldsToggle")) {
@@ -622,6 +848,7 @@
 				<LedgerQueryBox
 					value={$queryText}
 					error={queryBoxError}
+					readyMade={$readyMadeQueries}
 					on:change={(e) => {
 						ledgerStore.setQueryText(e.detail);
 						ledgerStore.scheduleQuery(e.detail);
@@ -674,6 +901,11 @@
 					<CircleHelp size={15} />
 				</button>
 			</div>
+			<SavedQueriesMenu
+				queryText={$queryText}
+				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}
+				on:apply={(e) => applySavedQuery(e.detail)}
+			/>
 			<ToolbarMenu
 				id="ledgerMarks"
 				label="Marks"
@@ -711,18 +943,24 @@
 						bind:this={table}
 						rows={$rows}
 						focusId={focusID}
+						selectedIds={$selection.ids}
 						palette={$highlightPalette}
 						{firstNumber}
 						sort={$sort}
 						pinTop={$newKind === "top" && !$results.hasBefore}
 						resetKey={$results.reset}
-						on:select={(e) => ledgerStore.selectPair(e.detail)}
-						on:step={(e) => ledgerStore.stepSelection(e.detail)}
+						on:click={(e) => ledgerStore.clickRow(e.detail.id, e.detail)}
+						on:sweepstart={(e) => ledgerStore.startSweep(e.detail)}
+						on:sweep={(e) => ledgerStore.sweepTo(e.detail)}
+						on:sweepend={() => ledgerStore.endSweep()}
+						on:step={(e) => ledgerStore.stepSelection(e.detail.step, { extend: e.detail.extend })}
+						on:selectall={() => ledgerStore.selectAll()}
+						on:menukey={openRowMenuAtFocus}
 						on:viewport={(e) => ledgerStore.setViewport(e.detail)}
 						on:sort={(e) => ledgerStore.sortBy(e.detail)}
 						on:menu={(e) => {
-							contextPairID = e.detail.id;
-							contextMenu.show(e.detail.event);
+							ledgerStore.contextRow(e.detail.id);
+							openRowMenu(e.detail.event.clientX, e.detail.event.clientY);
 						}}
 					/>
 				</div>
@@ -785,61 +1023,31 @@
 				<span class="opacity-60">{$hiddenCount.toLocaleString()} hidden by type</span>
 			{/if}
 			{#if drawerOpen}
-				<span class="text-primary-500">Request {focusNumber} selected</span>
+				<span id="ledgerSelectionCount" class="text-primary-500">
+					{#if selectedCount === 1}
+						Request {focusNumber} selected
+					{:else if allSelected}
+						All {selectedCount.toLocaleString()} selected
+					{:else}
+						{selectedCount.toLocaleString()} selected
+					{/if}
+				</span>
 				<button class="opacity-70 hover:underline" on:click={closeDrawer}>Clear</button>
 			{/if}
+			<span class="ml-auto truncate opacity-50">
+				⇧-click range · ⌘-click toggle · drag to sweep · ⌘A all · right-click for actions
+			</span>
 		</div>
 	</div>
 </div>
 
-<ContextMenu bind:this={contextMenu}>
-	<Item on:click={() => openNote(contextPairID)}>Open Note</Item>
-	<Item on:click={() => sendToLaunchpad(contextPairID)}>Send to Launchpad</Item>
-	<Item on:click={() => createTestCase(contextPairID)}>Create Test Case</Item>
-	<Item on:click={() => createFinding(contextPairID)}>Create Finding</Item>
-	<Divider />
-	<ListBox active="">
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, 0xef4444)}
-			class="!bg-red-500 text-black hover:brightness-110">Red</ListBoxItem
-		>
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, 0x22c55e)}
-			class="!bg-green-500 text-black hover:brightness-110">Green</ListBoxItem
-		>
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, 0xeab308)}
-			class="!bg-yellow-500 text-black hover:brightness-110">Yellow</ListBoxItem
-		>
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, 0x3b82f6)}
-			class="!bg-blue-500 text-black hover:brightness-110">Blue</ListBoxItem
-		>
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, 0xa855f7)}
-			class="!bg-purple-500 text-black hover:brightness-110">Purple</ListBoxItem
-		>
-		<ListBoxItem
-			group
-			name
-			value
-			on:click={() => ledgerStore.highlight(contextPairID, -1)}
-			class="context-menu-none">None</ListBoxItem
-		>
-	</ListBox>
-</ContextMenu>
+<RowMenu
+	bind:open={rowMenu.open}
+	x={rowMenu.x}
+	y={rowMenu.y}
+	pairs={rowMenu.pairs}
+	context={rowMenuContext}
+	on:action={(e) => runMenuAction(e.detail, rowMenu.pairs)}
+	on:close={(e) => e.detail.refocus && table?.focus()}
+/>
+

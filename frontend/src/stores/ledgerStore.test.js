@@ -652,6 +652,25 @@ test("the focused pair stays in the drawer when its page is dropped", async () =
   assert.equal(focusedPair(state)?.ID, id);
 });
 
+test("selected pairs stay selected when their page is dropped, and a fresh read drops them", async () => {
+  const api = fakeApi({ traffic: pairs(PAGE_SIZE * 10), queries: { odd: (p) => Number(p.ID.slice(1)) % 2 === 1 } });
+  const store = createLedgerStore(api);
+  await store.populate();
+  const [a, b] = [tableRows(get(store))[3].ID, tableRows(get(store))[5].ID];
+  store.clickRow(a);
+  store.clickRow(b, { toggle: true });
+  for (let step = 0; step < 9; step++) {
+    await scrollTo(store, tableRows(get(store)).length - 40);
+  }
+  assert.ok(!ids(get(store)).includes(a), "their page was dropped");
+  assert.deepEqual([...get(store).selection.ids].sort(), [a, b].sort());
+  assert.equal(focusedPair(get(store))?.ID, b);
+
+  await store.runQuery("odd");
+  const kept = [a, b].filter((id) => Number(id.slice(1)) % 2 === 1);
+  assert.deepEqual([...get(store).selection.ids], kept);
+});
+
 test("a metadata patch reaches the loaded rows", async () => {
   const store = createLedgerStore(fakeApi({ traffic: pairs(2) }));
   await store.populate();

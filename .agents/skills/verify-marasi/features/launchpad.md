@@ -131,7 +131,7 @@ Tree, prompts and dock:
  {"text":"Collapse sidebar"},{"waitSelector":".lp-strip"},{"text":"Show launchpads"},{"waitSelector":".lp-dock"}]}
 ```
 
-`Latest in <launchpad>` appears at the bottom of the tree once the list at the top of the tree has its last entry cut off; collapse other launchpads and `Show N more` until the tree overflows. Drag-resize has no driver step; drive `.lp-resize` with raw `Input.dispatchMouseEvent` (fire and forget, see Gotchas).
+`Latest in <launchpad>` appears at the bottom of the tree once the list at the top of the tree has its last entry cut off; collapse other launchpads and `Show N more` until the tree overflows. Drag-resize with `{"drag":".lp-resize","to":"<css>"}`: dropping on a control to the right widens the dock, and dropping on the rail (`[title="Ledger"]`) collapses it. `.lp-resize` takes no layout width: it is an 8px grab area drawn over the dock's border, so hovering it changes only that strip's colour.
 
 Prove linkage with `select l.name, r.path, r.status_code from launchpad l join launchpad_request lr on lr.launchpad_id=l.id join request r on r.id=lr.request_id`. Proxied traffic can no longer be tagged for a launchpad (Marasi PR #28 removed `x-launchpad-id`), so the `+1` unseen badge needs a launch whose request arrives after another launchpad is opened; the store tests cover it, and no driver sequence for it is proven yet.
 

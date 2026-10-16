@@ -165,12 +165,17 @@
 {/if}
 
 {#if !collapsed || dragging}
-	<!-- svelte-ignore a11y-no-static-element-interactions -->
-	<div
-		class="lp-resize w-1 flex-none cursor-col-resize transition-colors hover:bg-primary-500/60 {dragging
-			? 'bg-primary-500'
-			: ''}"
-		title="Drag to resize, drag left to collapse"
-		on:pointerdown|preventDefault={startDrag}
-	></div>
+	<!-- The resize handle takes no width: its grab area and highlight sit
+	     over the dock's border and the content's edge, so hovering or
+	     dragging never moves the layout. -->
+	<div class="relative w-0 flex-none">
+		<!-- svelte-ignore a11y-no-static-element-interactions -->
+		<div
+			class="lp-resize absolute inset-y-0 -left-1 z-30 w-2 cursor-col-resize transition-colors hover:bg-primary-500/60 {dragging
+				? 'bg-primary-500'
+				: ''}"
+			title="Drag to resize, drag left to collapse"
+			on:pointerdown|preventDefault={startDrag}
+		></div>
+	</div>
 {/if}

@@ -5,6 +5,7 @@
 	import { ChevronDown, ChevronUp, Maximize2, Minimize2, X } from "lucide-svelte";
 	import RequestResponseView from "../components/RequestResponseView.svelte";
 	import { statusClass } from "../launchpad/format.js";
+	import { groupBuilding, jobsStore } from "../../stores/jobsStore";
 
 	/** The focused pair's table row. */
 	export let pair;
@@ -17,6 +18,8 @@
 	export let highlight = null;
 
 	const dispatch = createEventDispatcher();
+	// Marasi is still moving older pairs' prettified copies out of metadata.
+	$: prettifiedMoving = groupBuilding($jobsStore, "prettified");
 </script>
 
 <div class="ledger-drawer flex h-full min-h-0 flex-col bg-surface-50 dark:bg-surface-800">
@@ -32,6 +35,13 @@
 			>{pair.Host ?? ""}<span class="opacity-70">{pair.Path ?? ""}</span></span
 		>
 		<span class={statusClass(pair.StatusCode)}>{pair.StatusCode || "pending"}</span>
+		{#if prettifiedMoving}
+			<span
+				class="ledger-prettified-moving whitespace-nowrap font-sans text-warning-600 dark:text-warning-400"
+				title="Marasi is still moving older formatted bodies, so some may not show prettified yet"
+				>Some formatted bodies still moving</span
+			>
+		{/if}
 		<div class="flex items-center gap-1 border-l border-surface-300-600-token pl-2">
 			<button
 				class="opacity-60 hover:opacity-100"

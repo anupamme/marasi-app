@@ -928,7 +928,13 @@
 						>{$statusCount}</span
 					>
 					{#if $indexNote}
-						<span class="text-warning-500" title={$indexNote}><TriangleAlert size={14} /></span>
+						<span
+							id="ledgerIndexBuilding"
+							class="flex items-center gap-1 whitespace-nowrap text-xs text-warning-600 dark:text-warning-400"
+							role="status"
+							title="Marasi is still indexing older pairs, so text matches may be missing"
+							><TriangleAlert size={13} />{$indexNote}</span
+						>
 					{/if}
 				{/if}
 				{#if $highlightMigrating}

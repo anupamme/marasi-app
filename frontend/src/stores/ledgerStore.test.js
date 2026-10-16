@@ -458,6 +458,28 @@ test("an invalid query records the error and keeps the earlier results", async (
   assert.equal(get(store).query.error, null);
 });
 
+test("querying is true while Marasi reads a query's first page, and clears with its result or error", async () => {
+  const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID === idOf(1) } });
+  const store = createLedgerStore(api);
+  await store.populate();
+  assert.equal(get(store).querying, false);
+
+  const running = store.runQuery("one");
+  assert.equal(get(store).querying, true, "the read is in flight");
+  await running;
+  assert.equal(get(store).querying, false);
+
+  const failing = store.runQuery("bad");
+  assert.equal(get(store).querying, true);
+  await failing;
+  assert.equal(get(store).querying, false, "an invalid query clears it too");
+
+  const sorting = store.sortBy("host");
+  assert.equal(get(store).querying, true, "a sort reads from the top too");
+  await sorting;
+  assert.equal(get(store).querying, false);
+});
+
 test("clearing the query returns to the live view from the top", async () => {
   const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID === idOf(1) } });
   const store = createLedgerStore(api);

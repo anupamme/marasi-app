@@ -4,7 +4,7 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
-	import { tick } from "svelte";
+	import { onDestroy, tick } from "svelte";
 	import { get, writable } from "svelte/store";
 	import { lineWrap } from "../../stores";
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
@@ -106,6 +106,23 @@
 	const query = select(ledgerStore, (state) => state.query);
 	const queryText = select(ledgerStore, (state) => state.queryText);
 	const queryPending = select(ledgerStore, (state) => state.queryPending);
+	const querying = select(ledgerStore, (state) => state.querying);
+	// Ghost rows show only once a read has taken a moment, so a quick one
+	// doesn't flash them.
+	const GHOST_DELAY_MS = 150;
+	let ghost = false;
+	let ghostTimer = null;
+	$: if ($querying && !ghost && !ghostTimer) {
+		ghostTimer = setTimeout(() => {
+			ghostTimer = null;
+			ghost = true;
+		}, GHOST_DELAY_MS);
+	} else if (!$querying) {
+		clearTimeout(ghostTimer);
+		ghostTimer = null;
+		ghost = false;
+	}
+	onDestroy(() => clearTimeout(ghostTimer));
 	const queryActive = select(ledgerStore, (state) => isQueryActive(state.query));
 	// The row menu's Hide type adds to it.
 	const exclusion = select(ledgerStore, (state) => state.exclusion);
@@ -1055,8 +1072,13 @@
 		>
 			<!-- An expanded query wraps, and the toolbar grows to show it all. -->
 			<div class="flex min-w-0 flex-1 gap-2 pl-3 {queryExpanded ? 'items-start py-3' : 'items-center'}">
-				{#if $queryPending}
-					<LoaderCircle size={15} class="shrink-0 animate-spin opacity-70" />
+				{#if $queryPending || $querying}
+					<span
+						class="ledger-querying flex shrink-0"
+						title="Querying Marasi…"
+						role="status"
+						aria-label="Querying Marasi"><LoaderCircle size={15} class="animate-spin opacity-70" /></span
+					>
 				{:else}
 					<Search size={15} class="shrink-0 opacity-70" />
 				{/if}
@@ -1085,7 +1107,7 @@
 					>
 				{:else if $queryActive}
 					<span id="ledgerQueryMatchCount" class="whitespace-nowrap text-xs opacity-70"
-						>{$statusCount}</span
+						>{ghost ? "Querying…" : $statusCount}</span
 					>
 					{#if $indexNote}
 						<span
@@ -1212,6 +1234,7 @@
 						sort={$sort}
 						pinTop={$newKind === "top" && !$results.hasBefore}
 						resetKey={$results.reset}
+						{ghost}
 						on:click={(e) => ledgerStore.clickRow(e.detail.id, e.detail)}
 						on:sweepstart={(e) => ledgerStore.startSweep(e.detail)}
 						on:sweep={(e) => ledgerStore.sweepTo(e.detail)}
@@ -1307,7 +1330,9 @@
 			class="ledger-status flex h-6 flex-none items-center gap-4 border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
 		>
 			<span id="ledgerCount" class="opacity-80"
-				>{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70">{` · ${position}`}</span>{/if}</span
+				>{#if ghost}Querying Marasi…{:else}{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70"
+							>{` · ${position}`}</span
+						>{/if}{/if}</span
 			>
 			{#if $hiddenCount}
 				<span class="opacity-60">{$hiddenCount.toLocaleString()} hidden by type</span>

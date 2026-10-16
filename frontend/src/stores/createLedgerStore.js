@@ -184,6 +184,9 @@ function initialState(runID = 0, layout = initialLayout(), sort = DEFAULT_SORT) 
     queryText: "",
     // True while the query box's delay timer is waiting to run a query.
     queryPending: false,
+    // True while Marasi reads fresh results from the top (a query, a sort,
+    // the live view again); the table shows ghost rows meanwhile.
+    querying: false,
     query: emptyQueryState(runID),
     results: emptyResults(),
   };
@@ -517,6 +520,8 @@ export function createLedgerStore(api) {
   // True while a fresh set of results is being read; pages for the old
   // window don't load meanwhile.
   let reading = false;
+  // The generation of the latest first-page read.
+  let firstPageGen = 0;
   // Bumped on a project switch, so the old project's exclusion is dropped.
   let projectVersion = 0;
   // Settles once the project's exclusion has loaded; counts wait for it.
@@ -601,8 +606,15 @@ export function createLedgerStore(api) {
    */
   async function readFirstPage(text, { onSuccess } = {}) {
     const gen = ++generation;
+    firstPageGen = gen;
     loadingForward = loadingBackward = false;
     reading = true;
+    if (!current.querying) update((state) => ({ ...state, querying: true }));
+    // Another kind of read (a jump, rows read again in place) can take
+    // over; `querying` still clears once no first-page read is left.
+    const settleStale = () => {
+      if (firstPageGen === gen && current.querying) update((state) => ({ ...state, querying: false }));
+    };
     let page;
     try {
       page = await api.queryTraffic(pageRequest(text, current.sort));
@@ -610,18 +622,27 @@ export function createLedgerStore(api) {
       console.error("Reading traffic failed:", err);
       if (gen === generation) {
         reading = false;
-        updateResults((r) => ({ ...r, loading: false, failed: true }));
-      }
+        update((state) => ({
+          ...state,
+          querying: false,
+          results: { ...state.results, loading: false, failed: true },
+        }));
+      } else settleStale();
       return { message: String(err), position: null };
     }
-    if (gen !== generation) return null;
+    if (gen !== generation) {
+      settleStale();
+      return null;
+    }
     reading = false;
     if (page.QueryError) {
+      update((state) => ({ ...state, querying: false }));
       return { message: page.QueryError.Message, position: page.QueryError.Position };
     }
     viewport = { first: 0, last: 0, atTop: true };
     update((state) => ({
       ...(onSuccess ? onSuccess(state) : state),
+      querying: false,
       results: { ...resultsFromPage(page, ""), reset: ++resets },
     }));
     await loadCount(gen);

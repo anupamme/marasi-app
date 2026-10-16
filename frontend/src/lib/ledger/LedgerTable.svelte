@@ -53,6 +53,11 @@
 	export let pinTop = false;
 	/** Changes when fresh results load from the top; the table scrolls there. */
 	export let resetKey = 0;
+	/**
+	 * True while Marasi reads fresh results: ghost rows fill the view in
+	 * place of the rows, which are about to be replaced.
+	 */
+	export let ghost = false;
 
 	const dispatch = createEventDispatcher();
 	const template = rowTemplate(LEDGER_COLUMNS);
@@ -78,6 +83,14 @@
 		overscan: OVERSCAN,
 	});
 	$: shown = rows.slice(range.start, range.end);
+	$: ghostRows = ghost ? Math.max(1, Math.ceil(rowsHeight / ROW_HEIGHT)) : 0;
+	// Each ghost cell's bar width, as a share of its cell, varied by row so
+	// the ghost reads as rows rather than stripes.
+	const GHOST_WIDTHS = [
+		[0.5, 0, 0.7, 0.5, 0.8, 0.9, 0.5, 0.6, 0.5],
+		[0.4, 0, 0.7, 0.6, 0.6, 0.6, 0.5, 0.5, 0.4],
+		[0.5, 0, 0.7, 0.4, 0.8, 0.75, 0.5, 0.7, 0.6],
+	];
 
 	// The top row in view and how far it is scrolled into, so it can keep
 	// its place when the rows change.
@@ -235,6 +248,7 @@
 	tabindex="0"
 	class="ledger-table no-select relative h-full overflow-auto font-mono focus:outline-none"
 	role="grid"
+	aria-busy={ghost}
 	aria-rowcount={rows.length}
 	aria-multiselectable="true"
 >
@@ -265,65 +279,85 @@
 			{/if}
 		{/each}
 	</div>
-	<div style="height: {rows.length * ROW_HEIGHT}px; position: relative">
-		<div style="position: absolute; left: 0; right: 0; top: {range.start * ROW_HEIGHT}px">
-			{#each shown as row, i (String(row.ID))}
-				{@const selected = selectedIds.has(String(row.ID))}
-				{@const focused = sameID(row.ID, focusId)}
-				{@const onDrawer = focused && drawerBelow && meetsFooter(range.start + i, scrollTop, ROW_HEIGHT, rowsHeight)}
-				{@const color = rowHighlight(row, palette)}
-				<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
+	{#if ghost}
+		<div class="ledger-ghost" aria-hidden="true">
+			{#each { length: ghostRows } as _, i}
 				<div
-					class="lg-row ledger-row relative border-b {onDrawer
-						? 'border-transparent'
-						: 'border-surface-300/50 dark:border-surface-700/60'} {selected
-						? 'bg-primary-500/25'
-						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'}"
-					style="grid-template-columns: {template}; height: {ROW_HEIGHT}px;{color
-						? ` box-shadow: inset 3px 0 0 ${color};`
-						: ''}{color && !selected ? ` background-color: ${color}22;` : ''}"
-					data-row={String(row.ID)}
-					role="row"
-					aria-selected={selected}
-					on:pointerdown={(event) => onRowPointerDown(event, row.ID)}
-					on:pointerenter={() => onRowPointerEnter(row.ID)}
-					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
+					class="lg-row border-b border-surface-300/50 dark:border-surface-700/60"
+					style="grid-template-columns: {template}; height: {ROW_HEIGHT}px"
 				>
-					{#if focused}
-						<!-- The focus frame: it covers the row's bottom border, and skips
-						     its top edge right under the header, whose border is there. -->
-						<span
-							class="ledger-focus pointer-events-none absolute inset-x-0 -bottom-px top-0 border border-primary-500 !p-0 {meetsHeader(
-								range.start + i,
-								scrollTop,
-								ROW_HEIGHT,
-							)
-								? 'border-t-0'
-								: ''} {onDrawer ? 'border-b-0' : ''}"
-							aria-hidden="true"
-						></span>
-					{/if}
-					<span class="text-right tabular-nums {dim}"
-						>{row.Number || ""}</span
-					>
-					<span class="flex items-center !overflow-visible !pl-1"><RowBadges {row} /></span>
-					<span class={dim}>{shortTime(row.RequestedAt)}</span>
-					<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>
-					<span title={row.Host}>{row.Host ?? ""}</span>
-					<span title={row.Path}>{row.Path ?? ""}</span>
-					<span class="text-right {statusClass(row.StatusCode)}">{statusText(row.StatusCode)}</span>
-					<!-- svelte-ignore a11y-no-static-element-interactions -->
-					<span
-						class="ledger-type {dim}"
-						aria-label={row.ContentType || undefined}
-						on:mouseenter={(event) => showTypeTip(event, row.ContentType)}
-						on:mouseleave={() => (typeTip = null)}>{shortType(row.ContentType)}</span
-					>
-					<span class="text-right {dim}">{formatSize(row.Length)}</span>
+					{#each GHOST_WIDTHS[i % GHOST_WIDTHS.length] as width, c}
+						<span class="flex items-center {LEDGER_COLUMNS[c]?.align === 'right' ? 'justify-end' : ''}"
+							>{#if width}<span
+									class="ledger-ghost-bar block h-2 animate-pulse rounded-sm bg-surface-300 dark:bg-surface-600"
+									style="width: {width * 100}%; animation-delay: {(i % 6) * 120}ms"
+								></span>{/if}</span
+						>
+					{/each}
 				</div>
 			{/each}
 		</div>
-	</div>
+	{:else}
+		<div style="height: {rows.length * ROW_HEIGHT}px; position: relative">
+			<div style="position: absolute; left: 0; right: 0; top: {range.start * ROW_HEIGHT}px">
+				{#each shown as row, i (String(row.ID))}
+					{@const selected = selectedIds.has(String(row.ID))}
+					{@const focused = sameID(row.ID, focusId)}
+					{@const onDrawer = focused && drawerBelow && meetsFooter(range.start + i, scrollTop, ROW_HEIGHT, rowsHeight)}
+					{@const color = rowHighlight(row, palette)}
+					<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
+					<div
+						class="lg-row ledger-row relative border-b {onDrawer
+							? 'border-transparent'
+							: 'border-surface-300/50 dark:border-surface-700/60'} {selected
+							? 'bg-primary-500/25'
+							: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'}"
+						style="grid-template-columns: {template}; height: {ROW_HEIGHT}px;{color
+							? ` box-shadow: inset 3px 0 0 ${color};`
+							: ''}{color && !selected ? ` background-color: ${color}22;` : ''}"
+						data-row={String(row.ID)}
+						role="row"
+						aria-selected={selected}
+						on:pointerdown={(event) => onRowPointerDown(event, row.ID)}
+						on:pointerenter={() => onRowPointerEnter(row.ID)}
+						on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
+					>
+						{#if focused}
+							<!-- The focus frame: it covers the row's bottom border, and skips
+							     its top edge right under the header, whose border is there. -->
+							<span
+								class="ledger-focus pointer-events-none absolute inset-x-0 -bottom-px top-0 border border-primary-500 !p-0 {meetsHeader(
+									range.start + i,
+									scrollTop,
+									ROW_HEIGHT,
+								)
+									? 'border-t-0'
+									: ''} {onDrawer ? 'border-b-0' : ''}"
+								aria-hidden="true"
+							></span>
+						{/if}
+						<span class="text-right tabular-nums {dim}"
+							>{row.Number || ""}</span
+						>
+						<span class="flex items-center !overflow-visible !pl-1"><RowBadges {row} /></span>
+						<span class={dim}>{shortTime(row.RequestedAt)}</span>
+						<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>
+						<span title={row.Host}>{row.Host ?? ""}</span>
+						<span title={row.Path}>{row.Path ?? ""}</span>
+						<span class="text-right {statusClass(row.StatusCode)}">{statusText(row.StatusCode)}</span>
+						<!-- svelte-ignore a11y-no-static-element-interactions -->
+						<span
+							class="ledger-type {dim}"
+							aria-label={row.ContentType || undefined}
+							on:mouseenter={(event) => showTypeTip(event, row.ContentType)}
+							on:mouseleave={() => (typeTip = null)}>{shortType(row.ContentType)}</span
+						>
+						<span class="text-right {dim}">{formatSize(row.Length)}</span>
+					</div>
+				{/each}
+			</div>
+		</div>
+	{/if}
 </div>
 
 {#if typeTip}

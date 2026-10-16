@@ -10,7 +10,10 @@ import {
   rowTemplate,
   scrollToReveal,
   shortType,
+  DEFAULT_SORT,
+  sortAria,
   sortMark,
+  sortTitle,
   statusText,
   visibleRange,
 } from "./table.js";
@@ -50,6 +53,20 @@ test("a sorted column's header shows its direction", () => {
   assert.equal(sortMark({ field: "host", desc: false }, host), "↑");
   assert.equal(sortMark({ field: "host", desc: true }, host), "↓");
   assert.equal(sortMark({ field: "host", desc: true }, time), "");
+});
+
+test("the default sort, newest first by number, shows no arrow but still reports its order", () => {
+  const number = LEDGER_COLUMNS.find((column) => column.label === "#");
+  const time = LEDGER_COLUMNS.find((column) => column.label === "Time");
+  assert.deepEqual(DEFAULT_SORT, { field: "number", desc: true });
+  assert.equal(sortMark(DEFAULT_SORT, number), "");
+  assert.equal(sortAria(DEFAULT_SORT, number), "descending");
+  assert.equal(sortTitle(DEFAULT_SORT, number), "Newest first · click for oldest first");
+  assert.equal(sortMark({ field: "number", desc: false }, number), "↑", "oldest first is a change");
+  assert.equal(sortAria({ field: "number", desc: false }, number), "ascending");
+  assert.equal(sortTitle({ field: "number", desc: false }, number), "Sort by number");
+  assert.equal(sortMark({ field: "requested_at", desc: true }, time), "↓", "time newest first is not the default");
+  assert.equal(sortAria(DEFAULT_SORT, time), "none");
 });
 
 test("when rows change around it, the top row in view keeps its place", () => {

@@ -25,10 +25,33 @@ export const LEDGER_COLUMNS = Object.freeze([
   { key: "size", label: "Size", width: "62px", align: "right", sort: "length" },
 ]);
 
-/** "↑" or "↓" when the table is sorted by the column's field, else "". */
+// Newest first by Marasi's pair number (ADR-0042 in Marasi): unlike
+// requested_at, it reads strictly in order under concurrent capture.
+export const DEFAULT_SORT = Object.freeze({ field: "number", desc: true });
+
+const isDefaultSort = (sort) => sort?.field === DEFAULT_SORT.field && sort?.desc === DEFAULT_SORT.desc;
+
+/** The column's aria-sort: "ascending" or "descending" when the table is sorted by it, else "none". */
+export function sortAria(sort, column) {
+  if (!column.sort || sort?.field !== column.sort) return "none";
+  return sort.desc ? "descending" : "ascending";
+}
+
+/**
+ * "↑" or "↓" when the table is sorted by the column's field, else "". The
+ * default sort shows none, so an arrow always means a sort the researcher
+ * chose.
+ */
 export function sortMark(sort, column) {
-  if (!column.sort || sort?.field !== column.sort) return "";
-  return sort.desc ? "↓" : "↑";
+  if (isDefaultSort(sort)) return "";
+  const aria = sortAria(sort, column);
+  return aria === "none" ? "" : aria === "descending" ? "↓" : "↑";
+}
+
+/** The header's tooltip. */
+export function sortTitle(sort, column) {
+  if (isDefaultSort(sort) && column.sort === DEFAULT_SORT.field) return "Newest first · click for oldest first";
+  return `Sort by ${column.label === "#" ? "number" : column.label.toLowerCase()}`;
 }
 
 /**

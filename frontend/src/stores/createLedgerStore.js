@@ -31,6 +31,7 @@ import { searchRequests } from "../lib/requestPicker.js";
 import { select } from "../lib/storeSelect.js";
 import { LAUNCHPADS_EACH_MAX, pairIDSet, sameID } from "../lib/ledger/pairs.js";
 import { formatCount, matchNoun, requestCount } from "../lib/ledger/counts.js";
+import { DEFAULT_SORT } from "../lib/ledger/table.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
@@ -65,9 +66,7 @@ const MAX_PAGE_ROWS = 1000;
 export const EDGE_ROWS = 60;
 
 /** The default sort: newest first. */
-// Newest first by Marasi's pair number (ADR-0042 in Marasi): unlike
-// requested_at, it reads strictly in order under concurrent capture.
-export const DEFAULT_SORT = Object.freeze({ field: "number", desc: true });
+export { DEFAULT_SORT };
 // Fields a header click sorts newest first rather than ascending.
 const NEWEST_FIRST_FIELDS = new Set(["number", "requested_at"]);
 

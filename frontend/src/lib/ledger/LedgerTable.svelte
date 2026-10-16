@@ -21,7 +21,9 @@
 		rowTemplate,
 		scrollToReveal,
 		shortType,
+		sortAria,
 		sortMark,
+		sortTitle,
 		statusText,
 		visibleRange,
 	} from "./table.js";
@@ -238,8 +240,8 @@
 						? 'justify-end'
 						: 'justify-start'} {mark ? 'text-primary-500' : ''}"
 					role="columnheader"
-					aria-sort={mark ? (sort.desc ? "descending" : "ascending") : "none"}
-					title="Sort by {column.label === '#' ? 'number' : column.label.toLowerCase()}"
+					aria-sort={sortAria(sort, column)}
+					title={sortTitle(sort, column)}
 					data-sort={column.sort}
 					on:click={() => dispatch("sort", column.sort)}
 					><!-- The arrow never truncates, so the sort direction always shows. --><span class="min-w-0 truncate"

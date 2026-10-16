@@ -34,7 +34,7 @@
 		<span class="min-w-0 flex-1 truncate" title="{pair.Host}{pair.Path}"
 			>{pair.Host ?? ""}<span class="opacity-70">{pair.Path ?? ""}</span></span
 		>
-		<span class={statusClass(pair.StatusCode)}>{pair.StatusCode || "pending"}</span>
+		<span class={statusClass(pair.StatusCode)}>{pair.StatusCode > 0 ? pair.StatusCode : "pending"}</span>
 		{#if prettifiedMoving}
 			<span
 				class="ledger-prettified-moving whitespace-nowrap font-sans text-warning-600 dark:text-warning-400"

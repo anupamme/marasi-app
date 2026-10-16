@@ -11,6 +11,7 @@ import {
   scrollToReveal,
   shortType,
   sortMark,
+  statusText,
   visibleRange,
 } from "./table.js";
 import { effectivePalette } from "./highlights.js";
@@ -60,10 +61,11 @@ test("when rows change around it, the top row in view keeps its place", () => {
   assert.equal(keepRowInPlace({ anchorID: null, offset: 0, rows: rows("a"), rowHeight: 22 }), null);
 });
 
+// Method fits OPTIONS, and Status and Type fit their label with the sort arrow.
 test("every row lays its cells out on the same grid; the path takes the spare width", () => {
   assert.equal(
     rowTemplate(LEDGER_COLUMNS),
-    "52px 46px 70px 56px 170px minmax(180px,1fr) 50px 48px 62px",
+    "52px 46px 70px 64px 170px minmax(180px,1fr) 60px 56px 62px",
   );
 });
 
@@ -169,4 +171,12 @@ test("a highlighted row takes its highlight's colour from the palette", () => {
 test("an old hex highlight in metadata isn't drawn; the migration makes it a number", () => {
   const palette = effectivePalette([{ color: "#111111" }]);
   assert.equal(rowHighlight({ Metadata: { highlight: "#EF4444" } }, palette), null);
+});
+
+// Marasi stores -1 for a pair with no response (status_code's default).
+test("a pair without a response shows a pending status", () => {
+  assert.equal(statusText(0), "…");
+  assert.equal(statusText(-1), "…");
+  assert.equal(statusText(undefined), "…");
+  assert.equal(statusText(204), "204");
 });

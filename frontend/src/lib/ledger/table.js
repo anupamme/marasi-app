@@ -17,11 +17,11 @@ export const LEDGER_COLUMNS = Object.freeze([
   { key: "number", label: "#", width: "52px", align: "right", sort: "requested_at" },
   { key: "badges", label: "", width: "46px" },
   { key: "time", label: "Time", width: "70px", sort: "requested_at" },
-  { key: "method", label: "Method", width: "56px", sort: "method" },
+  { key: "method", label: "Method", width: "64px", sort: "method" },
   { key: "host", label: "Host", width: "170px", sort: "host" },
   { key: "path", label: "Path", width: "minmax(180px,1fr)", sort: "path" },
-  { key: "status", label: "Status", width: "50px", align: "right", sort: "status_code" },
-  { key: "type", label: "Type", width: "48px", sort: "content_type" },
+  { key: "status", label: "Status", width: "60px", align: "right", sort: "status_code" },
+  { key: "type", label: "Type", width: "56px", sort: "content_type" },
   { key: "size", label: "Size", width: "62px", align: "right", sort: "length" },
 ]);
 
@@ -84,6 +84,15 @@ export function shortType(contentType) {
   const type = (contentType ?? "").split(";")[0].trim().toLowerCase();
   if (!type) return "";
   return SHORT_TYPES[type] ?? type.split("/")[1] ?? type;
+}
+
+/**
+ * The Status column's text: the code, or "…" while a pair has no response.
+ * Marasi stores -1 for that (status_code's default); a live pair has 0.
+ */
+export function statusText(code) {
+  const n = Number(code);
+  return n > 0 ? String(n) : "…";
 }
 
 /** A response length for the Size column: "512 B", "2.0 KB", "3.0 MB"; blank for none. */

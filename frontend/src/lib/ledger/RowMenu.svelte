@@ -37,6 +37,7 @@
 	import { formatBinding } from "../keybindings/keys.js";
 	import { statusClass } from "../launchpad/format.js";
 	import { plural } from "./counts.js";
+	import { statusText } from "./table.js";
 
 	/** Whether the menu shows. The menu closes itself by setting it false. */
 	export let open = false;
@@ -279,7 +280,7 @@
 				<div class="flex items-center gap-2 font-mono">
 					<span class="opacity-60">#{context.numberOf?.(pair) ?? ""}</span>
 					<span class={METHOD_CLASS[pair.Method] ?? ""}>{pair.Method}</span>
-					<span class="ml-auto {statusClass(pair.StatusCode)}">{pair.StatusCode || "…"}</span>
+					<span class="ml-auto {statusClass(pair.StatusCode)}">{statusText(pair.StatusCode)}</span>
 				</div>
 				<div class="mt-0.5 truncate font-mono text-[11px] opacity-70" title="{pair.Host}{pair.Path}">
 					{pair.Host}{pair.Path}

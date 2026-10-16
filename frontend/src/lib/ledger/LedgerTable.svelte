@@ -22,6 +22,7 @@
 		scrollToReveal,
 		shortType,
 		sortMark,
+		statusText,
 		visibleRange,
 	} from "./table.js";
 	import { sameID } from "./pairs.js";
@@ -220,14 +221,17 @@
 			{#if column.sort}
 				<button
 					type="button"
-					class="ledger-sort h-full hover:bg-surface-200-700-token {column.align === 'right'
-						? 'text-right'
-						: 'text-left'} {mark ? 'text-primary-500' : ''}"
+					class="ledger-sort flex h-full items-center gap-0.5 hover:bg-surface-200-700-token {column.align === 'right'
+						? 'justify-end'
+						: 'justify-start'} {mark ? 'text-primary-500' : ''}"
 					role="columnheader"
 					aria-sort={mark ? (sort.desc ? "descending" : "ascending") : "none"}
 					title="Sort by {column.label === '#' ? 'number' : column.label.toLowerCase()}"
 					data-sort={column.sort}
-					on:click={() => dispatch("sort", column.sort)}>{column.label}{mark ? ` ${mark}` : ""}</button
+					on:click={() => dispatch("sort", column.sort)}
+					><!-- The arrow never truncates, so the sort direction always shows. --><span class="min-w-0 truncate"
+						>{column.label}</span
+					>{#if mark}<span class="shrink-0">{mark}</span>{/if}</button
 				>
 			{:else}
 				<span role="columnheader">{column.label}</span>
@@ -265,7 +269,7 @@
 					<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>
 					<span title={row.Host}>{row.Host ?? ""}</span>
 					<span title={row.Path}>{row.Path ?? ""}</span>
-					<span class="text-right {statusClass(row.StatusCode)}">{row.StatusCode || "…"}</span>
+					<span class="text-right {statusClass(row.StatusCode)}">{statusText(row.StatusCode)}</span>
 					<span class="opacity-60" title={row.ContentType}>{shortType(row.ContentType)}</span>
 					<span class="text-right opacity-60">{formatSize(row.Length)}</span>
 				</div>
@@ -290,5 +294,11 @@
 		overflow: hidden;
 		text-overflow: ellipsis;
 		padding: 0 6px;
+	}
+	/* Skeleton's [data-sort]::after gives every sortable header a hidden
+	   arrow and margin, which truncated the labels and our own arrow. */
+	.ledger-sort::after {
+		content: none !important;
+		margin: 0 !important;
 	}
 </style>

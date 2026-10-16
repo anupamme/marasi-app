@@ -12,3 +12,7 @@ test("status colours: pending dimmed, then success, warning, error", () => {
 test("3xx statuses use a darker warning in light mode", () => {
   assert.equal(statusClass(302), "text-warning-800 dark:text-warning-500");
 });
+
+test("a stored pair without a response (-1) is dimmed like a pending one", () => {
+  assert.equal(statusClass(-1), "opacity-50");
+});

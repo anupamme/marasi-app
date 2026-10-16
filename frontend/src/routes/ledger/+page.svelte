@@ -1347,11 +1347,14 @@
 						{selectedCount.toLocaleString()} selected
 					{/if}
 				</span>
-				<button class="opacity-70 hover:underline" on:click={closeDrawer}>Clear</button>
+				<button
+					id="ledgerClearSelection"
+					class="-ml-3 flex h-4 w-4 items-center justify-center opacity-60 hover:bg-surface-200-700-token hover:opacity-100"
+					title="Clear the selection and close the drawer (Esc)"
+					aria-label="Clear the selection"
+					on:click={closeDrawer}><X size={11} /></button
+				>
 			{/if}
-			<span class="ml-auto truncate opacity-50">
-				⇧-click range · ⌘-click toggle · drag to sweep · ⌘A all · right-click for actions
-			</span>
 		</div>
 	</div>
 </div>

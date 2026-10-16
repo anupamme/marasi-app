@@ -2,317 +2,495 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
 import {
+  countLabel,
   createLedgerStore,
+  focusedPair,
+  hiddenByTypeCount,
   indexWarning,
   isQueryActive,
-  ledgerPagination,
   markQueryError,
-  matchCountLabel,
-  needsOlderPage,
-  shownRows,
+  newMatchesKind,
+  PAGE_SIZE,
+  MAX_WINDOW_ROWS,
+  tableRows,
 } from "./createLedgerStore.js";
 
-// An in-memory backend: the live view, the stored content-type exclusion and
-// query results by query text. Writes are recorded in `api.calls`.
-function fakeApi({ liveView = [], exclusion = [], results = {} } = {}) {
+// Pair IDs sort by capture time, as Marasi's UUIDv7 ids do.
+const idOf = (n) => `p${String(n).padStart(6, "0")}`;
+const pair = (n, extra = {}) => ({
+  ID: idOf(n),
+  Method: "GET",
+  Host: "api.acme.test",
+  Path: `/${n}`,
+  StatusCode: 200,
+  ContentType: "application/json",
+  Length: "10",
+  ...extra,
+});
+const pairs = (count, extra = () => ({})) =>
+  Array.from({ length: count }, (_, i) => pair(i + 1, extra(i + 1)));
+
+const SORT_KEYS = {
+  requested_at: (p) => p.ID,
+  method: (p) => p.Method,
+  host: (p) => p.Host,
+  path: (p) => p.Path,
+  status_code: (p) => (p.StatusCode > 0 ? p.StatusCode : undefined),
+  content_type: (p) => p.ContentType || undefined,
+  length: (p) => (p.Length === "" || p.Length == null ? undefined : Number(p.Length)),
+};
+
+function hides(exclusion, type) {
+  const t = (type ?? "").split(";")[0].trim().toLowerCase();
+  if (!t) return false;
+  return exclusion.some((v) => v === t || (v.endsWith("/*") && t.startsWith(v.slice(0, -1))));
+}
+
+// An in-memory Marasi: ListTraffic's sort, opaque cursors bound to their
+// sort, as_of snapshots and both directions, and CountTraffic. Queries are
+// predicates by query text; "bad" is invalid. Calls are recorded.
+function fakeApi({ traffic = [], exclusion = [], queries = {} } = {}) {
   const calls = [];
+  const db = traffic.map((p) => ({ ...p }));
+  const newest = () => db.reduce((max, p) => (p.ID > max ? p.ID : max), "");
+  const predicate = (text) => (text === "" ? () => true : queries[text]);
+
+  function listed(req) {
+    const [field, dir] = (req.OrderBy || "requested_at desc").split(" ");
+    const sign = dir === "desc" ? -1 : 1;
+    const key = SORT_KEYS[field];
+    const asOf = req.AsOf || newest();
+    const match = predicate(req.Query);
+    const rows = db.filter((p) => p.ID <= asOf && match(p) && !hides(exclusion, p.ContentType));
+    const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
+    const valued = rows.filter((p) => key(p) !== undefined);
+    const unvalued = rows.filter((p) => key(p) === undefined);
+    valued.sort((a, b) => sign * (cmp(key(a), key(b)) || cmp(a.ID, b.ID)));
+    unvalued.sort((a, b) => sign * cmp(a.ID, b.ID));
+    return { list: [...valued, ...unvalued], sortName: `${field}${dir === "desc" ? " desc" : ""}`, asOf };
+  }
+
   const api = {
     calls,
-    getLiveView: async () => liveView.map((pair) => ({ ...pair })),
+    db,
+    capture(p) {
+      db.push({ ...p });
+    },
     getExclusion: async () => [...exclusion],
     setExclusion: async (types) => {
       calls.push(["setExclusion", types]);
       exclusion = [...types];
     },
-    queryTraffic: async (query, cursor) => {
-      calls.push(["queryTraffic", query, cursor]);
-      const pages = results[query];
-      if (typeof pages === "function") return pages(cursor);
-      return pages ?? { Items: [], NextCursor: null, IndexComplete: true };
+    queryTraffic: async (req) => {
+      calls.push(["queryTraffic", { ...req }]);
+      if (req.Query === "bad") return { QueryError: { Message: "expected a value", Position: 3 } };
+      const { list, sortName, asOf } = listed(req);
+      const at = (cursor) => {
+        const [sort, id] = cursor.split("|");
+        if (sort !== sortName) throw new Error("invalid cursor");
+        return list.findIndex((p) => p.ID === id);
+      };
+      const cursorAt = (p) => `${sortName}|${p.ID}`;
+      let rows;
+      let hasMore;
+      if (req.Direction === "backward") {
+        const end = req.Cursor ? at(req.Cursor) : list.length;
+        const begin = Math.max(0, end - req.Limit);
+        rows = list.slice(begin, end);
+        hasMore = begin > 0;
+      } else {
+        const start = req.Cursor ? at(req.Cursor) + 1 : 0;
+        rows = list.slice(start, start + req.Limit);
+        hasMore = start + req.Limit < list.length;
+      }
+      const first = rows.length ? cursorAt(rows[0]) : req.Cursor || null;
+      const last = rows.length ? cursorAt(rows.at(-1)) : req.Cursor || null;
+      const given = Boolean(req.Cursor);
+      const backward = req.Direction === "backward";
+      return {
+        Items: rows.map((p) => ({ ...p })),
+        NextCursor: backward ? (given ? last : null) : hasMore ? last : null,
+        PrevCursor: backward ? (hasMore ? first : null) : given ? first : null,
+        AsOf: asOf,
+        IndexComplete: true,
+      };
+    },
+    countTraffic: async (req) => {
+      calls.push(["countTraffic", { ...req }]);
+      if (req.Query === "bad") return { QueryError: { Message: "expected a value", Position: 3 } };
+      const match = predicate(req.Query);
+      const count = db.filter(
+        (p) =>
+          match(p) &&
+          (req.IgnoreExclusion || !hides(exclusion, p.ContentType)) &&
+          (!req.AsOf || p.ID <= req.AsOf) &&
+          (!req.After || p.ID > req.After),
+      ).length;
+      return { Count: Math.min(count, 100000), Capped: count > 100000, IndexComplete: true };
     },
   };
   return api;
 }
 
-const pair = (id, extra = {}) => ({ ID: id, Method: "GET", Path: `/${id}`, ...extra });
+const ids = (state) => tableRows(state).map((row) => row.ID);
+const pageCalls = (api) => api.calls.filter((c) => c[0] === "queryTraffic").map((c) => c[1]);
+const countCalls = (api) => api.calls.filter((c) => c[0] === "countTraffic").map((c) => c[1]);
 
-test("populate loads the live view and the content-type exclusion", async () => {
-  const store = createLedgerStore(
-    fakeApi({ liveView: [pair("a"), pair("b")], exclusion: ["image/png"] }),
-  );
-  await store.populate();
+// Scrolls the table so rows first..last are in view, then waits for the
+// loads that triggers.
+async function scrollTo(store, first, last = first + 30) {
+  store.setViewport({ first, last, atTop: first === 0 });
+  await store.settled();
+}
+
+test("the live view loads its first page newest first, then the count", async () => {
+  const api = fakeApi({ traffic: pairs(3) });
+  const store = createLedgerStore(api);
+  const loading = store.populate();
+  assert.equal(countLabel(get(store)), "…");
+  await loading;
+
   const state = get(store);
-  assert.deepEqual(
-    shownRows(state).map((row) => row.ID),
-    ["a", "b"],
-  );
-  assert.deepEqual(state.exclusion, ["image/png"]);
-  assert.equal(store.pairNumber("b"), 2);
-  assert.equal(store.pairNumber("zzz"), "?");
-});
-
-test("a request joins the live view on flush and its response fills it in", async () => {
-  const store = createLedgerStore(fakeApi({ liveView: [pair("a")] }));
-  await store.populate();
-
-  store.onRequest(pair("b"));
-  assert.equal(shownRows(get(store)).length, 1, "events wait for the flush");
-  store.flush();
-  assert.deepEqual(
-    shownRows(get(store)).map((row) => row.ID),
-    ["a", "b"],
-  );
-  assert.equal(store.pairNumber("b"), 2);
-
-  store.onResponse({ ID: "b", Status: "200 OK", Length: 12 });
-  store.flush();
-  const b = store.findShownPair("b");
-  assert.equal(b.Status, "200 OK");
-  assert.equal(b.Path, "/b");
-});
-
-test("a request and its response in one flush arrive as one row", () => {
-  const store = createLedgerStore(fakeApi());
-  store.onRequest(pair("a"));
-  store.onResponse({ ID: "a", Status: "404 Not Found" });
-  store.flush();
-  assert.deepEqual(shownRows(get(store)), [
-    { ...pair("a"), Status: "404 Not Found" },
-  ]);
-});
-
-test("a response fills in a loaded query result without moving rows", async () => {
-  const store = createLedgerStore(
-    fakeApi({
-      results: {
-        "host = x": { Items: [pair("b"), pair("a")], NextCursor: null, IndexComplete: true },
-      },
-    }),
-  );
-  await store.runQuery("host = x");
-  store.onResponse({ ID: "a", Status: "500 Internal Server Error" });
-  store.flush();
-  const rows = shownRows(get(store));
-  assert.deepEqual(
-    rows.map((row) => row.ID),
-    ["b", "a"],
-  );
-  assert.equal(rows[1].Status, "500 Internal Server Error");
-});
-
-test("running a query shows its results, and clearing it returns to the live view", async () => {
-  const api = fakeApi({
-    liveView: [pair("a"), pair("b"), pair("c")],
-    results: {
-      'method = "POST"': { Items: [pair("c"), pair("a")], NextCursor: null, IndexComplete: false },
-    },
+  assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
+  assert.equal(countLabel(state), "3 in the live view");
+  assert.equal(state.results.asOf, idOf(3));
+  assert.deepEqual(pageCalls(api)[0], {
+    Query: "",
+    OrderBy: "requested_at desc",
+    Cursor: "",
+    Direction: "forward",
+    AsOf: "",
+    Limit: PAGE_SIZE,
   });
+  assert.equal(store.pairNumber(idOf(3)), 1, "a pair's number is its position");
+  assert.equal(store.pairNumber("missing"), "?");
+});
+
+test("scrolling down loads later pages under the first page's as_of", async () => {
+  const api = fakeApi({ traffic: pairs(PAGE_SIZE * 2 + 5) });
   const store = createLedgerStore(api);
   await store.populate();
-  store.setQueryText('method = "POST"');
-  await store.runQuery();
+  const asOf = get(store).results.asOf;
+  api.capture(pair(9999));
 
-  let state = get(store);
-  assert.ok(isQueryActive(state.query));
-  assert.deepEqual(
-    shownRows(state).map((row) => row.ID),
-    ["c", "a"],
-  );
-  assert.equal(matchCountLabel(state.query), "2 matches");
-  assert.match(indexWarning(state.query), /Indexing older traffic/);
-  // Request numbers stay the live view's.
-  assert.equal(store.pairNumber("c"), 3);
-  assert.equal(store.shownPairAtNumber(2), undefined, "b doesn't match");
-  assert.equal(store.shownPairAtNumber(3).ID, "c");
-  assert.deepEqual(api.calls, [["queryTraffic", 'method = "POST"', ""]]);
+  await scrollTo(store, PAGE_SIZE - 20);
+  await scrollTo(store, PAGE_SIZE * 2 - 20);
 
-  store.clearQuery();
-  state = get(store);
-  assert.equal(state.queryText, "");
-  assert.equal(isQueryActive(state.query), false);
-  assert.deepEqual(
-    shownRows(state).map((row) => row.ID),
-    ["a", "b", "c"],
-  );
+  const state = get(store);
+  assert.equal(tableRows(state).length, PAGE_SIZE * 2 + 5);
+  assert.ok(!ids(state).includes(idOf(9999)), "the new pair stays out of the snapshot");
+  assert.equal(state.results.hasAfter, false);
+  const later = pageCalls(api).slice(1);
+  assert.equal(later.length, 2);
+  assert.ok(later.every((req) => req.AsOf === asOf && req.Direction === "forward" && req.Cursor));
 });
 
-test("an invalid query records the error with its position and keeps the earlier results", async () => {
-  const store = createLedgerStore(
-    fakeApi({
-      results: {
-        "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true },
-        "host = ": {
-          QueryError: { Message: "expected a value", Position: 8 },
-        },
-      },
-    }),
-  );
-  await store.runQuery("host = x");
-  await store.runQuery("host = ");
+test("far pages are dropped while scrolling, and load again backward on the way up", async () => {
+  const total = PAGE_SIZE * 12;
+  const api = fakeApi({ traffic: pairs(total) });
+  const store = createLedgerStore(api);
+  await store.populate();
 
-  const { query } = get(store);
-  assert.deepEqual(query.error, {
-    query: "host = ",
-    message: "expected a value",
-    position: 8,
-  });
-  assert.equal(query.ranQuery, "host = x");
-  assert.deepEqual(
-    query.items.map((row) => row.ID),
-    ["a"],
-  );
-  assert.deepEqual(markQueryError(query.error), {
-    before: "host = ",
-    at: " ",
-    after: "",
-  });
+  // Scroll down a page at a time; the window follows the viewport.
+  for (let step = 0; step < 11; step++) {
+    const rows = tableRows(get(store));
+    await scrollTo(store, rows.length - 40);
+    assert.ok(rows.length <= MAX_WINDOW_ROWS + PAGE_SIZE, "the window stays bounded");
+  }
+  let state = get(store);
+  assert.equal(state.results.hasBefore, true, "the top pages were dropped");
+  assert.ok(tableRows(state).length <= MAX_WINDOW_ROWS);
+  const top = tableRows(state)[0].ID;
+  const topNumber = store.pairNumber(top);
+  assert.equal(topNumber, total - Number(top.slice(1)) + 1, "numbers stay positions in the results");
 
-  await store.runQuery("host = x");
+  // Back up: the dropped pages come back, backward, without duplicates.
+  const asOf = state.results.asOf;
+  for (let step = 0; step < 12 && get(store).results.hasBefore; step++) {
+    await scrollTo(store, 0);
+  }
+  state = get(store);
+  assert.equal(state.results.hasBefore, false);
+  assert.equal(tableRows(state)[0].ID, idOf(total));
+  assert.equal(new Set(ids(state)).size, tableRows(state).length);
+  const backward = pageCalls(api).filter((req) => req.Direction === "backward");
+  assert.ok(backward.length > 0);
+  assert.ok(backward.every((req) => req.AsOf === asOf && req.Cursor));
+});
+
+test("sorting by a column reloads from the top under its order_by, and the sort persists", async () => {
+  const traffic = [
+    pair(1, { Host: "b.test" }),
+    pair(2, { Host: "c.test" }),
+    pair(3, { Host: "a.test" }),
+  ];
+  const api = fakeApi({ traffic });
+  const store = createLedgerStore(api);
+  await store.populate();
+  const reset = get(store).results.reset;
+
+  await store.sortBy("host");
+  assert.deepEqual(ids(get(store)), [idOf(3), idOf(1), idOf(2)]);
+  assert.ok(get(store).results.reset > reset, "the table goes back to the top");
+  assert.deepEqual(get(store).sort, { field: "host", desc: false });
+  let last = pageCalls(api).at(-1);
+  assert.equal(last.OrderBy, "host");
+  assert.equal(last.Cursor, "", "a cursor only works with its sort");
+  assert.equal(last.AsOf, "");
+
+  await store.sortBy("host");
+  assert.deepEqual(ids(get(store)), [idOf(2), idOf(1), idOf(3)]);
+  assert.equal(pageCalls(api).at(-1).OrderBy, "host desc");
+
+  // # and Time are one order, newest first by default.
+  await store.sortBy("requested_at");
+  assert.deepEqual(get(store).sort, { field: "requested_at", desc: true });
+
+  await store.sortBy("status_code");
+  store.clear();
+  assert.deepEqual(get(store).sort, { field: "status_code", desc: false });
+});
+
+test("a pending pair sorts last both ways and moves once its response arrives", async () => {
+  const traffic = [pair(1, { StatusCode: 500 }), pair(2, { StatusCode: -1, ContentType: "", Length: "" }), pair(3, { StatusCode: 200 })];
+  const api = fakeApi({ traffic });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.sortBy("status_code");
+  assert.deepEqual(ids(get(store)), [idOf(3), idOf(1), idOf(2)]);
+  await store.sortBy("status_code");
+  assert.deepEqual(ids(get(store)), [idOf(1), idOf(3), idOf(2)]);
+
+  // The response fills the row in where it is.
+  api.db[1].StatusCode = 404;
+  store.onResponse({ ID: idOf(2), StatusCode: 404, Status: "404 Not Found" });
+  store.flush();
+  assert.deepEqual(ids(get(store)), [idOf(1), idOf(3), idOf(2)]);
+  assert.equal(tableRows(get(store))[2].StatusCode, 404);
+
+  // The next read sorts it by its status.
+  await store.sortBy("status_code");
+  assert.deepEqual(ids(get(store)), [idOf(3), idOf(2), idOf(1)]);
+});
+
+test("in the newest-first live view at the top, new pairs appear at the top", async () => {
+  const api = fakeApi({ traffic: pairs(2) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 0);
+  assert.equal(newMatchesKind(get(store)), "top");
+
+  api.capture(pair(3));
+  store.onRequest(pair(3, { StatusCode: 0, ContentType: "" }));
+  store.flush();
+  let state = get(store);
+  assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
+  assert.equal(countLabel(state), "3 in the live view");
+  assert.equal(state.results.asOf, idOf(3), "later pages include the shown pair");
+
+  // An excluded type leaves the live view once its response says so.
+  await store.saveExclusion(["image/*"]);
+  await scrollTo(store, 0);
+  api.capture(pair(4, { ContentType: "image/png" }));
+  store.onRequest(pair(4, { StatusCode: 0, ContentType: "" }));
+  store.flush();
+  assert.equal(ids(get(store))[0], idOf(4));
+  store.onResponse({ ID: idOf(4), StatusCode: 200, ContentType: "image/png" });
+  store.flush();
+  state = get(store);
+  assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
+});
+
+test("scrolled down in the live view, rows don't move and an N new count waits", async () => {
+  const api = fakeApi({ traffic: pairs(50) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 10);
+
+  api.capture(pair(51));
+  api.capture(pair(52));
+  store.onRequest(pair(51));
+  store.onRequest(pair(52));
+  store.flush();
+  assert.equal(ids(get(store))[0], idOf(50), "rows don't move");
+  await store.countNewMatches();
+  let state = get(store);
+  assert.equal(state.results.newCount, 2);
+  assert.deepEqual(countCalls(api).at(-1), { Query: "", After: idOf(50) });
+
+  // Back at the top, the new pairs load in.
+  await scrollTo(store, 0);
+  state = get(store);
+  assert.deepEqual(ids(state).slice(0, 3), [idOf(52), idOf(51), idOf(50)]);
+  assert.equal(state.results.newCount, 0);
+});
+
+test("query results count new matches after their as_of and show them in place", async () => {
+  const total = PAGE_SIZE * 16;
+  const even = (p) => Number(p.ID.slice(1)) % 2 === 0;
+  const api = fakeApi({ traffic: pairs(total), queries: { even } });
+  const store = createLedgerStore(api);
+  await store.runQuery("even");
+  assert.equal(newMatchesKind(get(store)), "pill");
+  const asOf = get(store).results.asOf;
+
+  // Scroll down until the top pages are dropped, then stop partway into
+  // the window's second page.
+  for (let step = 0; step < 7; step++) {
+    await scrollTo(store, tableRows(get(store)).length - 40);
+  }
+  assert.equal(get(store).results.hasBefore, true);
+  const before = ids(get(store));
+  const topIndex = get(store).results.chunks[0].items.length + 30;
+  await scrollTo(store, topIndex);
+  const topRow = before[topIndex];
+
+  for (let n = total + 1; n <= total + 4; n++) {
+    api.capture(pair(n));
+    store.onRequest(pair(n));
+  }
+  store.flush();
+  await store.countNewMatches();
+  assert.equal(get(store).results.newCount, 2);
+  assert.deepEqual(countCalls(api).at(-1), { Query: "even", After: asOf });
+  assert.equal(get(store).results.asOf, asOf, "the rows stay until Show");
+
+  const reset = get(store).results.reset;
+  await store.showNewMatches();
+  let state = get(store);
+  assert.equal(state.results.reset, reset, "a refresh in place doesn't send the table to the top");
+  const after = ids(state);
+  const at = after.indexOf(topRow);
+  assert.ok(at >= 0 && at < 30, "the top visible row is read again, near the window's top");
+  assert.deepEqual(after.slice(0, at + 1), before.slice(topIndex - at, topIndex + 1), "anchored at its page's cursor");
+  assert.notEqual(state.results.asOf, asOf);
+  assert.equal(state.results.newCount, 0);
+  assert.equal(state.results.hasBefore, true);
+  const refresh = pageCalls(api).at(-1);
+  assert.equal(refresh.Direction, "forward");
+  assert.ok(refresh.Cursor, "read from a cursor, not the top");
+  assert.equal(refresh.AsOf, "", "the refresh reads under a new as_of");
+
+  // Scrolling up loads the rows above, new matches included, newest first.
+  for (let step = 0; step < 20 && get(store).results.hasBefore; step++) {
+    await scrollTo(store, 0);
+  }
+  state = get(store);
+  assert.equal(state.results.hasBefore, false);
+  assert.deepEqual(ids(state).slice(0, 3), [idOf(total + 4), idOf(total + 2), idOf(total)]);
+});
+
+test("Show at the top of a sorted live view reads from the top", async () => {
+  const api = fakeApi({ traffic: pairs(3, (n) => ({ Host: `h${n}.test` })) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.sortBy("host");
+  await scrollTo(store, 0);
+  assert.equal(newMatchesKind(get(store)), "pill");
+  api.capture(pair(4, { Host: "h0.test" }));
+  store.onRequest(pair(4, { Host: "h0.test" }));
+  store.flush();
+  assert.equal(ids(get(store))[0], idOf(1), "other sorts never move rows");
+  await store.countNewMatches();
+  await store.showNewMatches();
+  assert.equal(ids(get(store))[0], idOf(4));
+  assert.equal(pageCalls(api).at(-1).Cursor, "");
+});
+
+test("an invalid query records the error and keeps the earlier results", async () => {
+  const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID === idOf(1) } });
+  const store = createLedgerStore(api);
+  await store.runQuery("one");
+  await store.runQuery("bad");
+
+  const state = get(store);
+  assert.deepEqual(state.query.error, { query: "bad", message: "expected a value", position: 3 });
+  assert.equal(state.query.ranQuery, "one");
+  assert.deepEqual(ids(state), [idOf(1)]);
+  assert.equal(countLabel(state), "1 matching");
+  assert.deepEqual(markQueryError(state.query.error), { before: "ba", at: "d", after: "" });
+
+  await store.runQuery("one");
   assert.equal(get(store).query.error, null);
 });
 
-test("paging past the loaded query results loads the next older page", async () => {
-  const pages = {
-    "": { Items: [pair("e"), pair("d")], NextCursor: "d", IndexComplete: true },
-    d: { Items: [pair("c"), pair("b")], NextCursor: "b", IndexComplete: true },
-    b: { Items: [pair("a")], NextCursor: null, IndexComplete: true },
-  };
-  const api = fakeApi({ results: { "host = x": (cursor) => pages[cursor] } });
+test("clearing the query returns to the live view from the top", async () => {
+  const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID === idOf(1) } });
   const store = createLedgerStore(api);
-  await store.runQuery("host = x");
-  store.setPagination((old) => ({ ...old, pageSize: 2 }));
-
-  let state = get(store);
-  assert.equal(matchCountLabel(state.query), "2+ matches");
-  assert.ok(needsOlderPage(state.query, ledgerPagination(state).pageIndex, 2));
-
-  await store.loadOlderPage();
-  state = get(store);
-  assert.deepEqual(
-    shownRows(state).map((row) => row.ID),
-    ["e", "d", "c", "b"],
-  );
-  assert.equal(
-    needsOlderPage(state.query, ledgerPagination(state).pageIndex, 2),
-    false,
-    "page 1 of 2 still has a loaded page after it",
-  );
-
-  store.setPagination((old) => ({ ...old, pageIndex: 1 }));
-  await store.loadOlderPage();
-  state = get(store);
-  assert.deepEqual(
-    shownRows(state).map((row) => row.ID),
-    ["e", "d", "c", "b", "a"],
-  );
-  assert.equal(state.query.nextCursor, null);
-  assert.deepEqual(
-    api.calls.map((call) => call[2]),
-    ["", "d", "b"],
-  );
+  store.setQueryText("one");
+  await store.runQuery();
+  assert.ok(isQueryActive(get(store).query));
+  await store.clearQuery();
+  const state = get(store);
+  assert.equal(state.queryText, "");
+  assert.equal(isQueryActive(state.query), false);
+  assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
 });
 
-test("each mode keeps its own page and they share the rows per page", async () => {
-  const store = createLedgerStore(
-    fakeApi({
-      results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
-    }),
-  );
-  store.setPagination({ pageIndex: 3, pageSize: 50 });
-  await store.runQuery("host = x");
-  assert.deepEqual(ledgerPagination(get(store)), { pageIndex: 0, pageSize: 50 });
-
-  store.setPagination((old) => ({ ...old, pageIndex: 1, pageSize: 20 }));
-  store.clearQuery();
-  assert.deepEqual(ledgerPagination(get(store)), { pageIndex: 3, pageSize: 20 });
-});
-
-test("new matches wait until merged, then join the results newest first", async () => {
-  const pages = [
-    { Items: [pair("b"), pair("a")], NextCursor: null, IndexComplete: true },
-    { Items: [pair("d"), pair("c"), pair("b")], NextCursor: null, IndexComplete: true },
-  ];
-  const store = createLedgerStore(fakeApi({ results: { "host = x": () => pages.shift() } }));
-  await store.runQuery("host = x");
-
-  await store.checkForNewMatches();
-  assert.equal(pages.length, 1, "no traffic, no check");
-
-  store.onRequest(pair("d"));
-  store.flush();
-  await store.checkForNewMatches();
-  let { query } = get(store);
-  assert.deepEqual(
-    query.newMatches.map((row) => row.ID),
-    ["d", "c"],
-  );
-  assert.deepEqual(
-    query.items.map((row) => row.ID),
-    ["b", "a"],
-  );
-
-  store.mergeNewMatches();
-  query = get(store).query;
-  assert.deepEqual(
-    query.items.map((row) => row.ID),
-    ["d", "c", "b", "a"],
-  );
-  assert.deepEqual(query.newMatches, []);
-});
-
-test("new matches are told apart from older pages by the oldest loaded pair, not the opaque cursor", async () => {
-  const pages = [
-    { Items: [pair("d"), pair("c")], NextCursor: "opaque-token", IndexComplete: true },
-    { Items: [pair("e"), pair("d"), pair("c")], NextCursor: "opaque-token-2", IndexComplete: true },
-  ];
-  const store = createLedgerStore(fakeApi({ results: { "host = x": () => pages.shift() } }));
-  await store.runQuery("host = x");
-  store.markTrafficChanged();
-  await store.checkForNewMatches();
-  assert.deepEqual(
-    get(store).query.newMatches.map((row) => row.ID),
-    ["e"],
-  );
-});
-
-test("saving the exclusion stores it and runs the active query again", async () => {
+test("the count shows 100,000+ when Marasi caps it, and the exclusion's hidden pairs", async () => {
   const api = fakeApi({
-    results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
+    traffic: [pair(1), pair(2, { ContentType: "image/png" }), pair(3)],
+    exclusion: ["image/png"],
   });
+  api.countTraffic = async (req) =>
+    req.IgnoreExclusion ? { Count: 3, Capped: false } : { Count: 2, Capped: false };
   const store = createLedgerStore(api);
-  await store.runQuery("host = x");
+  await store.populate();
+  assert.equal(hiddenByTypeCount(get(store)), 1);
+
+  api.countTraffic = async () => ({ Count: 100000, Capped: true });
+  await store.reload();
+  assert.equal(countLabel(get(store)), "100,000+ in the live view");
+  assert.equal(hiddenByTypeCount(get(store)), null);
+});
+
+test("saving the exclusion stores it and reloads the rows", async () => {
+  const api = fakeApi({ traffic: [pair(1), pair(2, { ContentType: "image/png" })] });
+  const store = createLedgerStore(api);
+  await store.populate();
   await store.saveExclusion(["image/png"]);
   assert.deepEqual(get(store).exclusion, ["image/png"]);
-  assert.deepEqual(api.calls, [
-    ["queryTraffic", "host = x", ""],
-    ["setExclusion", ["image/png"]],
-    ["queryTraffic", "host = x", ""],
-  ]);
+  assert.deepEqual(ids(get(store)), [idOf(1)]);
 });
 
-test("a metadata patch reaches the live view and the query results", async () => {
-  const store = createLedgerStore(
-    fakeApi({
-      liveView: [pair("a")],
-      results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
-    }),
-  );
+test("the focused pair stays in the drawer when its page is dropped", async () => {
+  const api = fakeApi({ traffic: pairs(PAGE_SIZE * 10) });
+  const store = createLedgerStore(api);
   await store.populate();
-  await store.runQuery("host = x");
-  store.patchMetadata("a", { has_note: 1 });
+  const id = tableRows(get(store))[5].ID;
+  store.selectPair(id);
+  for (let step = 0; step < 9; step++) {
+    await scrollTo(store, tableRows(get(store)).length - 40);
+  }
   const state = get(store);
-  assert.equal(state.items[0].Metadata.has_note, 1);
-  assert.equal(state.query.items[0].Metadata.has_note, 1);
+  assert.ok(!ids(state).includes(id), "its page was dropped");
+  assert.equal(focusedPair(state)?.ID, id);
 });
 
-test("clearing for another project drops a live view still loading", async () => {
+test("a metadata patch reaches the loaded rows", async () => {
+  const store = createLedgerStore(fakeApi({ traffic: pairs(2) }));
+  await store.populate();
+  store.patchMetadata(idOf(1), { has_note: 1 });
+  assert.equal(store.findShownPair(idOf(1)).Metadata.has_note, 1);
+});
+
+test("the index warning follows the page's completeness", async () => {
+  const api = fakeApi({ traffic: pairs(1), queries: { all: () => true } });
+  const query = api.queryTraffic;
+  api.queryTraffic = async (req) => ({ ...(await query(req)), IndexComplete: false });
+  const store = createLedgerStore(api);
+  await store.runQuery("all");
+  assert.match(indexWarning(get(store)), /Indexing older traffic/);
+});
+
+test("clearing for another project drops a page still loading", async () => {
   let release;
   const api = fakeApi();
-  api.getLiveView = () => new Promise((resolve) => (release = resolve));
+  api.queryTraffic = () => new Promise((resolve) => (release = resolve));
   const store = createLedgerStore(api);
   const loading = store.populate();
   store.clear();
-  release([pair("old")]);
+  release({ Items: [pair(1)], NextCursor: null, PrevCursor: null, AsOf: idOf(1), IndexComplete: true });
   await loading;
-  assert.deepEqual(get(store).items, []);
+  assert.deepEqual(ids(get(store)), []);
 });

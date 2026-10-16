@@ -1,6 +1,7 @@
 // The app's Ledger store, bound to the Wails backend. The logic lives in
 // createLedgerStore.js, which tests load with a fake API.
 import {
+  CountTraffic,
   CreateLaunchpadEntry,
   DeleteClientSetting,
   GetClientSetting,
@@ -8,7 +9,6 @@ import {
   GetDefaultContentTypeExclusion,
   GetMetadata,
   GetNote,
-  GetProxyItems,
   GetRawDetails,
   HighlightRow,
   LinkRequestToLaunchpad,
@@ -19,37 +19,32 @@ import {
   SetContentTypeExclusion,
   SetDefaultContentTypeExclusion,
 } from "../lib/wailsjs/go/main/App";
-import {
-  createLedgerStore,
-  FLUSH_INTERVAL_MS,
-  isQueryActive,
-  NEW_MATCHES_POLL_MS,
-  select,
-} from "./createLedgerStore.js";
+import { createLedgerStore, FLUSH_INTERVAL_MS } from "./createLedgerStore.js";
 
 export {
-  canLoadOlder,
   clampDrawerSplit,
+  countLabel,
   drawerKeybindingState,
   focusedPair,
   hiddenByTypeCount,
   indexWarning,
   isDrawerOpen,
   isQueryActive,
-  tableRows,
-  ledgerPagination,
   markQueryError,
-  matchCountLabel,
   matchNoun,
-  needsOlderPage,
-  queryStatusLabel,
+  newMatchesKind,
+  newMatchesLabel,
   select,
   shownRows,
+  tableRows,
 } from "./createLedgerStore.js";
 
 export const ledgerStore = createLedgerStore({
-  getLiveView: () => GetProxyItems(),
-  queryTraffic: (query, cursor) => QueryTraffic(query, cursor),
+  // A page of the live view or of a query's results:
+  // { Query, OrderBy, Cursor, Direction, AsOf, Limit }.
+  queryTraffic: (request) => QueryTraffic(request),
+  // { Query, AsOf, After, IgnoreExclusion }.
+  countTraffic: (request) => CountTraffic(request),
   getExclusion: () => GetContentTypeExclusion(),
   setExclusion: (types) => SetContentTypeExclusion(types),
   getRawDetails: (id) => GetRawDetails(id),
@@ -70,25 +65,6 @@ export const ledgerStore = createLedgerStore({
   listClientSettings: (prefix) => ListClientSettings(prefix),
 });
 
-/** The live view, for the pages outside the Ledger that read it. */
-export const liveViewItems = select(ledgerStore, (state) => state.items);
-
 if (typeof window !== "undefined") {
   setInterval(ledgerStore.flush, FLUSH_INTERVAL_MS);
-
-  // Polls for new matches only while query mode is active.
-  let pollTimer = null;
-  select(ledgerStore, (state) => isQueryActive(state.query)).subscribe(
-    (active) => {
-      if (active && pollTimer === null) {
-        pollTimer = setInterval(
-          ledgerStore.checkForNewMatches,
-          NEW_MATCHES_POLL_MS,
-        );
-      } else if (!active && pollTimer !== null) {
-        clearInterval(pollTimer);
-        pollTimer = null;
-      }
-    },
-  );
 }

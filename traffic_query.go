@@ -3,17 +3,50 @@ package main
 import (
 	"errors"
 	"fmt"
+	"strconv"
 
+	"github.com/google/uuid"
 	"github.com/tfkr-ae/marasi/domain"
 )
 
-// trafficQueryPageSize is the number of pairs one QueryTraffic page holds.
+// trafficQueryPageSize is the number of pairs a QueryTraffic page holds when
+// the request names no limit.
 const trafficQueryPageSize = 500
 
-// TrafficQueryResult is one page of query results, newest first.
+// maxTrafficQueryPageSize bounds the pairs one QueryTraffic page may ask for.
+const maxTrafficQueryPageSize = 1000
+
+// TrafficPageRequest asks for one page of the project's traffic.
+type TrafficPageRequest struct {
+	Query string
+	// OrderBy is one field with an optional " desc", as Marasi sorts
+	// (requested_at, method, host, path, status_code, content_type, length).
+	// "" is "requested_at desc".
+	OrderBy string
+	// Cursor is "" for the first page (the last page when Direction is
+	// "backward"), else a NextCursor or PrevCursor from an earlier page under
+	// the same OrderBy. The page starts just past it.
+	Cursor string
+	// Direction is "backward" to read the rows before Cursor; anything else
+	// reads the rows after it.
+	Direction string
+	// AsOf is "" for the newest pair at read time, else an AsOf from an
+	// earlier page, so every page of one set of results lists the same pairs.
+	AsOf string
+	// Limit is the page's size; 0 is trafficQueryPageSize.
+	Limit int
+	// IgnoreExclusion lists the pairs the content-type exclusion hides too.
+	IgnoreExclusion bool
+}
+
+// TrafficQueryResult is one page of a project's traffic, in display order.
 type TrafficQueryResult struct {
-	Items         []*domain.RequestResponseSummary
-	NextCursor    *string // opaque; nil when no older page exists
+	Items      []*domain.RequestResponseSummary
+	NextCursor *string // cursor at the page's last row; nil when nothing follows
+	PrevCursor *string // cursor at the page's first row; nil when nothing precedes
+	// AsOf bounds the results; pass it back on every later page. "" when the
+	// project has no pairs.
+	AsOf          string
 	IndexComplete bool
 	QueryError    *TrafficQueryError // nil when the query is valid
 }
@@ -21,26 +54,45 @@ type TrafficQueryResult struct {
 // TrafficQueryError reports an invalid query in the researcher's own text.
 type TrafficQueryError struct {
 	Message  string
-	Position int // 1-based offset into the researcher's query text; 0 when the fault is in the exclusion
+	Position int // 1-based offset into the researcher's query text; 0 when the fault is in the exclusion or the sort
 }
 
-// QueryTraffic runs the researcher's query, minus the project's content-type
-// exclusion, against the project's traffic. cursor is "" for the first page,
-// else a NextCursor from an earlier page of the same query.
-func (a *App) QueryTraffic(query string, cursor string) (TrafficQueryResult, error) {
+// QueryTraffic reads one page of the project's traffic that matches the
+// researcher's query, minus the project's content-type exclusion unless req
+// ignores it.
+func (a *App) QueryTraffic(req TrafficPageRequest) (TrafficQueryResult, error) {
 	traffic, err := a.Proxy.GetTrafficRepo()
 	if err != nil {
 		return TrafficQueryResult{}, fmt.Errorf("querying traffic: %w", err)
 	}
-	exclusion, err := a.GetContentTypeExclusion()
+	var exclusion []string
+	if !req.IgnoreExclusion {
+		exclusion, err = a.GetContentTypeExclusion()
+		if err != nil {
+			return TrafficQueryResult{}, fmt.Errorf("querying traffic: %w", err)
+		}
+	}
+	asOf, err := parseOptionalPairID("as_of", req.AsOf)
 	if err != nil {
 		return TrafficQueryResult{}, fmt.Errorf("querying traffic: %w", err)
 	}
+	limit := req.Limit
+	if limit <= 0 {
+		limit = trafficQueryPageSize
+	}
+	limit = min(limit, maxTrafficQueryPageSize)
+	direction := domain.Forward
+	if req.Direction == "backward" {
+		direction = domain.Backward
+	}
 	page, err := traffic.ListTraffic(domain.TrafficQuery{
-		Text:      query,
+		Text:      req.Query,
 		Exclusion: exclusion,
-		Cursor:    cursor,
-		Limit:     trafficQueryPageSize,
+		OrderBy:   req.OrderBy,
+		Cursor:    req.Cursor,
+		Direction: direction,
+		AsOf:      asOf,
+		Limit:     limit,
 	})
 	if queryErr, ok := asQueryError(err); ok {
 		return TrafficQueryResult{QueryError: queryErr}, nil
@@ -48,7 +100,116 @@ func (a *App) QueryTraffic(query string, cursor string) (TrafficQueryResult, err
 	if err != nil {
 		return TrafficQueryResult{}, fmt.Errorf("querying traffic: %w", err)
 	}
-	return TrafficQueryResult{Items: page.Items, NextCursor: page.NextCursor, IndexComplete: searchIndexComplete(page.Complete)}, nil
+	result := TrafficQueryResult{
+		Items:         page.Items,
+		NextCursor:    page.NextCursor,
+		PrevCursor:    page.PrevCursor,
+		IndexComplete: searchIndexComplete(page.Complete),
+	}
+	if page.AsOf != nil {
+		result.AsOf = page.AsOf.String()
+	}
+	return result, nil
+}
+
+// TrafficCountRequest asks how many pairs match a query.
+type TrafficCountRequest struct {
+	Query string
+	// AsOf counts only the pairs up to a page's AsOf; "" counts them all.
+	AsOf string
+	// After counts only the pairs captured after a page's AsOf, its new
+	// matches; "" counts them all.
+	After string
+	// IgnoreExclusion counts the pairs the content-type exclusion hides too.
+	IgnoreExclusion bool
+}
+
+// TrafficCountResult is how many pairs match, up to Marasi's cap.
+type TrafficCountResult struct {
+	Count         int
+	Capped        bool // more than Count matched
+	IndexComplete bool
+	QueryError    *TrafficQueryError // nil when the query is valid
+}
+
+// CountTraffic counts the project's pairs that match the researcher's query,
+// minus the project's content-type exclusion unless req ignores it.
+func (a *App) CountTraffic(req TrafficCountRequest) (TrafficCountResult, error) {
+	traffic, err := a.Proxy.GetTrafficRepo()
+	if err != nil {
+		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	var exclusion []string
+	if !req.IgnoreExclusion {
+		exclusion, err = a.GetContentTypeExclusion()
+		if err != nil {
+			return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
+		}
+	}
+	asOf, err := parseOptionalPairID("as_of", req.AsOf)
+	if err != nil {
+		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	after, err := parseOptionalPairID("after", req.After)
+	if err != nil {
+		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	count, err := traffic.CountTraffic(domain.TrafficCountQuery{
+		Text:      req.Query,
+		Exclusion: exclusion,
+		AsOf:      asOf,
+		After:     after,
+	})
+	if queryErr, ok := asQueryError(err); ok {
+		return TrafficCountResult{QueryError: queryErr}, nil
+	}
+	if err != nil {
+		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
+	}
+	return TrafficCountResult{Count: count.Count, Capped: count.Capped, IndexComplete: searchIndexComplete(count.Complete)}, nil
+}
+
+// ListArmoryRunTraffic lists every pair an Armory run sent, oldest first,
+// whatever their content type.
+func (a *App) ListArmoryRunTraffic(runID string) ([]*domain.RequestResponseSummary, error) {
+	id, err := uuid.Parse(runID)
+	if err != nil {
+		return nil, fmt.Errorf("listing run requests: run id %q: %w", runID, err)
+	}
+	traffic, err := a.Proxy.GetTrafficRepo()
+	if err != nil {
+		return nil, fmt.Errorf("listing run requests: %w", err)
+	}
+	q := domain.TrafficQuery{
+		Text:    "metadata.armory_run_id = " + strconv.Quote(id.String()),
+		OrderBy: "requested_at",
+		Limit:   maxTrafficQueryPageSize,
+	}
+	items := []*domain.RequestResponseSummary{}
+	for {
+		page, err := traffic.ListTraffic(q)
+		if err != nil {
+			return nil, fmt.Errorf("listing run requests: %w", err)
+		}
+		items = append(items, page.Items...)
+		if page.NextCursor == nil {
+			return items, nil
+		}
+		q.Cursor, q.AsOf = *page.NextCursor, page.AsOf
+	}
+}
+
+// parseOptionalPairID parses a pair id the frontend passed back, or returns
+// nil for "".
+func parseOptionalPairID(name, value string) (*uuid.UUID, error) {
+	if value == "" {
+		return nil, nil
+	}
+	id, err := uuid.Parse(value)
+	if err != nil {
+		return nil, fmt.Errorf("%s %q is not a pair id: %w", name, value, err)
+	}
+	return &id, nil
 }
 
 // searchIndexComplete reports whether every search index job has finished.

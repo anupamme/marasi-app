@@ -3,17 +3,24 @@
 	// rows in view render however many the table holds. A highlighted row
 	// has a 3px stripe in its colour and a light tint; the stripe stays when
 	// the row is selected.
-	import { createEventDispatcher } from "svelte";
+	//
+	// `rows` is the store's window of loaded pages. The table reports the
+	// rows in view (`viewport`) so pages load and drop around them, and when
+	// rows are added or dropped above, it keeps the top row in view where it
+	// was, so nothing moves under the researcher.
+	import { afterUpdate, createEventDispatcher } from "svelte";
 	import RowBadges from "./RowBadges.svelte";
 	import {
 		HEADER_HEIGHT,
 		LEDGER_COLUMNS,
 		ROW_HEIGHT,
 		formatSize,
+		keepRowInPlace,
 		rowHighlight,
 		rowTemplate,
 		scrollToReveal,
 		shortType,
+		sortMark,
 		visibleRange,
 	} from "./table.js";
 	import { sameID } from "../../stores/createLedgerStore.js";
@@ -25,10 +32,17 @@
 	export let focusId = null;
 	/** The highlight palette (stores/highlightsStore.js). */
 	export let palette = [];
-	/** A pair's number for the # column. */
-	export let numberOf = (row) => "";
-	/** Rows from the end at which `nearend` fires. */
-	export let nearEndRows = 50;
+	/** The first row's number for the # column, or null when unknown. */
+	export let firstNumber = null;
+	/** The sort: { field, desc }. */
+	export let sort = null;
+	/**
+	 * True when rows added at the top should show while the table is
+	 * scrolled to the top (the newest-first live view).
+	 */
+	export let pinTop = false;
+	/** Changes when fresh results load from the top; the table scrolls there. */
+	export let resetKey = 0;
 
 	const dispatch = createEventDispatcher();
 	const template = rowTemplate(LEDGER_COLUMNS);
@@ -53,7 +67,55 @@
 		overscan: OVERSCAN,
 	});
 	$: shown = rows.slice(range.start, range.end);
-	$: if (rows.length > 0 && range.end >= rows.length - nearEndRows) dispatch("nearend");
+
+	// The top row in view and how far it is scrolled into, so it can keep
+	// its place when the rows change.
+	let anchor = { id: null, offset: 0 };
+	let laidOut = rows;
+	let laidOutReset = resetKey;
+	let reported = "";
+
+	// Records the top row in view and reports the rows in view when they
+	// changed.
+	function noteScroll() {
+		const top = Math.floor(scrollTop / ROW_HEIGHT);
+		anchor = { id: rows[top]?.ID ?? null, offset: scrollTop - top * ROW_HEIGHT };
+		const visible = Math.max(1, Math.ceil(rowsHeight / ROW_HEIGHT));
+		const lastRow = Math.max(rows.length - 1, 0);
+		const view = {
+			first: Math.min(top, lastRow),
+			last: Math.min(top + visible, lastRow),
+			atTop: scrollTop <= 0,
+		};
+		const key = `${view.first}:${view.last}:${view.atTop}:${rows.length}`;
+		if (key === reported) return;
+		reported = key;
+		dispatch("viewport", view);
+	}
+
+	afterUpdate(() => {
+		if (!viewport) return;
+		if (resetKey !== laidOutReset) {
+			// Fresh results: back to the top.
+			laidOutReset = resetKey;
+			laidOut = rows;
+			viewport.scrollTop = 0;
+		} else if (rows !== laidOut) {
+			// The same results with rows added or dropped around the view.
+			laidOut = rows;
+			if (!(pinTop && viewport.scrollTop <= 0)) {
+				const next = keepRowInPlace({ anchorID: anchor.id, offset: anchor.offset, rows, rowHeight: ROW_HEIGHT });
+				if (next != null && next !== viewport.scrollTop) viewport.scrollTop = next;
+			}
+		}
+		scrollTop = viewport.scrollTop;
+		noteScroll();
+	});
+
+	function onScroll() {
+		scrollTop = viewport.scrollTop;
+		noteScroll();
+	}
 
 	/** Scrolls just enough to show the row with this ID. */
 	export function reveal(id) {
@@ -73,6 +135,12 @@
 	export function focus() {
 		viewport?.focus();
 	}
+	/** Scrolls to the first row. */
+	export function scrollToTop() {
+		if (!viewport) return;
+		viewport.scrollTop = 0;
+		onScroll();
+	}
 
 	function onKeydown(event) {
 		if (event.metaKey || event.ctrlKey || event.altKey) return;
@@ -87,7 +155,7 @@
 <div
 	bind:this={viewport}
 	bind:clientHeight={height}
-	on:scroll={() => (scrollTop = viewport.scrollTop)}
+	on:scroll={onScroll}
 	on:keydown={onKeydown}
 	tabindex="0"
 	class="ledger-table no-select relative h-full overflow-auto font-mono focus:outline-none"
@@ -100,14 +168,27 @@
 		role="row"
 	>
 		{#each LEDGER_COLUMNS as column (column.key)}
-			<span class={column.align === "right" ? "text-right" : ""} role="columnheader"
-				>{column.label}</span
-			>
+			{@const mark = sortMark(sort, column)}
+			{#if column.sort}
+				<button
+					type="button"
+					class="ledger-sort h-full hover:bg-surface-200-700-token {column.align === 'right'
+						? 'text-right'
+						: 'text-left'} {mark ? 'text-primary-500' : ''}"
+					role="columnheader"
+					aria-sort={mark ? (sort.desc ? "descending" : "ascending") : "none"}
+					title="Sort by {column.label === '#' ? 'number' : column.label.toLowerCase()}"
+					data-sort={column.sort}
+					on:click={() => dispatch("sort", column.sort)}>{column.label}{mark ? ` ${mark}` : ""}</button
+				>
+			{:else}
+				<span role="columnheader">{column.label}</span>
+			{/if}
 		{/each}
 	</div>
 	<div style="height: {rows.length * ROW_HEIGHT}px; position: relative">
 		<div style="position: absolute; left: 0; right: 0; top: {range.start * ROW_HEIGHT}px">
-			{#each shown as row (String(row.ID))}
+			{#each shown as row, i (String(row.ID))}
 				{@const selected = sameID(row.ID, focusId)}
 				{@const color = rowHighlight(row, palette)}
 				<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
@@ -124,7 +205,9 @@
 					on:click={() => dispatch("select", row.ID)}
 					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
 				>
-					<span class="text-right tabular-nums opacity-60">{numberOf(row)}</span>
+					<span class="text-right tabular-nums opacity-60"
+						>{firstNumber == null ? "" : firstNumber + range.start + i}</span
+					>
 					<span class="!overflow-visible !pl-1"><RowBadges {row} /></span>
 					<span class="opacity-60">{shortTime(row.RequestedAt)}</span>
 					<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>

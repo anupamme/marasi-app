@@ -65,11 +65,11 @@
 		focusedPair,
 		drawerKeybindingState,
 		isQueryActive,
-		canLoadOlder,
-		matchNoun,
 		markQueryError,
-		matchCountLabel,
 		indexWarning,
+		countLabel,
+		newMatchesKind,
+		newMatchesLabel,
 	} from "../../stores/ledgerStore";
 
 	// The parts of the Ledger store the page follows. Each notifies only when
@@ -85,6 +85,12 @@
 	const focused = select(ledgerStore, focusedPair);
 	const drawerLayout = select(ledgerStore, (state) => state.layout.drawer);
 	const drawerKeys = select(ledgerStore, drawerKeybindingState);
+	const results = select(ledgerStore, (state) => state.results);
+	const sort = select(ledgerStore, (state) => state.sort);
+	const statusCount = select(ledgerStore, countLabel);
+	const indexNote = select(ledgerStore, indexWarning);
+	const newKind = select(ledgerStore, newMatchesKind);
+	const newLabel = select(ledgerStore, newMatchesLabel);
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
@@ -102,20 +108,18 @@
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
 	$: queryErrorMark = markQueryError($query.error);
-	$: liveCount = $rows.length;
-
-	const numberOf = (row) => ledgerStore.pairNumber(row.ID);
+	// Rows are numbered by their position in the results.
+	$: firstNumber = $results.start == null ? null : $results.start + 1;
 
 	// The toast style the Ledger's handoffs use.
 	$: handoffBackground = $modeCurrent
 		? "bg-surface-50 text-surface-900 border border-surface-300"
 		: "bg-surface-100 text-surface-900";
 
-	// Reaching the end of the loaded query results loads the next older
-	// page. The table fires again after each load while it stays near the
-	// end, so pages that come back short keep loading.
-	function onNearEnd() {
-		if (canLoadOlder($query)) ledgerStore.loadOlderPage();
+	// "N new" in the newest-first live view: back to the top, with them.
+	function showNewAtTop() {
+		ledgerStore.goToTop();
+		table?.scrollToTop();
 	}
 
 	function selectAndReveal(id) {
@@ -668,10 +672,10 @@
 				{/if}
 				{#if $queryActive}
 					<span id="ledgerQueryMatchCount" class="whitespace-nowrap text-xs opacity-70"
-						>{matchCountLabel($query)}</span
+						>{$statusCount}</span
 					>
-					{#if indexWarning($query)}
-						<span class="text-warning-500" title={indexWarning($query)}><TriangleAlert size={14} /></span>
+					{#if $indexNote}
+						<span class="text-warning-500" title={$indexNote}><TriangleAlert size={14} /></span>
 					{/if}
 				{/if}
 				{#if $queryText}
@@ -769,10 +773,14 @@
 						rows={$rows}
 						focusId={focusID}
 						palette={$highlightPalette}
-						{numberOf}
+						{firstNumber}
+						sort={$sort}
+						pinTop={$newKind === "top" && !$results.hasBefore}
+						resetKey={$results.reset}
 						on:select={(e) => ledgerStore.selectPair(e.detail)}
 						on:step={(e) => ledgerStore.stepSelection(e.detail)}
-						on:nearend={onNearEnd}
+						on:viewport={(e) => ledgerStore.setViewport(e.detail)}
+						on:sort={(e) => ledgerStore.sortBy(e.detail)}
 						on:menu={(e) => {
 							contextPairID = e.detail.id;
 							contextMenu.show(e.detail.event);
@@ -802,16 +810,29 @@
 					/>
 				</div>
 			{/if}
-			{#if $queryActive && $query.newMatches.length > 0}
-				<div class="pointer-events-none absolute bottom-3 left-0 right-0 z-10 flex justify-center">
-					<button
-						type="button"
-						class="btn btn-sm pointer-events-auto shadow-lg {primary}"
-						on:click={ledgerStore.mergeNewMatches}
-					>
-						{$query.newMatches.length.toLocaleString()}
-						new {matchNoun($query.newMatches.length)}
-					</button>
+			{#if $newLabel && !(drawerOpen && $drawerLayout.maximised)}
+				<div class="pointer-events-none absolute left-0 right-0 top-8 z-20 flex justify-center">
+					{#if $newKind === "top"}
+						<button
+							id="ledgerNewMatches"
+							type="button"
+							class="btn btn-sm pointer-events-auto rounded-full py-0.5 text-xs shadow-lg {primary}"
+							title="Back to the top"
+							on:click={showNewAtTop}
+						>
+							{$newLabel}
+						</button>
+					{:else}
+						<button
+							id="ledgerNewMatches"
+							type="button"
+							class="btn btn-sm pointer-events-auto rounded-full py-0.5 text-xs shadow-lg {primary}"
+							title="Show them, keeping your place"
+							on:click={() => ledgerStore.showNewMatches()}
+						>
+							{$newLabel} · Show
+						</button>
+					{/if}
 				</div>
 			{/if}
 		</div>
@@ -820,13 +841,7 @@
 		<div
 			class="ledger-status flex h-6 flex-none items-center gap-4 border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
 		>
-			<span class="opacity-80">
-				{#if $queryActive}
-					{liveCount.toLocaleString()}{$query.nextCursor ? "+" : ""} matching
-				{:else}
-					{liveCount.toLocaleString()} in the live view
-				{/if}
-			</span>
+			<span id="ledgerCount" class="opacity-80">{$statusCount}</span>
 			{#if $hiddenCount}
 				<span class="opacity-60">{$hiddenCount.toLocaleString()} hidden by type</span>
 			{/if}

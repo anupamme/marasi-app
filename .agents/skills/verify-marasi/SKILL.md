@@ -171,4 +171,6 @@ Run one verification instance at a time. This repo fixes Vite to port `5173`, so
 
 All scripts under `scripts/` are executable and derive the repository root from their own path. Their supported invocations are shown above. `launch.sh`, `doctor.sh`, `reset.sh`, and `drive.sh` call `cdp.mjs`, which resolves targets through `targets.mjs` (`node --test scripts/*.test.mjs` covers the selection rules); call the shell helpers rather than reverse-engineering the CDP protocol. Shortcut compares go through `drive.sh <feature> compare`, not a one-off CDP script.
 
+`bench-seed.sh` and `bench-ledger.sh` benchmark the Ledger against its performance budget; see "Performance budget" in `features/ledger.md`.
+
 Read `features/README.md` before choosing proof coverage. A check of one easy route does not cover the other mapped entry points.

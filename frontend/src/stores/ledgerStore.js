@@ -1,6 +1,8 @@
 // The app's Ledger store, bound to the Wails backend. The logic lives in
 // createLedgerStore.js, which tests load with a fake API.
 import {
+  CountContentTypes,
+  CountTraffic,
   CreateLaunchpadEntry,
   DeleteClientSetting,
   GetClientSetting,
@@ -50,8 +52,17 @@ export {
 export const ledgerStore = createLedgerStore({
   getLiveView: () => GetProxyItems(),
   queryTraffic: (query, cursor) => QueryTraffic(query, cursor),
+  // after: "" counts every match, else only pairs captured after that id.
+  countTraffic: (query, after) => CountTraffic(query, after),
   getExclusion: () => GetContentTypeExclusion(),
   setExclusion: (types) => SetContentTypeExclusion(types),
+  // ledger.exclusion is the project's own list; without it the project
+  // follows the app default.
+  hasOwnExclusion: async () => (await GetClientSetting("ledger.exclusion")) != null,
+  resetExclusion: () => ResetContentTypeExclusion(),
+  getDefaultExclusion: () => GetDefaultContentTypeExclusion(),
+  setDefaultExclusion: (types) => SetDefaultContentTypeExclusion(types),
+  countContentTypes: () => CountContentTypes(),
   getRawDetails: (id) => GetRawDetails(id),
   getMetadata: (id) => GetMetadata(id),
   getNote: (id) => GetNote(id),
@@ -59,11 +70,7 @@ export const ledgerStore = createLedgerStore({
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
   linkToLaunchpad: (requestId, launchpadId) =>
     LinkRequestToLaunchpad(requestId, launchpadId),
-  // Not called by the store yet; the exclusion layering and the Ledger's
-  // client settings use them.
-  resetExclusion: () => ResetContentTypeExclusion(),
-  getDefaultExclusion: () => GetDefaultContentTypeExclusion(),
-  setDefaultExclusion: (types) => SetDefaultContentTypeExclusion(types),
+  // Not called by the store yet; the Ledger's client settings use them.
   getClientSetting: (key) => GetClientSetting(key),
   setClientSetting: (key, value) => SetClientSetting(key, value),
   deleteClientSetting: (key) => DeleteClientSetting(key),

@@ -4,12 +4,11 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
-	import { contentTypeFilterInput, lineWrap } from "../../stores";
+	import { lineWrap } from "../../stores";
 	import ContextMenu, { Item, Divider } from "svelte-contextmenu";
 	import {
 		getModalStore,
 		getToastStore,
-		InputChip,
 		ListBoxItem,
 		ListBox,
 		modeCurrent,
@@ -40,7 +39,7 @@
 		CircleAlert,
 		TriangleAlert,
 		PanelLeftIcon,
-		FileType,
+		Tags,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
 	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
@@ -54,6 +53,10 @@
 	import { LEDGER_DOCK } from "../../lib/dock/dock.js";
 	import LedgerTable from "../../lib/ledger/LedgerTable.svelte";
 	import LedgerDrawer from "../../lib/ledger/LedgerDrawer.svelte";
+	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
+	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
+	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
+	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { rowHighlight } from "../../lib/ledger/table.js";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
 	import { highlightPalette } from "../../stores/highlightsStore";
@@ -82,7 +85,6 @@
 	const queryText = select(ledgerStore, (state) => state.queryText);
 	const queryPending = select(ledgerStore, (state) => state.queryPending);
 	const queryActive = select(ledgerStore, (state) => isQueryActive(state.query));
-	const exclusion = select(ledgerStore, (state) => state.exclusion);
 	const selection = select(ledgerStore, (state) => state.selection);
 	const focused = select(ledgerStore, focusedPair);
 	const drawerLayout = select(ledgerStore, (state) => state.layout.drawer);
@@ -97,7 +99,7 @@
 	let contextMenu;
 	let contextPairID;
 	let queryFieldsOpen = false;
-	let typesOpen = false;
+	let typesMenu;
 
 	$: primary = primaryVariant($modeCurrent);
 	$: drawerOpen = Boolean($focused);
@@ -278,24 +280,6 @@
 		else element.focus();
 	}
 
-	function exclusionInput() {
-		return document.querySelector('input[placeholder="Filter by Content Type"]');
-	}
-
-	async function toggleExclusionFocus() {
-		if (!typesOpen) {
-			typesOpen = true;
-			await Promise.resolve();
-			setTimeout(() => exclusionInput()?.focus(), 0);
-			return;
-		}
-		const input = exclusionInput();
-		if (document.activeElement === input) {
-			input.blur();
-			typesOpen = false;
-		} else input?.focus();
-	}
-
 	const toggleSidebar = {
 		icon: PanelLeftIcon,
 		handler: () => dock?.toggle(),
@@ -315,7 +299,7 @@
 		{
 			actionId: "ledger.drawer-closed.focus-exclusion",
 			icon: FilterIcon,
-			handler: toggleExclusionFocus,
+			handler: () => typesMenu?.focusFind(),
 		},
 		{
 			actionId: "ledger.drawer-closed.next-page",
@@ -580,20 +564,16 @@
 		document.getElementById("searchBox")?.focus();
 	}
 
-	// The content-type chips edit a copy of the exclusion, refreshed whenever
-	// the store's exclusion changes.
-	let exclusionDraft = [];
-	let draftedExclusion;
-	$: if ($exclusion !== draftedExclusion) {
-		draftedExclusion = $exclusion;
-		exclusionDraft = [...$exclusion];
+	// The Marks menu's counts, read each time it opens.
+	let markCounts = {};
+	let markCountsRead = 0;
+	async function loadMarkCounts() {
+		const read = ++markCountsRead;
+		markCounts = {};
+		const counts = await ledgerStore.countQueries(MARKS.map((mark) => mark.term));
+		if (read === markCountsRead) markCounts = counts;
 	}
-
-	// Stores the content-type exclusion, then runs the active query again so
-	// its results reflect it. The query reads the stored exclusion itself.
-	function saveContentTypeExclusion() {
-		return ledgerStore.saveExclusion(exclusionDraft);
-	}
+	$: activeMarks = activeMarkCount($queryText);
 
 	// Runs a saved query the menu chose, or returns to the live view for "".
 	function applySavedQuery(text) {
@@ -604,7 +584,6 @@
 
 	// Closes the toolbar's panels on a click outside them.
 	function onWindowPointerDown(event) {
-		if (typesOpen && !event.target.closest?.(".ledger-types")) typesOpen = false;
 		if (queryFieldsOpen && !event.target.closest?.(".ledger-query-fields, #ledgerQueryFieldsToggle")) {
 			queryFieldsOpen = false;
 		}
@@ -634,8 +613,8 @@
 	</Dock>
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		<!-- Toolbar: the query box, then the menus. Saved queries, Highlights
-		     and Marks join it before Types. -->
+		<!-- Toolbar: the query box, then the menus. Saved queries and
+		     Highlights join it before Marks. -->
 		<div
 			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-100-800-token"
 		>
@@ -706,39 +685,22 @@
 				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}
 				on:apply={(e) => applySavedQuery(e.detail)}
 			/>
-			<div class="ledger-types relative flex items-stretch border-l border-surface-300-600-token">
-				<button
-					type="button"
-					class="flex items-center gap-1.5 px-3 text-sm hover:bg-surface-200-700-token"
-					title="Content types the Ledger hides"
-					aria-expanded={typesOpen}
-					on:click={() => (typesOpen = !typesOpen)}
-				>
-					<FileType size={15} class="opacity-70" />
-					Types
-					{#if $exclusion.length}
-						<span class="badge {primary} px-1.5 py-0 text-[10px]">{$exclusion.length}</span>
-					{/if}
-				</button>
-				{#if typesOpen}
-					<div
-						class="card absolute right-0 top-full z-40 mt-1 max-h-[60vh] w-96 space-y-2 overflow-auto p-3 shadow-xl"
-						role="dialog"
-						aria-label="Hidden content types"
-					>
-						<div class="text-xs opacity-70">Hidden content types</div>
-						<InputChip
-							bind:input={$contentTypeFilterInput}
-							bind:value={exclusionDraft}
-							name="chips"
-							placeholder="Filter by Content Type"
-							rounded="none"
-							on:add={saveContentTypeExclusion}
-							on:remove={saveContentTypeExclusion}
-						/>
-					</div>
-				{/if}
-			</div>
+			<ToolbarMenu
+				id="ledgerMarks"
+				label="Marks"
+				icon={Tags}
+				title="Pairs with a note or a link"
+				badge={activeMarks ? String(activeMarks) : ""}
+				panelClass="w-64"
+				on:open={loadMarkCounts}
+			>
+				<MarksMenu
+					queryText={$queryText}
+					counts={markCounts}
+					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
+				/>
+			</ToolbarMenu>
+			<LedgerTypesMenu bind:this={typesMenu} />
 			{#if queryFieldsOpen}
 				<div
 					id="ledgerQueryFields"

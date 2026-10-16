@@ -16,6 +16,7 @@ function fakeApi({ liveView = [], exclusion = [], results = {} } = {}) {
   return {
     getLiveView: async () => liveView.map((pair) => ({ ...pair })),
     getExclusion: async () => [...exclusion],
+    hasOwnExclusion: async () => true,
     setExclusion: async (types) => {
       exclusion = [...types];
     },

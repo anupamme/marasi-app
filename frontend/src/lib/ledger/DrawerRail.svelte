@@ -1,0 +1,319 @@
+<script>
+	// The Ledger drawer's left edge: a thin icon rail that expands into a
+	// details column. The rail keeps the drawer's own controls at the top and
+	// scrolls its actions when the drawer is short. The column shows the
+	// pair's facts, its highlight, a read-only preview of its note, what it is
+	// linked to, the actions with their shortcuts, and the view toggles.
+	// Actions are dispatched as `action` with their catalog action id, for the
+	// page to run with its own handlers.
+	import { createEventDispatcher } from "svelte";
+	import {
+		BookCheck,
+		Braces,
+		ChevronDown,
+		ChevronUp,
+		Copy,
+		FileOutput,
+		Link,
+		Maximize2,
+		Minimize2,
+		PanelLeftClose,
+		PanelLeftOpen,
+		Pencil,
+		Radio,
+		Send,
+		ShieldAlert,
+		Sparkles,
+		StickyNote,
+		Swords,
+		WrapText,
+		X,
+	} from "lucide-svelte";
+	import { menuDispatcher } from "../keybindings/app.js";
+	import { shortcutLabel } from "../keybindings/keys.js";
+	import { statusClass } from "../launchpad/format.js";
+	import { formatSize, statusText } from "./table.js";
+
+	/** The focused pair's table row, and its request number. */
+	export let pair;
+	export let number;
+	/** Whether the details column shows instead of the rail. */
+	export let expanded = false;
+	export let maximised = false;
+	/** The highlight palette, [{ number, label, color }]. */
+	export let palette = [];
+	/** The pair's note, or null while it loads. */
+	export let note = null;
+	/** The findings and test cases that list the pair. */
+	export let findings = [];
+	export let testCases = [];
+	/** "note" or "metadata" while one shows in place of the response. */
+	export let pane = null;
+	export let timing = "";
+	export let prettify = true;
+	export let wrap = false;
+	/** Whether the pair is a WebSocket upgrade whose stream can open. */
+	export let canOpenStream = false;
+
+	const dispatch = createEventDispatcher();
+	const DRAWER = "ledger.drawer-open";
+
+	// The pair actions, in groups; null separates them.
+	$: actions = [
+		...(canOpenStream
+			? [{ label: "Open WebSocket stream", icon: Radio, actionId: `${DRAWER}.websocket.open-stream` }, null]
+			: []),
+		{ label: "Copy request", icon: Copy, actionId: `${DRAWER}.copy-raw-request` },
+		{ label: "Copy response", icon: FileOutput, actionId: `${DRAWER}.copy-raw-response` },
+		{ label: "Copy URL", icon: Link, actionId: `${DRAWER}.copy-url` },
+		null,
+		{ label: "Send to Launchpad", icon: Send, actionId: `${DRAWER}.send-to-launchpad` },
+		{ label: "Send to Armory", icon: Swords, actionId: `${DRAWER}.send-to-armory` },
+		{ label: "Create finding", icon: ShieldAlert, actionId: `${DRAWER}.create-finding` },
+		{ label: "Create test case", icon: BookCheck, actionId: `${DRAWER}.create-test-case` },
+	];
+
+	// "Label (⌘⇧R)", or the label alone when the action has no shortcut.
+	function tip(label, actionId, keymap) {
+		const key = shortcutLabel(keymap, actionId);
+		return key ? `${label} (${key})` : label;
+	}
+	$: keymap = $menuDispatcher;
+	$: hasNote = note != null ? note.length > 0 : pair.Metadata?.has_note == 1;
+	$: maximiseLabel = maximised ? "Restore the table" : "Maximise the drawer";
+	$: ExpandIcon = expanded ? PanelLeftClose : PanelLeftOpen;
+	$: hasResponse = Number(pair.StatusCode) > 0;
+
+	const togglePane = (which) => dispatch("pane", pane === which ? null : which);
+	const run = (actionId) => dispatch("action", actionId);
+	const highlightLabel = (h) => (pair.Highlight === h.number ? `${h.label} (click to clear)` : h.label);
+
+	const railButton = "flex h-7 w-8 flex-none items-center justify-center rounded-sm hover:bg-surface-200-700-token";
+	const headerButton = "flex h-6 w-6 flex-none items-center justify-center rounded-sm hover:bg-surface-200-700-token";
+	const heading = "px-3 pb-1 pt-3 text-[10px] font-semibold uppercase tracking-wide opacity-50";
+	const row = "flex w-full items-center gap-2 whitespace-nowrap px-3 py-[5px] text-left hover:bg-surface-200-700-token";
+	const divider = "my-1 w-5 flex-none border-t border-surface-300-600-token";
+</script>
+
+{#if expanded}
+	<aside
+		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-100 text-[12px] dark:bg-surface-800"
+		aria-label="Request details"
+	>
+		<div class="flex flex-none flex-nowrap items-center gap-0.5 border-b border-surface-300-600-token px-2 py-1">
+			<button
+				class="ledger-drawer-expand {headerButton}"
+				title="Collapse the details to the rail"
+				aria-label="Collapse the details"
+				aria-expanded="true"
+				on:click={() => dispatch("expand", false)}><svelte:component this={ExpandIcon} size={14} /></button
+			>
+			<span class="min-w-0 flex-1 truncate pl-1 font-mono text-[11px] opacity-60">#{number}</span>
+			<button
+				class={headerButton}
+				title={tip("Previous request", `${DRAWER}.previous-request`, keymap)}
+				aria-label="Previous request"
+				on:click={() => dispatch("step", -1)}><ChevronUp size={14} /></button
+			>
+			<button
+				class={headerButton}
+				title={tip("Next request", `${DRAWER}.next-request`, keymap)}
+				aria-label="Next request"
+				on:click={() => dispatch("step", 1)}><ChevronDown size={14} /></button
+			>
+			<button
+				class={headerButton}
+				title={tip(maximiseLabel, `${DRAWER}.toggle-fullscreen`, keymap)}
+				aria-label={maximiseLabel}
+				aria-pressed={maximised}
+				on:click={() => dispatch("maximise")}
+			>
+				{#if maximised}<Minimize2 size={13} />{:else}<Maximize2 size={13} />{/if}
+			</button>
+			<button class={headerButton} title="Close (Esc)" aria-label="Close the drawer" on:click={() => dispatch("close")}
+				><X size={14} /></button
+			>
+		</div>
+
+		<div class="ledger-drawer-facts flex-none space-y-0.5 px-3 py-2 font-mono text-[11px] leading-4">
+			<div class="flex flex-wrap gap-x-2">
+				<b>{pair.Method ?? ""}</b>
+				<span class={statusClass(pair.StatusCode)}>{hasResponse ? statusText(pair.StatusCode) : "pending"}</span>
+				{#if timing}<span class="opacity-60">{timing}</span>{/if}
+			</div>
+			<div class="break-all"><span class="opacity-70">{pair.Host ?? ""}</span>{pair.Path ?? ""}</div>
+			<div class="opacity-60">
+				{pair.ContentType || (hasResponse ? "no content type" : "no response yet")}{formatSize(pair.Length)
+					? ` · ${formatSize(pair.Length)}`
+					: ""}
+			</div>
+		</div>
+
+		<div class={heading}>Highlight</div>
+		<div class="ledger-drawer-swatches flex flex-none flex-wrap gap-1 px-3" role="radiogroup" aria-label="Highlight">
+			{#each palette as h (h.number)}
+				<button
+					class="h-3.5 w-3.5 rounded-full {pair.Highlight === h.number
+						? 'ring-2 ring-surface-900 ring-offset-1 ring-offset-surface-100 dark:ring-surface-50 dark:ring-offset-surface-800'
+						: ''}"
+					style="background: {h.color}"
+					role="radio"
+					aria-checked={pair.Highlight === h.number}
+					title={highlightLabel(h)}
+					aria-label={h.label}
+					data-highlight={h.number}
+					on:click={() => dispatch("highlight", pair.Highlight === h.number ? null : h.number)}
+				></button>
+			{/each}
+		</div>
+
+		<div class="flex items-center justify-between {heading}">
+			Note
+			<button
+				class="ledger-drawer-note-edit flex items-center gap-1 normal-case tracking-normal text-primary-500 hover:underline"
+				on:click={() => dispatch("pane", "note")}><Pencil size={10} />{hasNote ? "Edit" : "Add"}</button
+			>
+		</div>
+		{#if note}
+			<button
+				class="ledger-drawer-note-preview mx-3 line-clamp-3 flex-none whitespace-pre-line break-words text-left text-[12px] opacity-80 hover:opacity-100"
+				title="Open the note"
+				on:click={() => dispatch("pane", "note")}>{note}</button
+			>
+		{:else}
+			<p class="mx-3 flex-none text-[12px] opacity-40">{note === null ? "…" : "No note"}</p>
+		{/if}
+
+		{#if findings.length || testCases.length}
+			<div class={heading}>Linked</div>
+			{#each findings as finding (finding.ID)}
+				<div class="flex flex-none items-center gap-2 px-3 py-0.5" title="Finding">
+					<ShieldAlert size={12} class="flex-none text-error-500" /><span class="truncate"
+						>{finding.Title || "Untitled finding"}</span
+					>
+				</div>
+			{/each}
+			{#each testCases as testCase (testCase.ID)}
+				<div class="flex flex-none items-center gap-2 px-3 py-0.5" title="Test case">
+					<BookCheck size={12} class="flex-none text-tertiary-500" /><span class="truncate"
+						>{testCase.Title || "Untitled test case"}</span
+					>
+				</div>
+			{/each}
+		{/if}
+
+		<div class={heading}>Actions</div>
+		{#each actions as action}
+			{#if action}
+				<button class={row} on:click={() => run(action.actionId)}>
+					<svelte:component this={action.icon} size={13} class="flex-none opacity-70" />
+					<span class="flex-1">{action.label}</span>
+					<kbd class="text-[10px] opacity-50">{shortcutLabel(keymap, action.actionId)}</kbd>
+				</button>
+			{:else}
+				<div class="mx-3 my-1 flex-none border-t border-surface-300-600-token"></div>
+			{/if}
+		{/each}
+		<button class="{row} {pane === 'metadata' ? 'text-primary-500' : ''}" on:click={() => togglePane("metadata")}>
+			<Braces size={13} class="flex-none opacity-70" />
+			<span class="flex-1">Metadata</span>
+			<kbd class="text-[10px] opacity-50">{shortcutLabel(keymap, `${DRAWER}.view-metadata`)}</kbd>
+		</button>
+
+		<div class={heading}>View</div>
+		<label class={row}>
+			<Sparkles size={13} class="flex-none opacity-70" /><span class="flex-1">Pretty</span>
+			<input type="checkbox" class="checkbox h-3 w-3" bind:checked={prettify} />
+		</label>
+		<label class="{row} mb-2">
+			<WrapText size={13} class="flex-none opacity-70" /><span class="flex-1">Wrap lines</span>
+			<kbd class="text-[10px] opacity-50">{shortcutLabel(keymap, `${DRAWER}.toggle-word-wrap`)}</kbd>
+			<input type="checkbox" class="checkbox h-3 w-3" bind:checked={wrap} />
+		</label>
+	</aside>
+{:else}
+	<nav
+		class="ledger-drawer-rail flex w-9 flex-none flex-col items-center border-r border-surface-300-600-token bg-surface-100 py-0.5 dark:bg-surface-800"
+		aria-label="Request actions"
+	>
+		<button
+			class="ledger-drawer-expand {railButton}"
+			title="Show the details"
+			aria-label="Show the details"
+			aria-expanded="false"
+			on:click={() => dispatch("expand", true)}><svelte:component this={ExpandIcon} size={14} /></button
+		>
+		<button class={railButton} title="Close (Esc)" aria-label="Close the drawer" on:click={() => dispatch("close")}
+			><X size={14} /></button
+		>
+		<button
+			class={railButton}
+			title={tip(maximiseLabel, `${DRAWER}.toggle-fullscreen`, keymap)}
+			aria-label={maximiseLabel}
+			aria-pressed={maximised}
+			on:click={() => dispatch("maximise")}
+		>
+			{#if maximised}<Minimize2 size={13} />{:else}<Maximize2 size={13} />{/if}
+		</button>
+		<button
+			class={railButton}
+			title={tip("Previous request", `${DRAWER}.previous-request`, keymap)}
+			aria-label="Previous request"
+			on:click={() => dispatch("step", -1)}><ChevronUp size={14} /></button
+		>
+		<button
+			class={railButton}
+			title={tip("Next request", `${DRAWER}.next-request`, keymap)}
+			aria-label="Next request"
+			on:click={() => dispatch("step", 1)}><ChevronDown size={14} /></button
+		>
+		<div class={divider}></div>
+		<div class="flex min-h-0 flex-1 flex-col items-center overflow-y-auto [scrollbar-width:none]">
+			{#each actions as action}
+				{#if action}
+					<button
+						class={railButton}
+						title={tip(action.label, action.actionId, keymap)}
+						aria-label={action.label}
+						on:click={() => run(action.actionId)}><svelte:component this={action.icon} size={14} /></button
+					>
+				{:else}
+					<div class={divider}></div>
+				{/if}
+			{/each}
+			<div class={divider}></div>
+			<button
+				class="ledger-drawer-note-toggle relative {railButton} {pane === 'note' ? 'text-primary-500' : ''}"
+				title={tip(hasNote ? "Note" : "Add a note", `${DRAWER}.view-note`, keymap)}
+				aria-label="Note"
+				aria-pressed={pane === "note"}
+				on:click={() => togglePane("note")}
+			>
+				<StickyNote size={14} />
+				{#if hasNote}<span class="absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-primary-500"></span>{/if}
+			</button>
+			<button
+				class="{railButton} {pane === 'metadata' ? 'text-primary-500' : ''}"
+				title={tip("Metadata", `${DRAWER}.view-metadata`, keymap)}
+				aria-label="Metadata"
+				aria-pressed={pane === "metadata"}
+				on:click={() => togglePane("metadata")}><Braces size={14} /></button
+			>
+			<div class={divider}></div>
+			<button
+				class="{railButton} {prettify ? 'text-primary-500' : ''}"
+				title="Prettify"
+				aria-label="Prettify"
+				aria-pressed={prettify}
+				on:click={() => (prettify = !prettify)}><Sparkles size={14} /></button
+			>
+			<button
+				class="{railButton} {wrap ? 'text-primary-500' : ''}"
+				title={tip("Wrap lines", `${DRAWER}.toggle-word-wrap`, keymap)}
+				aria-label="Wrap lines"
+				aria-pressed={wrap}
+				on:click={() => (wrap = !wrap)}><WrapText size={14} /></button
+			>
+		</div>
+	</nav>
+{/if}

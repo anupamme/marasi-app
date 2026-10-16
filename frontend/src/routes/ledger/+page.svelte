@@ -53,6 +53,7 @@
 	import { activeSitemapNode, chooseSitemapNode, excludeSitemapNode, stripLabel } from "../../lib/ledger/sitemap.js";
 	import { sitemapStore } from "../../stores/sitemapStore";
 	import LedgerDrawer from "../../lib/ledger/LedgerDrawer.svelte";
+	import { linkedTo } from "../../lib/ledger/drawer.js";
 	import RowMenu from "../../lib/ledger/RowMenu.svelte";
 	import {
 		curlCommand,
@@ -143,6 +144,10 @@
 	$: primary = primaryVariant($modeCurrent);
 	$: sitemapNode = activeSitemapNode($queryText);
 	$: drawerOpen = Boolean($focused);
+	// "note" or "metadata" while the drawer shows one in place of the
+	// response; a closed drawer reopens on the response.
+	let drawerPane = null;
+	$: if (!drawerOpen) drawerPane = null;
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
 	$: selectedCount = $selection.ids.size;
@@ -539,16 +544,25 @@
 		toastStore.trigger({ message: `Selected ${requestCount(ids.length)}`, background: handoffBackground });
 	}
 
-	function openMetadata(id) {
-		ledgerStore.getMetadata(id).then((metadata) =>
-			toggleModal("Metadata", {
-				type: "component",
-				component: "Metadata",
-				toggleAction: "ledger.drawer-open.view-metadata",
-				content: metadata,
-				title: "Request " + ledgerStore.pairNumber(id) + " Metadata",
-			}),
-		);
+	// Shows the pair's note or metadata in the drawer, in place of the
+	// response (the row menu's Add note…/Edit note… and Metadata).
+	function showInDrawer(id, pane) {
+		if (!sameID($focused?.ID, id)) ledgerStore.focusPair(id);
+		drawerPane = pane;
+	}
+
+	// ⌘N and ⌘M: the note or metadata pane, or back to the response.
+	function toggleDrawerPane(pane) {
+		if ($modalStore[0]) return;
+		drawerPane = drawerPane === pane ? null : pane;
+	}
+
+	// The drawer's highlight swatches: the focused pair alone, as the row
+	// menu's swatches highlight a selection.
+	function highlightFocused(number) {
+		if (!$focused) return;
+		const id = String($focused.ID);
+		highlightPairs({ pairs: [$focused], selection: { ids: [id] }, all: false, count: 1 }, number);
 	}
 
 	/** Runs a row menu action (rowMenu.js) on `target` (selectionTarget). */
@@ -585,7 +599,7 @@
 			case "unlink-test-case":
 				return changeLinks(target, (sel) => ledgerStore.unlinkFromTestCase(sel, action.id), "Unlinked", "test case", action.title);
 			case "note":
-				return openNote(action.id);
+				return showInDrawer(action.id, "note");
 			case "copy":
 				return copyPairs(pairs, action.what);
 			case "narrow":
@@ -597,7 +611,7 @@
 			case "select":
 				return selectSimilar(pairs, action.kind, action.number);
 			case "metadata":
-				return openMetadata(action.id);
+				return showInDrawer(action.id, "metadata");
 			case "append-note":
 				return appendNote(target);
 			case "clear-notes":
@@ -660,19 +674,6 @@
 	function toggleModal(component, modal) {
 		if (!$modalStore[0]) modalStore.trigger(modal);
 		else if ($modalStore[0].component === component) modalStore.close();
-	}
-
-	function openNote(id) {
-		ledgerStore.getNote(id).then((note) =>
-			toggleModal("Notes", {
-				type: "component",
-				component: "Notes",
-				toggleAction: "ledger.drawer-open.view-note",
-				title: "Request " + ledgerStore.pairNumber(id) + " notes",
-				requestID: id,
-				content: note,
-			}),
-		);
 	}
 
 	function createTestCase(ids) {
@@ -912,12 +913,12 @@
 		{
 			actionId: "ledger.drawer-open.view-note",
 			icon: PenIcon,
-			handler: whenOpen(openNote),
+			handler: whenOpen(() => toggleDrawerPane("note")),
 		},
 		{
 			actionId: "ledger.drawer-open.view-metadata",
 			icon: BracesIcon,
-			handler: whenOpen(openMetadata),
+			handler: whenOpen(() => toggleDrawerPane("metadata")),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-url",
@@ -956,6 +957,12 @@
 		icon: RadioIcon,
 		handler: openWebSocketStream,
 	};
+
+	// The drawer's rail and details column run the same handlers as the
+	// shortcuts, by action id.
+	const drawerHandlers = new Map(
+		[websocketDrawerMenuItem, ...drawerMenu].map(({ actionId, handler }) => [actionId, handler]),
+	);
 
 	// Every Ledger action stays registered; the drawer-closed, drawer-open and
 	// WebSocket-upgrade menu contexts decide which ones a key reaches.
@@ -1235,14 +1242,24 @@
 				{/if}
 				<div class="min-h-0" style="flex: {$drawerLayout.maximised ? 1 : $drawerLayout.split} 1 0">
 					<LedgerDrawer
+						store={ledgerStore}
 						pair={$focused}
 						number={focusNumber}
 						incomingResponse={$selection.incomingResponse}
 						maximised={$drawerLayout.maximised}
+						expanded={$drawerLayout.expanded}
+						bind:pane={drawerPane}
 						highlight={rowHighlight($focused, $highlightPalette)}
+						palette={$highlightPalette}
+						findings={linkedTo($focused.ID, $findingStore)}
+						testCases={linkedTo($focused.ID, $testCaseStore)}
+						canOpenStream={canOpenDrawerStream($drawerKeys.meta)}
 						on:step={(e) => ledgerStore.stepSelection(e.detail)}
 						on:maximise={() => ledgerStore.toggleDrawerMaximised()}
 						on:close={closeDrawer}
+						on:expand={(e) => ledgerStore.setDrawerExpanded(e.detail)}
+						on:action={(e) => drawerHandlers.get(e.detail)?.()}
+						on:highlight={(e) => highlightFocused(e.detail)}
 					/>
 				</div>
 			{/if}

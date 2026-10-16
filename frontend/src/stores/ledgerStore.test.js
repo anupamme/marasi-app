@@ -89,7 +89,9 @@ function fakeApi({
     const key = SORT_KEYS[field];
     const asOf = req.AsOf || newest();
     const match = predicate(req.Query);
-    const rows = db.filter((p) => p.ID <= asOf && match(p) && !hides(excluded(), p.ContentType));
+    const rows = db.filter(
+      (p) => p.ID <= asOf && match(p) && (req.IgnoreExclusion || !hides(excluded(), p.ContentType)),
+    );
     const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     const valued = rows.filter((p) => key(p) !== undefined);
     const unvalued = rows.filter((p) => key(p) === undefined);
@@ -555,14 +557,30 @@ test("a jump under a query keeps the query's rows only", async () => {
   assert.equal(get(store).queryText, "even");
 });
 
-test("a jump to a request the results don't hold leaves them as they were", async () => {
+test("a jump to a request the results don't hold opens it anyway, leaving them as they were", async () => {
   const api = fakeApi({ traffic: pairs(1000), queries: { even: (p) => p.Number % 2 === 0 } });
   const store = createLedgerStore(api);
   store.setQueryText("even");
   await store.runQuery();
   const before = tableRows(get(store));
-  assert.deepEqual(await store.goToNumber(301), { reason: "missing" });
-  assert.equal(tableRows(get(store)), before);
+  const { pair } = await store.goToNumber(301);
+  assert.equal(pair.Number, 301);
+  assert.equal(get(store).focusRow?.Number, 301, "it opens in the drawer");
+  assert.equal(store.pairNumber(pair.ID), 301);
+  assert.equal(tableRows(get(store)), before, "the table stays as it was");
+});
+
+test("a jump opens a request the type filter hides, and only a number with no request is missing", async () => {
+  const api = fakeApi({
+    traffic: pairs(10, (n) => (n === 4 ? { ContentType: "image/png" } : {})),
+    exclusion: ["image/*"],
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  const { pair } = await store.goToNumber(4);
+  assert.equal(pair?.Number, 4);
+  assert.equal(get(store).focusRow?.Number, 4);
+  assert.deepEqual(await store.goToNumber(4000), { reason: "missing" });
 });
 
 test("under another sort a jump opens a request that isn't loaded, without touching the table", async () => {

@@ -1368,6 +1368,17 @@ export function createLedgerStore(api) {
     return page.QueryError ? null : (page.Items?.[0] ?? null);
   }
 
+  // Pair `number` wherever it is: outside the query, the type exclusion and
+  // the results' as_of. Null when the project has no such pair.
+  async function anyPair(number) {
+    const page = await api.queryTraffic({
+      ...pageRequest(`number = ${number}`, current.sort, { Limit: 1 }),
+      OrderBy: "number",
+      IgnoreExclusion: true,
+    });
+    return page.QueryError ? null : (page.Items?.[0] ?? null);
+  }
+
   // Selects only `pair`, which the loaded rows don't hold, and shows it in
   // the drawer; the table stays as it is.
   function focusOutside(pair) {
@@ -1385,10 +1396,29 @@ export function createLedgerStore(api) {
    * with the query, sort and as_of left as they are (Marasi's cursors name
    * only the sort and the row, so the edges of the two reads keep paging the
    * same results); else the pair alone, selected and in the drawer while
-   * the table stays as it is. Returns { pair }, or { reason: "missing" }
-   * when the results don't hold it.
+   * the table stays as it is. A pair the results don't hold (the query or
+   * the type filter leaves it out) opens on its own the same way. Returns
+   * { pair }, or { reason: "missing" } when the project has no pair N.
    */
   async function goToNumber(number) {
+    const found = await jumpWithin(number);
+    if (found.pair) return found;
+    // Not in these results (the query, the type filter, or newer than them):
+    // it opens on its own, and the table stays as it is.
+    let pair = null;
+    try {
+      pair = await anyPair(number);
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+    }
+    if (!pair) return { reason: "missing" };
+    focusOutside(pair);
+    return { pair };
+  }
+
+  // The jump within the current results; { reason: "missing" } when they
+  // don't hold the pair.
+  async function jumpWithin(number) {
     const shown = shownPairAtNumber(number);
     if (shown) return { pair: shown };
     if (current.sort.field !== "number") {

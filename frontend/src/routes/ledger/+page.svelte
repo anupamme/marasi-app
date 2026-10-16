@@ -772,7 +772,7 @@
 				ledgerStore.goToNumber(number).then(({ pair }) => {
 					if (pair) return selectAndReveal(pair.ID);
 					toastStore.trigger({
-						message: `No request ${number} in these results`,
+						message: `No request ${number} in this project`,
 						background: "variant-filled-warning",
 						timeout: 2500,
 					});

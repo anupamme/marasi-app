@@ -23,11 +23,15 @@ export const ANY_HIGHLIGHT_TERM = "highlight:*";
 /** The query term for pairs with highlight `number`. */
 export const highlightTerm = (number) => `highlight = ${number}`;
 
+/** The Highlights menu's terms: "Any highlight", then each highlight's. */
+export const HIGHLIGHT_TERMS = Object.freeze([
+  ANY_HIGHLIGHT_TERM,
+  ...DEFAULT_HIGHLIGHTS.map((h) => highlightTerm(h.number)),
+]);
+
 /** How many of the Highlights menu's terms the query has as conditions of their own. */
 export function activeHighlightCount(text) {
-  return [ANY_HIGHLIGHT_TERM, ...DEFAULT_HIGHLIGHTS.map((h) => highlightTerm(h.number))].filter(
-    (term) => hasQueryTerm(text, term),
-  ).length;
+  return HIGHLIGHT_TERMS.filter((term) => hasQueryTerm(text, term)).length;
 }
 
 const present = (label) => (typeof label === "string" && label.trim() ? label.trim() : null);

@@ -330,6 +330,10 @@ export function GetWebSocketMessages(arg1) {
   return window['go']['main']['App']['GetWebSocketMessages'](arg1);
 }
 
+export function HasOwnContentTypeExclusion() {
+  return window['go']['main']['App']['HasOwnContentTypeExclusion']();
+}
+
 export function ImportKeybindingProfile() {
   return window['go']['main']['App']['ImportKeybindingProfile']();
 }

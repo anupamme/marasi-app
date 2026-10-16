@@ -5,7 +5,8 @@
 	import { createEventDispatcher } from "svelte";
 	import { BookCheckIcon, FlagIcon, PenIcon, SendIcon, ShieldAlertIcon } from "lucide-svelte";
 	import { hasQueryTerm } from "../ledgerQueryFields.js";
-	import { MARKS, matchCountText } from "./marks.js";
+	import { MARKS } from "./marks.js";
+	import { matchCountText } from "./counts.js";
 
 	/** The text in the query box. */
 	export let queryText = "";

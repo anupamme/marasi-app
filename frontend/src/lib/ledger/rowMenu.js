@@ -15,12 +15,11 @@
 // `icon` is a key into RowMenu.svelte's icon map.
 // The highlight item has `swatches` instead of `sub`: one action item per
 // highlight, then None, each with a `color` (null for None) and `checked`.
-import { LAUNCHPADS_EACH_MAX } from "../../stores/createLedgerStore.js";
 import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presentation.js";
 import { shortType } from "./table.js";
 import { effectivePalette } from "./highlights.js";
+import { LAUNCHPADS_EACH_MAX } from "./pairs.js";
 
-const plural = (n, one, many = one + "s") => `${n.toLocaleString()} ${n === 1 ? one : many}`;
 const unique = (values) => [...new Set(values)];
 
 /** The pair's URL: scheme, host and path. */
@@ -585,9 +584,4 @@ export function isRunnable(item) {
 /** True for the row of highlight swatches. */
 export function isSwatchRow(item) {
   return isAction(item) && Array.isArray(item.swatches);
-}
-
-/** Plural helper for the page's toasts: "1 request", "3 requests". */
-export function requestCount(n) {
-  return plural(n, "request");
 }

@@ -10,7 +10,8 @@
 	import { ChevronDown, FileType, Plus, Search } from "lucide-svelte";
 	import { getModalStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import { primaryVariant } from "../launchpad/format.js";
-	import { ledgerStore, select } from "../../stores/ledgerStore";
+	import { ledgerStore } from "../../stores/ledgerStore";
+	import { select } from "../storeSelect.js";
 	import {
 		CONTENT_TYPE_GROUPS,
 		groupState,

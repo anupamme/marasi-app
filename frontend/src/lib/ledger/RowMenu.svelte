@@ -36,6 +36,7 @@
 	import { menuDispatcher } from "../keybindings/app.js";
 	import { formatBinding } from "../keybindings/keys.js";
 	import { statusClass } from "../launchpad/format.js";
+	import { plural } from "./counts.js";
 
 	/** Whether the menu shows. The menu closes itself by setting it false. */
 	export let open = false;
@@ -245,8 +246,6 @@
 		const binding = keymap.bindingsFor(item.actionId)[0];
 		return binding ? formatBinding(binding, keymap.platform) : "";
 	}
-
-	const plural = (n, word) => `${n.toLocaleString()} ${n === 1 ? word : word + "s"}`;
 
 	// A ⌘A selection counts every match, not just the loaded pairs. While it
 	// holds pairs the table hasn't loaded, the header names only its count:

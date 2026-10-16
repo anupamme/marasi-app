@@ -172,6 +172,8 @@ export function GetWebSocketConnection(arg1:uuid.UUID):Promise<domain.WebSocketC
 
 export function GetWebSocketMessages(arg1:uuid.UUID):Promise<Array<domain.WebSocketMessage>>;
 
+export function HasOwnContentTypeExclusion():Promise<boolean>;
+
 export function ImportKeybindingProfile():Promise<main.KeybindingProfileFile>;
 
 export function InjectWebSocketMessage(arg1:uuid.UUID,arg2:string,arg3:number,arg4:string,arg5:boolean):Promise<void>;

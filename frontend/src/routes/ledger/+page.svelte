@@ -4,7 +4,7 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
-	import { get } from "svelte/store";
+	import { get, writable } from "svelte/store";
 	import { lineWrap } from "../../stores";
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import {
@@ -60,13 +60,16 @@
 		menuFor,
 		narrowQuery,
 		pairURL,
-		requestCount,
 		similarIDs,
 	} from "../../lib/ledger/rowMenu.js";
+	import { plural, requestCount } from "../../lib/ledger/counts.js";
+	import { LAUNCHPADS_EACH_MAX, sameID } from "../../lib/ledger/pairs.js";
+	import { select } from "../../lib/storeSelect.js";
+	import { toastError as showError } from "../../lib/toasts.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
-	import { activeHighlightCount, ANY_HIGHLIGHT_TERM, highlightTerm } from "../../lib/ledger/highlights.js";
+	import { activeHighlightCount, HIGHLIGHT_TERMS } from "../../lib/ledger/highlights.js";
 	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { rowHighlight } from "../../lib/ledger/table.js";
@@ -77,7 +80,6 @@
 	import { findingStore } from "../../stores/findingStore";
 	import {
 		ledgerStore,
-		select,
 		tableRows,
 		hiddenByTypeCount,
 		focusedPair,
@@ -85,7 +87,6 @@
 		isQueryActive,
 		indexWarning,
 		selectedPairs,
-		LAUNCHPADS_EACH_MAX,
 		countLabel,
 		newMatchesKind,
 		newMatchesLabel,
@@ -196,15 +197,10 @@
 		navigator.clipboard
 			.writeText(text ?? "")
 			.then(() => toastStore.trigger({ message: done, background: "variant-filled-success" }))
-			.catch(() => toastStore.trigger({ message: failed, background: "variant-filled-error" }));
+			.catch(() => toastError(failed));
 	}
 
-	function toastError(message, error) {
-		toastStore.trigger({
-			message: error ? `${message}: ${String(error)}` : message,
-			background: "variant-filled-error",
-		});
-	}
+	const toastError = (message, error) => showError(toastStore, message, error);
 
 	// A toast with a button that leaves for another page.
 	function toastJump(message, label, path) {
@@ -321,7 +317,7 @@
 			const result = await ledgerStore.sendToLaunchpadsEach(idsOf(pairs));
 			refreshLaunchpads();
 			toastJump(
-				`Created ${result.done} ${result.done === 1 ? "launchpad" : "launchpads"}${failures(result)}`,
+				`Created ${plural(result.done, "launchpad")}${failures(result)}`,
 				"Jump to Launchpad",
 				"/launchpad?id=" + (result.launchpadIds[0] ?? ""),
 			);
@@ -397,7 +393,7 @@
 		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", async () => {
 			try {
 				const count = await ledgerStore.clearNotes(target.selection);
-				toastStore.trigger({ message: `Cleared ${count.toLocaleString()} ${count === 1 ? "note" : "notes"}`, background: handoffBackground });
+				toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
 			} catch (error) {
 				toastError("Failed to clear the notes", error);
 			}
@@ -457,7 +453,7 @@
 	async function copyPairs(pairs, what) {
 		const label = describe(pairs);
 		if (what === "urls") {
-			return copyText(pairs.map(pairURL).join("\n"), `Copied ${pairs.length === 1 ? "URL" : `${pairs.length} URLs`}`, "Failed to copy URLs");
+			return copyText(pairs.map(pairURL).join("\n"), pairs.length === 1 ? "Copied URL" : `Copied ${plural(pairs.length, "URL")}`, "Failed to copy URLs");
 		}
 		if (what === "markdown") {
 			return copyText(markdownTable(pairs, (pair) => ledgerStore.pairNumber(pair.ID)), "Copied a Markdown table", "Failed to copy");
@@ -487,7 +483,7 @@
 			const incoming = $selection.incomingResponse;
 			const text = details
 				.map((d, i) => {
-					const live = incoming && String(incoming.ID) === String(pairs[i].ID) ? incoming : null;
+					const live = incoming && sameID(incoming.ID, pairs[i].ID) ? incoming : null;
 					return (live || d?.Response)?.Raw ?? "";
 				})
 				.filter(Boolean)
@@ -961,27 +957,22 @@
 		document.getElementById("searchBox")?.focus();
 	}
 
-	// The Marks menu's counts, read each time it opens.
-	let markCounts = {};
-	let markCountsRead = 0;
-	async function loadMarkCounts() {
-		const read = ++markCountsRead;
-		markCounts = {};
-		const counts = await ledgerStore.countQueries(MARKS.map((mark) => mark.term));
-		if (read === markCountsRead) markCounts = counts;
+	// A toolbar menu's counts for `terms`, read each time it opens: a store
+	// of { [term]: count } with `load()`; a newer read wins.
+	function menuCounts(terms) {
+		const counts = writable({});
+		let reads = 0;
+		async function load() {
+			const read = ++reads;
+			counts.set({});
+			const result = await ledgerStore.countQueries(terms);
+			if (read === reads) counts.set(result);
+		}
+		return { subscribe: counts.subscribe, load };
 	}
+	const markCounts = menuCounts(MARKS.map((mark) => mark.term));
+	const highlightCounts = menuCounts(HIGHLIGHT_TERMS);
 	$: activeMarks = activeMarkCount($queryText);
-
-	// The Highlights menu's counts, read each time it opens.
-	const HIGHLIGHT_TERMS = [ANY_HIGHLIGHT_TERM, ...[1, 2, 3, 4, 5, 6, 7, 8].map(highlightTerm)];
-	let highlightCounts = {};
-	let highlightCountsRead = 0;
-	async function loadHighlightCounts() {
-		const read = ++highlightCountsRead;
-		highlightCounts = {};
-		const counts = await ledgerStore.countQueries(HIGHLIGHT_TERMS);
-		if (read === highlightCountsRead) highlightCounts = counts;
-	}
 	$: activeHighlights = activeHighlightCount($queryText);
 
 	function onRenameHighlight({ number, label, allProjects }) {
@@ -990,17 +981,12 @@
 		);
 	}
 
-	// Runs the query after a sitemap choice: choosing a node narrows to it
-	// (again removes it), the eye-off button leaves it out.
-	function applySitemapChoice(text) {
+	// Puts `text` in the query box and runs it at once, or returns to the
+	// live view when it is blank: a sitemap choice (choosing a node narrows
+	// to it, again removes it, the eye-off button leaves it out) or a saved
+	// query the menu chose.
+	function applyQuery(text) {
 		if (!text.trim()) return ledgerStore.clearQuery();
-		ledgerStore.setQueryText(text);
-		ledgerStore.runQuery(text);
-	}
-
-	// Runs a saved query the menu chose, or returns to the live view for "".
-	function applySavedQuery(text) {
-		if (!text) return ledgerStore.clearQuery();
 		ledgerStore.setQueryText(text);
 		ledgerStore.runQuery(text);
 	}
@@ -1031,8 +1017,8 @@
 			store={sitemapStore}
 			activeNode={sitemapNode}
 			bind:findInput={sitemapFind}
-			on:choose={(e) => applySitemapChoice(chooseSitemapNode($queryText, e.detail))}
-			on:exclude={(e) => applySitemapChoice(excludeSitemapNode($queryText, e.detail))}
+			on:choose={(e) => applyQuery(chooseSitemapNode($queryText, e.detail))}
+			on:exclude={(e) => applyQuery(excludeSitemapNode($queryText, e.detail))}
 		/>
 	</Dock>
 
@@ -1120,7 +1106,7 @@
 			<SavedQueriesMenu
 				queryText={$queryText}
 				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}
-				on:apply={(e) => applySavedQuery(e.detail)}
+				on:apply={(e) => applyQuery(e.detail)}
 			/>
 			<ToolbarMenu
 				id="ledgerHighlights"
@@ -1129,11 +1115,11 @@
 				title="Pairs by highlight"
 				badge={activeHighlights ? String(activeHighlights) : ""}
 				panelClass="w-72"
-				on:open={loadHighlightCounts}
+				on:open={highlightCounts.load}
 			>
 				<HighlightsMenu
 					queryText={$queryText}
-					counts={highlightCounts}
+					counts={$highlightCounts}
 					palette={$highlightPalette}
 					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
 					on:rename={(e) => onRenameHighlight(e.detail)}
@@ -1146,11 +1132,11 @@
 				title="Pairs with a note or a link"
 				badge={activeMarks ? String(activeMarks) : ""}
 				panelClass="w-64"
-				on:open={loadMarkCounts}
+				on:open={markCounts.load}
 			>
 				<MarksMenu
 					queryText={$queryText}
-					counts={markCounts}
+					counts={$markCounts}
 					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
 				/>
 			</ToolbarMenu>

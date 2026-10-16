@@ -7,7 +7,7 @@
 	import { createEventDispatcher, onDestroy, tick } from "svelte";
 	import { Check, Pencil, X } from "lucide-svelte";
 	import { hasQueryTerm } from "../ledgerQueryFields.js";
-	import { matchCountText } from "./marks.js";
+	import { matchCountText } from "./counts.js";
 	import { ANY_HIGHLIGHT_TERM, highlightTerm } from "./highlights.js";
 
 	/** The text in the query box. */

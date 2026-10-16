@@ -28,12 +28,12 @@ import { LEDGER_DOCK } from "../lib/dock/dock.js";
 import { toggleQueryTerm } from "../lib/ledgerQueryFields.js";
 import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
 import { searchRequests } from "../lib/requestPicker.js";
+import { select } from "../lib/storeSelect.js";
+import { LAUNCHPADS_EACH_MAX, pairIDSet, sameID } from "../lib/ledger/pairs.js";
+import { formatCount, matchNoun, requestCount } from "../lib/ledger/counts.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
-
-/** The most pairs "one launchpad each" sends at a time. */
-export const LAUNCHPADS_EACH_MAX = 25;
 
 /** How long the query box waits after the last keystroke before running. */
 export const QUERY_DELAY_MS = 700;
@@ -222,9 +222,6 @@ export function tableRows(state) {
   return tableRowsCache.rows;
 }
 
-/** The loaded rows, in display order. */
-export const shownRows = tableRows;
-
 /**
  * How many pairs the content-type exclusion hides from the live view or the
  * query's results, or null when unknown.
@@ -240,7 +237,7 @@ export function hiddenByTypeCount(state) {
 export function countLabel(state) {
   const count = state.results.count;
   if (!count) return "…";
-  const n = `${count.count.toLocaleString("en-US")}${count.capped ? "+" : ""}`;
+  const n = formatCount(count.count, count.capped);
   return isQueryActive(state.query) ? `${n} matching` : `${n} in the live view`;
 }
 
@@ -248,7 +245,7 @@ export function countLabel(state) {
 export function newMatchesLabel(state) {
   const { newCount, newCapped } = state.results;
   if (!newCount) return "";
-  const n = `${newCount.toLocaleString("en-US")}${newCapped ? "+" : ""}`;
+  const n = formatCount(newCount, newCapped);
   return newMatchesKind(state) === "top" ? `${n} new` : `${n} new ${matchNoun(newCount, newCapped)}`;
 }
 
@@ -315,10 +312,10 @@ export function allSelectedLabel(state) {
   const query = state.selection.query;
   if (!query) return "";
   const n = query.count
-    ? `${query.count.count.toLocaleString("en-US")}${query.count.capped ? "+" : ""}`
+    ? formatCount(query.count.count, query.count.capped)
     : "…";
   const left = newMatchesNotSelected(state);
-  const note = left ? ` · ${left.toLocaleString("en-US")} new ${matchNoun(left)} not included` : "";
+  const note = left ? ` · ${formatCount(left)} new ${matchNoun(left)} not included` : "";
   return `All ${n} matching selected${note}`;
 }
 
@@ -361,65 +358,11 @@ export function clampDrawerSplit(split) {
   return Math.min(DRAWER_SPLIT.max, Math.max(DRAWER_SPLIT.min, split));
 }
 
-/** True when both are pair IDs and they name the same pair. */
-export function sameID(a, b) {
-  return a != null && b != null && String(a) === String(b);
-}
-
-/** The IDs of `items`, as strings. */
-export function pairIDSet(items) {
-  return new Set(items.map((item) => String(item.ID)));
-}
-
-/** "match" or "matches" for `count`; `more` means there could be more. */
-export function matchNoun(count, more = false) {
-  return count === 1 && !more ? "match" : "matches";
-}
-
 /** Shown while a query is active and older traffic is still being indexed. */
 export function indexWarning(state) {
   return isQueryActive(state.query) && !state.results.indexComplete
     ? "Search index still building"
     : "";
-}
-
-/**
- * Splits an invalid query around marasi's 1-based error position, counting
- * characters rather than UTF-16 units, so the problem can be marked:
- * { before, at, after }. `at` is a space when the position is past the end.
- * Returns null when the error has no position.
- */
-export function markQueryError(error) {
-  if (!error?.position) return null;
-  const chars = Array.from(error.query);
-  const index = Math.min(Math.max(error.position - 1, 0), chars.length);
-  return {
-    before: chars.slice(0, index).join(""),
-    at: chars[index] ?? " ",
-    after: chars.slice(index + 1).join(""),
-  };
-}
-
-/**
- * A readable of `selector(state)` that notifies its subscribers only when the
- * selected value changes, so a component can follow one part of the store
- * without updating on every other change.
- */
-export function select(store, selector) {
-  return {
-    subscribe(run) {
-      let first = true;
-      let last;
-      return store.subscribe((state) => {
-        const value = selector(state);
-        if (first || value !== last) {
-          first = false;
-          last = value;
-          run(value);
-        }
-      });
-    },
-  };
 }
 
 // A live event's pair as a table row: without the raw and prettified
@@ -1642,7 +1585,7 @@ export function createLedgerStore(api) {
       ? launchpadName(selection.ids)
       : count == null
         ? ["Matching requests", "Launchpad for the matching requests"]
-        : [`${count.toLocaleString("en-US")} requests`, `Launchpad for ${count.toLocaleString("en-US")} requests`];
+        : [requestCount(count), `Launchpad for ${requestCount(count)}`];
     const launchpadId = await api.createLaunchpad(...name);
     const linked = await link(selection, "launchpad", launchpadId);
     return { launchpadId, count: linked };

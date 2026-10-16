@@ -57,6 +57,21 @@ test("⌘⇧F filters the Ledger with its drawer closed and creates a finding wi
   );
 });
 
+test("with a selection, the row menu's shortcuts reach its actions", () => {
+  const dispatcher = mac();
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmd(".", "Period"), open), "ledger.drawer-open.open-row-menu");
+  assert.equal(dispatcher.resolve(cmd("l", "KeyL"), open), "ledger.drawer-open.send-to-launchpad");
+  assert.equal(dispatcher.resolve(cmdShift("A", "KeyA"), open), "ledger.drawer-open.send-to-armory");
+  assert.equal(dispatcher.resolve(cmdShift("T", "KeyT"), open), "ledger.drawer-open.create-test-case");
+  assert.equal(dispatcher.resolve(cmd("n", "KeyN"), open), "ledger.drawer-open.view-note");
+  assert.equal(dispatcher.resolve(cmdShift("C", "KeyC"), open), "ledger.drawer-open.copy-url");
+  assert.equal(dispatcher.resolve(cmd("m", "KeyM"), open), "ledger.drawer-open.view-metadata");
+  // With nothing selected, the global actions keep their keys.
+  assert.equal(dispatcher.resolve(cmd(".", "Period"), on("/ledger")), "global.jump-to-toast");
+  assert.equal(dispatcher.resolve(cmd("l", "KeyL"), on("/ledger")), "global.setup-listener");
+});
+
 test("⌘\\ toggles the Ledger's sitemap dock with the drawer open or closed", () => {
   const dispatcher = mac();
   const press = () => cmd("\\", "Backslash");

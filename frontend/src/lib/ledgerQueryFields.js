@@ -1,5 +1,5 @@
 // The fields a ledger query can name, shown by the "?" toggle beside the query
-// box. Hard-coded to match marasi's traffic query grammar
+// box and offered as its suggestions. Hard-coded to match marasi's traffic query grammar
 // (marasi db/traffic_query.go): update it when that grammar changes.
 //
 // Plain module: no Svelte component dependencies.
@@ -12,7 +12,9 @@ export const QUERY_PREAMBLE =
 
 /**
  * One entry per field: its name, the operators it accepts, an example that
- * can be inserted into the query box, and one line of help.
+ * can be inserted into the query box, and one line of help. `values`, when
+ * present, lists the values the query box suggests after an operator; without
+ * it, the example's value is suggested after the example's operator.
  */
 export const QUERY_FIELDS = [
   { name: "host", ops: ["=", "!="], example: 'host = "*.acme.test"', help: "Exact case. * at the start or end is a wildcard." },
@@ -23,13 +25,18 @@ export const QUERY_FIELDS = [
   { name: "status_code", ops: ["=", "!=", "<", "<=", ">", ">="], example: "status_code >= 500", help: "Whole number. In-flight pairs have no status code." },
   { name: "requested_at", ops: ["=", "!=", "<", "<=", ">", ">="], example: 'requested_at > "2026-10-09T10:00:00Z"', help: "RFC 3339 timestamp." },
   { name: "responded_at", ops: ["=", "!=", "<", "<=", ">", ">="], example: 'responded_at < "2026-10-09T10:00:00Z"', help: "RFC 3339 timestamp." },
-  { name: "metadata.<key>", ops: ["=", "!="], example: 'metadata.extension = "workshop"', help: "The value at that key: a string, number, true, false or null." },
-  { name: "launchpad", ops: ["=", "!=", ":"], example: "launchpad:*", help: 'Launchpad membership: launchpad = "<uuid>" for one launchpad, launchpad != "<uuid>" for pairs outside it, launchpad:* for pairs in any launchpad.' },
+  { name: "length", ops: ["=", "!=", "<", "<=", ">", ">="], example: "length > 100000", help: "Response size in bytes, a whole number. Pairs with no response have no length." },
+  { name: "metadata.<key>", ops: ["=", "!=", ":"], example: 'metadata.extension = "workshop"', values: { ":": ["*"] }, help: "The value at that key, a dotted path: a string, number, true, false or null. metadata.<key>:* for pairs that have the key." },
+  { name: "highlight", ops: ["=", "!=", ":"], example: "highlight = 1", values: { ":": ["*"] }, help: "Highlight colour, 1 to 8. highlight:* for any highlighted pair." },
+  { name: "sitemap", ops: ["=", "!="], example: 'sitemap = "https://api.acme.test/v2"', help: 'A sitemap node and everything under it, quoted; != for pairs outside it.' },
+  { name: "launchpad", ops: ["=", "!=", ":"], example: "launchpad:*", values: { "=": [], "!=": [] }, help: 'Launchpad membership: launchpad = "<uuid>" for one launchpad, launchpad != "<uuid>" for pairs outside it, launchpad:* for pairs in any launchpad.' },
+  { name: "finding", ops: ["=", "!=", ":"], example: "finding:*", values: { "=": [], "!=": [] }, help: 'Linked to a finding: finding = "<uuid>" for one finding, finding != "<uuid>" for pairs not linked to it, finding:* for pairs linked to any finding.' },
+  { name: "test_case", ops: ["=", "!=", ":"], example: "test_case:*", values: { "=": [], "!=": [] }, help: 'Linked to a test case: test_case = "<uuid>" for one test case, test_case != "<uuid>" for pairs not linked to it, test_case:* for pairs linked to any test case.' },
   { name: "request_head", ops: [":"], example: 'request_head:"authorization"', help: "Contains, ignoring case. Request line plus headers." },
   { name: "request_body", ops: [":"], example: 'request_body:"password"', help: "Contains, ignoring case. Binary bodies never match." },
   { name: "response_head", ops: [":"], example: 'response_head:"set-cookie"', help: "Contains, ignoring case. Status line plus headers." },
   { name: "response_body", ops: [":"], example: 'response_body:"eyJhbGci"', help: "Contains, ignoring case. Binary bodies never match." },
-  { name: "note", ops: [":"], example: 'note:"idor"', help: "Contains, ignoring case." },
+  { name: "note", ops: [":"], example: 'note:"idor"', values: { ":": ['"idor"', "*"] }, help: "Contains, ignoring case. note:* for any pair with a note." },
   { name: "metadata", ops: [":"], example: 'metadata:"workshop"', help: "Contains, ignoring case, anywhere in the metadata." },
 ];
 

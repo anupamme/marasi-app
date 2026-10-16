@@ -43,6 +43,7 @@
 		FileType,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
+	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
 	import { appendToQuery } from "../../lib/ledgerQueryFields";
 	import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions } from "../../lib/keybindings/app.js";
@@ -67,7 +68,6 @@
 		isQueryActive,
 		canLoadOlder,
 		matchNoun,
-		markQueryError,
 		matchCountLabel,
 		indexWarning,
 	} from "../../stores/ledgerStore";
@@ -101,7 +101,9 @@
 	$: drawerOpen = Boolean($focused);
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
-	$: queryErrorMark = markQueryError($query.error);
+	// Marasi's error for the text in the query box, underlined there; an
+	// error for text since edited is stale.
+	$: queryBoxError = $query.error?.query === $queryText ? $query.error : null;
 	$: liveCount = $rows.length;
 
 	const numberOf = (row) => ledgerStore.pairNumber(row.ID);
@@ -576,17 +578,6 @@
 		document.getElementById("searchBox")?.focus();
 	}
 
-	function onQueryKeydown(e) {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			ledgerStore.runQuery($queryText);
-		} else if (e.key === "Escape") {
-			e.preventDefault();
-			e.stopPropagation();
-			ledgerStore.clearQuery();
-		}
-	}
-
 	// The content-type chips edit a copy of the exclusion, refreshed whenever
 	// the store's exclusion changes.
 	let exclusionDraft = [];
@@ -645,28 +636,29 @@
 				{:else}
 					<Search size={15} class="shrink-0 opacity-70" />
 				{/if}
-				<input
-					id="searchBox"
-					class="h-full min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-sm focus:outline-none focus:ring-0"
-					type="text"
-					autocomplete="off"
-					spellcheck="false"
-					placeholder="Search traffic…"
+				<LedgerQueryBox
 					value={$queryText}
-					on:input={(e) => {
-						ledgerStore.setQueryText(e.currentTarget.value);
-						ledgerStore.scheduleQuery(e.currentTarget.value);
+					error={queryBoxError}
+					on:change={(e) => {
+						ledgerStore.setQueryText(e.detail);
+						ledgerStore.scheduleQuery(e.detail);
 					}}
-					on:keydown={onQueryKeydown}
+					on:run={() => ledgerStore.runQuery($queryText)}
+					on:clear={() => ledgerStore.clearQuery()}
 				/>
-				{#if $query.error?.query === $queryText}
+				{#if queryBoxError}
 					<span
-						id="ledgerQueryErrorMarker"
-						class="text-error-500"
-						title="Invalid query: {$query.error.message}"><CircleAlert size={14} /></span
+						id="ledgerQueryError"
+						class="flex max-w-[24rem] items-center gap-1 text-xs text-error-500"
+						role="alert"
+						title={queryBoxError.position
+							? `Position ${queryBoxError.position}: ${queryBoxError.message}`
+							: queryBoxError.message}
+						><CircleAlert size={14} class="shrink-0" /><span class="truncate"
+							>{queryBoxError.message}</span
+						></span
 					>
-				{/if}
-				{#if $queryActive}
+				{:else if $queryActive}
 					<span id="ledgerQueryMatchCount" class="whitespace-nowrap text-xs opacity-70"
 						>{matchCountLabel($query)}</span
 					>
@@ -741,21 +733,6 @@
 				</div>
 			{/if}
 		</div>
-		{#if $query.error}
-			<div
-				class="flex-none border-b border-surface-300-600-token px-3 py-1 text-xs text-error-500"
-				role="alert"
-			>
-				{#if queryErrorMark}
-					<pre class="whitespace-pre-wrap break-all font-mono">{queryErrorMark.before}<mark
-							class="bg-error-500 text-white">{queryErrorMark.at}</mark
-						>{queryErrorMark.after}</pre>
-					<span>Position {$query.error.position}: {$query.error.message}</span>
-				{:else}
-					<span>{$query.error.message}</span>
-				{/if}
-			</div>
-		{/if}
 
 		<!-- The table, and the drawer below it while a pair is selected. -->
 		<div class="relative flex min-h-0 flex-1 flex-col" bind:this={tableArea}>

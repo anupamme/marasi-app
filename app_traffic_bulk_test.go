@@ -1,22 +1,24 @@
 package main
 
 import (
+	"encoding/json"
 	"slices"
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/tfkr-ae/marasi/domain"
 )
 
-func idSelection(ids ...uuid.UUID) TrafficSelection {
-	sel := TrafficSelection{}
-	for _, id := range ids {
-		sel.IDs = append(sel.IDs, id.String())
+// querySelection is a ⌘A selection as the frontend sends it: the query, the
+// exclusion and as_of, decoded the way Wails decodes it.
+func querySelection(t *testing.T, text string, asOf uuid.UUID, exclusion ...string) domain.Selection {
+	t.Helper()
+	var sel domain.Selection
+	body, _ := json.Marshal(map[string]any{"query": text, "exclusion": exclusion, "as_of": asOf})
+	if err := json.Unmarshal(body, &sel); err != nil {
+		t.Fatalf("decoding selection: %v", err)
 	}
 	return sel
-}
-
-func querySelection(text string, asOf uuid.UUID, exclusion ...string) TrafficSelection {
-	return TrafficSelection{Query: &text, Exclusion: exclusion, AsOf: asOf.String()}
 }
 
 func jsonPair(t *testing.T, app *App, host string) uuid.UUID {
@@ -50,7 +52,7 @@ func TestLinkTrafficLinksListedPairsToALaunchpad(t *testing.T) {
 	c := jsonPair(t, app, "c.acme.test")
 	launchpad := app.CreateLaunchpadEntry("Login", "")
 
-	n, err := app.LinkTraffic(idSelection(a, c), TrafficLinkTarget{Kind: "launchpad", ID: launchpad.String()})
+	n, err := app.LinkTraffic(idSelection(t, a, c), TrafficLinkTarget{Kind: "launchpad", ID: launchpad.String()})
 
 	if err != nil || n != 2 {
 		t.Fatalf("wanted 2 linked, got %d, %v", n, err)
@@ -72,7 +74,7 @@ func TestLinkTrafficLinksAQuerySelectionUpToItsAsOf(t *testing.T) {
 		t.Fatalf("creating finding: %v", err)
 	}
 
-	n, err := app.LinkTraffic(querySelection(`host = "api.acme.test"`, asOf), TrafficLinkTarget{Kind: "finding", ID: finding.ID.String()})
+	n, err := app.LinkTraffic(querySelection(t, `host = "api.acme.test"`, asOf), TrafficLinkTarget{Kind: "finding", ID: finding.ID.String()})
 
 	if err != nil || n != 2 {
 		t.Fatalf("wanted 2 linked, got %d, %v", n, err)
@@ -92,7 +94,7 @@ func TestLinkTrafficQuerySelectionSkipsExcludedTypes(t *testing.T) {
 		t.Fatalf("creating test case: %v", err)
 	}
 
-	n, err := app.LinkTraffic(querySelection("", html, "text/html"), TrafficLinkTarget{Kind: "test_case", ID: testCase.ID.String()})
+	n, err := app.LinkTraffic(querySelection(t, "", html, "text/html"), TrafficLinkTarget{Kind: "test_case", ID: testCase.ID.String()})
 
 	if err != nil || n != 1 {
 		t.Fatalf("wanted 1 linked, got %d, %v", n, err)
@@ -110,7 +112,7 @@ func TestUnlinkTrafficRemovesPairsFromALaunchpad(t *testing.T) {
 	app.LinkRequestToLaunchpad(a, launchpad)
 	app.LinkRequestToLaunchpad(b, launchpad)
 
-	n, err := app.UnlinkTraffic(idSelection(a), TrafficLinkTarget{Kind: "launchpad", ID: launchpad.String()})
+	n, err := app.UnlinkTraffic(idSelection(t, a), TrafficLinkTarget{Kind: "launchpad", ID: launchpad.String()})
 
 	if err != nil || n != 1 {
 		t.Fatalf("wanted 1 unlinked, got %d, %v", n, err)
@@ -124,7 +126,7 @@ func TestLinkTrafficRejectsAnUnknownKind(t *testing.T) {
 	app := newScratchpadApp(t)
 	a := jsonPair(t, app, "a.acme.test")
 
-	if _, err := app.LinkTraffic(idSelection(a), TrafficLinkTarget{Kind: "armory", ID: uuid.NewString()}); err == nil {
+	if _, err := app.LinkTraffic(idSelection(t, a), TrafficLinkTarget{Kind: "armory", ID: uuid.NewString()}); err == nil {
 		t.Fatal("wanted an error for an unknown link kind")
 	}
 }
@@ -133,12 +135,8 @@ func TestBulkOpsRejectAnEmptySelection(t *testing.T) {
 	app := newScratchpadApp(t)
 	jsonPair(t, app, "a.acme.test")
 
-	if _, err := app.ClearNotes(TrafficSelection{}); err == nil {
+	if _, err := app.ClearNotes(domain.Selection{}); err == nil {
 		t.Fatal("wanted an error for an empty selection")
-	}
-	text := "host = \"a\""
-	if _, err := app.ClearNotes(TrafficSelection{Query: &text}); err == nil {
-		t.Fatal("wanted an error for a query selection without as_of")
 	}
 }
 
@@ -150,7 +148,7 @@ func TestAppendNoteAddsAParagraphAfterAnExistingNote(t *testing.T) {
 		t.Fatalf("writing note: %v", err)
 	}
 
-	n, err := app.AppendNote(idSelection(noted, bare), "second")
+	n, err := app.AppendNote(idSelection(t, noted, bare), "second")
 
 	if err != nil || n != 2 {
 		t.Fatalf("wanted 2 notes written, got %d, %v", n, err)
@@ -174,7 +172,7 @@ func TestClearNotesDeletesTheSelectionsNotes(t *testing.T) {
 		}
 	}
 
-	n, err := app.ClearNotes(querySelection("", b))
+	n, err := app.ClearNotes(querySelection(t, "", b))
 
 	if err != nil || n != 2 {
 		t.Fatalf("wanted 2 notes cleared, got %d, %v", n, err)
@@ -190,7 +188,7 @@ func TestDeleteTrafficDeletesTheSelection(t *testing.T) {
 	jsonPair(t, app, "b.acme.test")
 	c := jsonPair(t, app, "c.acme.test")
 
-	n, err := app.DeleteTraffic(idSelection(a, c))
+	n, err := app.DeleteTraffic(idSelection(t, a, c))
 
 	if err != nil || n != 2 {
 		t.Fatalf("wanted 2 deleted, got %d, %v", n, err)
@@ -204,7 +202,7 @@ func TestDeleteTrafficReportsAnInvalidQuery(t *testing.T) {
 	app := newScratchpadApp(t)
 	a := jsonPair(t, app, "a.acme.test")
 
-	if _, err := app.DeleteTraffic(querySelection("host = ", a)); err == nil {
+	if _, err := app.DeleteTraffic(querySelection(t, "host = ", a)); err == nil {
 		t.Fatal("wanted an error for an invalid query")
 	}
 	if got := countTraffic(t, app, "", "").Count; got != 1 {

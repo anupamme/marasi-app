@@ -449,15 +449,6 @@ func (a *App) GetLogs() ([]*domain.Log, error) {
 	}
 	return logs, nil
 }
-func (a *App) GetProxyItems() []*domain.RequestResponseSummary {
-	resultsSlice, err := a.Proxy.TrafficRepo.GetRequestResponseSummary()
-	if err != nil {
-		log.Print(fmt.Errorf("getting proxy items: %w", err))
-		return nil
-	}
-	return resultsSlice
-}
-
 func (a *App) GetRawDetails(id uuid.UUID) *domain.RequestResponseRow {
 	row, err := a.Proxy.TrafficRepo.GetRequestResponseRow(id)
 	if err != nil {
@@ -472,6 +463,7 @@ type ExtensionUI struct {
 }
 
 type Dashboard struct {
+	Requests      int
 	Notes         int
 	Launchpads    int
 	Interceptions int
@@ -479,6 +471,11 @@ type Dashboard struct {
 
 func (a *App) CountNotes() (Dashboard, error) {
 	dashboard := Dashboard{}
+	requests, err := a.Proxy.StatsRepo.CountRows()
+	if err != nil {
+		return dashboard, fmt.Errorf("counting requests : %w", err)
+	}
+	dashboard.Requests = requests
 	count, err := a.Proxy.StatsRepo.CountNotes()
 	if err != nil {
 		return dashboard, fmt.Errorf("counting notes : %w", err)

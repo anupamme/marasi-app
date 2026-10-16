@@ -2,7 +2,8 @@
   import { onMount } from "svelte";
   import { GetExtensionUI } from "../wailsjs/go/main/App";
   import { EventsOn } from "../wailsjs/runtime/runtime";
-  import { extensionElements, proxyItems } from "../../stores";
+  import { extensionElements } from "../../stores";
+  import { recentTraffic } from "../../stores/recentTrafficStore";
 
   export let extensionName = "";
   export let type = "";
@@ -11,8 +12,9 @@
   let elementTag = ""; // Unique tag name for this instance
   let customElement;
 
-  // reactively update elementProps when proxyItems change
-  $: elementProps = { items: $proxyItems };
+  // Extension components get the project's newest pairs (at most
+  // RECENT_TRAFFIC_LIMIT, oldest first), updated as traffic arrives.
+  $: elementProps = { items: $recentTraffic };
   onMount(() => {
     if (!extensionName) return;
 

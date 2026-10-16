@@ -1,6 +1,6 @@
 <script>
 	import { onMount } from "svelte";
-	import { activeProject, proxyItems } from "../../stores";
+	import { activeProject } from "../../stores";
 	import { CountNotes, GetScopeRules } from "../wailsjs/go/main/App";
 	import {
 		Edit2Icon,
@@ -30,8 +30,6 @@
 	let includeRulesCount = 0;
 	let excludeRulesCount = 0;
 
-	// Calculate total requests reactively
-	$: totalRequests = Object.values($proxyItems).length;
 	$: testCasesCount = $testCaseStore.length;
 	$: findingsCount = $findingStore.length;
 	$: criticalCount = $findingStore.filter(
@@ -50,6 +48,7 @@
 	function refreshDashboard() {
 		CountNotes().then((dashboard) => {
 			console.log(dashboard);
+			totalRequests = dashboard.Requests;
 			notes = dashboard.Notes;
 			launchpads = dashboard.Launchpads;
 			intercepted = dashboard.Interceptions || 0;

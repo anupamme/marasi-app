@@ -1,0 +1,42 @@
+// The request pickers in the finding and test case modals search the
+// project's traffic through QueryTraffic instead of holding every pair.
+
+/** How many pairs a picker offers at once. */
+export const PICKER_LIMIT = 100;
+
+/**
+ * The traffic query for the picker's text: the text anywhere in the host or
+ * the path. Quotes and backslashes are dropped so the text stays one value.
+ * "" lists every pair.
+ */
+export function requestPickerQuery(text) {
+  const value = (text ?? "").trim().replace(/["\\]/g, "");
+  if (!value) return "";
+  return `host = "*${value}*" OR path = "*${value}*"`;
+}
+
+/** A pair as a picker option: { label, value, ...pair }. */
+export function requestOption(pair) {
+  const label = `${pair.Method} ${pair.Scheme}://${pair.Host}${pair.Path}`;
+  return { label, value: pair.ID, ...pair };
+}
+
+/**
+ * The newest pairs of any content type that match the picker's text, as
+ * options. `queryTraffic` is the QueryTraffic binding.
+ */
+export async function searchRequests(queryTraffic, text) {
+  try {
+    const page = await queryTraffic({
+      Query: requestPickerQuery(text),
+      OrderBy: "requested_at desc",
+      Limit: PICKER_LIMIT,
+      IgnoreExclusion: true,
+    });
+    if (page.QueryError) return [];
+    return (page.Items ?? []).map(requestOption);
+  } catch (err) {
+    console.error("Searching requests failed:", err);
+    return [];
+  }
+}

@@ -16,7 +16,8 @@ import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
 import { readHighlights } from "./stores/highlightsStore";
-import { ledgerStore, liveViewItems } from "./stores/ledgerStore";
+import { ledgerStore } from "./stores/ledgerStore";
+import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
 
 // Startup
@@ -31,9 +32,6 @@ export const extensions = writable([]);
 export const extensions_ui = writable({});
 
 // Ledger Stores. The rest of the Ledger's state is in ledgerStore.
-export const sorting = writable([{ id: "ID", desc: true }]);
-// The live view, read by pages outside the Ledger.
-export const proxyItems = liveViewItems;
 
 // Logbook Stores
 export const logbookSearchInput = writable("");
@@ -124,7 +122,6 @@ export async function openProject() {
     message: "Loading " + get(activeProject) + "…",
     details: "",
   });
-  sorting.set([{ id: "ID", desc: true }]);
   logbookSearchInput.set("");
   reportMetadata.set({
     title: get(activeProject) + " Report",
@@ -148,6 +145,7 @@ export async function openProject() {
   workshopCode.set("");
   waypoints.set({});
   ledgerStore.clear();
+  recentTraffic.clear();
   // Project saved queries belong to the project just opened.
   savedQueriesStore.loadProject();
   extensions.set([]);
@@ -163,9 +161,10 @@ export async function openProject() {
     console.error("Failed to load project extensions:", err);
   }
 
-  // Reset items. The Ledger's live view and exclusion load in the
-  // background.
+  // Reset items. The Ledger's first page, its exclusion and the recent
+  // traffic for extensions load in the background.
   ledgerStore.populate();
+  recentTraffic.populate();
   await populateLogs();
   await populateScope();
   await populateCheckpoint();

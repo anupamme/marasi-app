@@ -52,8 +52,9 @@
 		drawerHeight,
 		lineWrap,
 		marasiConfig,
-		proxyItems,
 	} from "../../stores";
+	import { recentTraffic } from "../../stores/recentTrafficStore";
+	import { runTraffic } from "../../lib/armoryRunTraffic.js";
 
 	const drawerStore = getDrawerStore();
 	const modalStore = getModalStore();
@@ -168,12 +169,25 @@
 		? $armoryStore.runsByTemplate[selectedTemplateId] || []
 		: [];
 	$: selectedRun = runs.find((run) => run.ID === selectedRunId);
+	// The run's pairs load when it is chosen; the recent traffic adds the
+	// ones it sends after that.
+	let runTrafficId = null;
+	let loadedRunTraffic = [];
+	$: if ((selectedRun ? selectedRunId : null) !== runTrafficId) {
+		const runId = selectedRun ? selectedRunId : null;
+		runTrafficId = runId;
+		loadedRunTraffic = [];
+		if (runId != null) {
+			armoryStore
+				.getRunTraffic(runId)
+				.then((items) => {
+					if (runTrafficId === runId) loadedRunTraffic = items ?? [];
+				})
+				.catch((err) => console.error("Loading run traffic failed:", err));
+		}
+	}
 	$: requests = selectedRun
-		? ($proxyItems || []).filter(
-				(item) =>
-					String(item?.Metadata?.armory_run_id) ===
-					String(selectedRunId),
-			)
+		? runTraffic(loadedRunTraffic, $recentTraffic, selectedRunId)
 		: [];
 	$: armoryTraffic.set(requests);
 	$: if ($armoryStore.projectStateVersion !== projectStateVersion) {

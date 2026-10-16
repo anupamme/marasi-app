@@ -16,7 +16,6 @@ function fakeApi({ liveView = [], exclusion = [], results = {}, fail = new Set()
   let launchpads = 0;
   return {
     calls,
-    getLiveView: async () => liveView.map((pair) => ({ ...pair })),
     getExclusion: async () => [...exclusion],
     hasOwnExclusion: async () => true,
     getDefaultExclusion: async () => [],
@@ -26,8 +25,20 @@ function fakeApi({ liveView = [], exclusion = [], results = {}, fail = new Set()
       calls.push(["setExclusion", types]);
       exclusion = [...types];
     },
-    queryTraffic: async (query) =>
-      results[query] ?? { Items: [], NextCursor: null, IndexComplete: true },
+    // One page: the live view newest first without the excluded types, or
+    // a query's `results`.
+    queryTraffic: async ({ Query }) =>
+      Query === ""
+        ? {
+            Items: [...liveView]
+              .reverse()
+              .filter((pair) => !exclusion.includes(pair.ContentType))
+              .map((pair) => ({ ...pair })),
+            NextCursor: null,
+            AsOf: "z",
+            IndexComplete: true,
+          }
+        : results[Query] ?? { Items: [], NextCursor: null, IndexComplete: true },
     createLaunchpad: async (name, description) => {
       calls.push(["createLaunchpad", name, description]);
       launchpads += 1;
@@ -195,9 +206,9 @@ test("a new launchpad takes every pair; one pair names it after its request numb
   const many = await store.sendToNewLaunchpad(["b", "d"]);
   assert.deepEqual(many, { launchpadId: "lp2", done: 2, failed: 0 });
   assert.deepEqual(api.calls, [
-    ["createLaunchpad", "Request 2", "Launchpad for Request 2"],
+    ["createLaunchpad", "Request 4", "Launchpad for Request 4"],
     ["linkToLaunchpad", "b", "lp1"],
-    ["createLaunchpad", "2 requests", "Launchpad for Requests 2, 4"],
+    ["createLaunchpad", "2 requests", "Launchpad for Requests 4, 2"],
     ["linkToLaunchpad", "b", "lp2"],
     ["linkToLaunchpad", "d", "lp2"],
   ]);
@@ -208,7 +219,7 @@ test("one launchpad each, up to 25 pairs", async () => {
   const result = await store.sendToLaunchpadsEach(["a", "c"]);
   assert.deepEqual(result, { launchpadIds: ["lp1", "lp2"], done: 2, failed: 0 });
   assert.deepEqual(api.calls, [
-    ["createLaunchpad", "Request 1", "Launchpad for Request 1"],
+    ["createLaunchpad", "Request 5", "Launchpad for Request 5"],
     ["linkToLaunchpad", "a", "lp1"],
     ["createLaunchpad", "Request 3", "Launchpad for Request 3"],
     ["linkToLaunchpad", "c", "lp2"],

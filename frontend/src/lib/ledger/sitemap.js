@@ -4,7 +4,7 @@
 // (ADR-0040), such as https://api.acme.test/v2/users/{int}.
 //
 // Plain module: no Svelte component dependencies.
-import { appendToQuery, hasQueryTerm } from "../ledgerQueryFields.js";
+import { appendToQuery, hasQueryTerm, toggleQueryTerm } from "../ledgerQueryFields.js";
 
 /** The segments Marasi collapses ids into; the dock shows them in italics. */
 const PLACEHOLDERS = new Set(["{uuid}", "{int}", "{hash}"]);
@@ -119,10 +119,18 @@ export function chooseSitemapNode(text, name) {
   return wasActive ? rest : appendToQuery(rest.trimEnd(), sitemapTerm(name));
 }
 
-/** The query with `sitemap != "<name>"` added, unless it has it already. */
+/** True when the query leaves the node out with its own `sitemap != "<name>"` term. */
+export function isSitemapExcluded(text, name) {
+  return hasQueryTerm(text ?? "", sitemapExcludeTerm(name));
+}
+
+/**
+ * The query after the node's eye button: `sitemap != "<name>"` added, or,
+ * when the query has it already, removed, so a second click shows the node
+ * again.
+ */
 export function excludeSitemapNode(text, name) {
-  const term = sitemapExcludeTerm(name);
-  return hasQueryTerm(text, term) ? text : appendToQuery(text.trimEnd(), term);
+  return toggleQueryTerm(text, sitemapExcludeTerm(name));
 }
 
 /** The collapsed strip's label: the active node without its scheme. */

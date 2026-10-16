@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { activeSitemapNode, chooseSitemapNode, excludeSitemapNode, isPlaceholder, stripLabel } from "./sitemap.js";
+import { activeSitemapNode, chooseSitemapNode, excludeSitemapNode, isPlaceholder, isSitemapExcluded, stripLabel } from "./sitemap.js";
 
 const API = "https://api.acme.test";
 const V2 = "https://api.acme.test/v2";
@@ -37,9 +37,12 @@ test("a node name with a quote or backslash is escaped in its term", () => {
   assert.equal(chooseSitemapNode(text, name), "");
 });
 
-test("the eye-off button adds a sitemap != term once", () => {
+test("the eye button toggles a node's sitemap != term", () => {
   assert.equal(excludeSitemapNode("note:*", V2), `note:* sitemap != "${V2}"`);
-  assert.equal(excludeSitemapNode(`note:* sitemap != "${V2}"`, V2), `note:* sitemap != "${V2}"`);
+  assert.equal(excludeSitemapNode(`note:* sitemap != "${V2}"`, V2), "note:*", "a second click shows it again");
+  assert.equal(excludeSitemapNode(`sitemap != "${V2}" AND note:*`, V2), "note:*");
+  assert.equal(isSitemapExcluded(`note:* sitemap != "${V2}"`, V2), true);
+  assert.equal(isSitemapExcluded(`note:* sitemap != "${V2}"`, API), false);
 });
 
 test("the active node is the query's own sitemap = term", () => {

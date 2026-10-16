@@ -11,7 +11,10 @@ import {
   scrollToReveal,
   shortType,
   DEFAULT_SORT,
+  meetsFooter,
   meetsHeader,
+  positionLabel,
+  scrollToCenter,
   sortAria,
   sortMark,
   sortTitle,
@@ -76,6 +79,28 @@ test("a row meets the header when it is first, or scrolled to sit right under it
   assert.equal(meetsHeader(3, 66, 22), true);
   assert.equal(meetsHeader(3, 66.4, 22), true, "sub-pixel scrolling still counts");
   assert.equal(meetsHeader(3, 70, 22), false, "partly under the header: its top edge is hidden anyway");
+});
+
+test("a jump centres a row that is out of view, and leaves one in view alone", () => {
+  const view = { scrollTop: 0, height: 220, rowHeight: 22 };
+  assert.equal(scrollToCenter(view, 3), 0, "row 3 is already in view");
+  assert.equal(scrollToCenter(view, 50), 50 * 22 - (220 - 22) / 2);
+  assert.equal(scrollToCenter({ ...view, scrollTop: 2000 }, 2), 0, "never above the first row");
+  assert.equal(scrollToCenter(view, 9), 0, "row 9 just fits at the bottom");
+  assert.equal(scrollToCenter(view, 10), 10 * 22 - 99, "the next row is out of view, so it is centred");
+});
+
+test("a row meets the footer when its bottom edge sits on the viewport's bottom", () => {
+  assert.equal(meetsFooter(9, 0, 22, 220), true);
+  assert.equal(meetsFooter(8, 0, 22, 220), false);
+  assert.equal(meetsFooter(19, 220.3, 22, 220), true);
+});
+
+test("the status bar says which rows of the results are in view", () => {
+  assert.equal(positionLabel({ start: 0, first: 0, last: 36 }), "rows 1–37");
+  assert.equal(positionLabel({ start: 40000, first: 10, last: 46 }), "rows 40,011–40,047");
+  assert.equal(positionLabel({ start: null, first: 0, last: 36 }), "", "unknown after paging backward");
+  assert.equal(positionLabel({ start: 0, first: 0, last: 0, empty: true }), "", "nothing to place");
 });
 
 test("when rows change around it, the top row in view keeps its place", () => {

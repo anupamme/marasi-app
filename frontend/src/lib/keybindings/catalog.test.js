@@ -21,10 +21,10 @@ test("global navigation and Home actions keep today's labels and default keys", 
     ["global.go-armory", "Armory", "meta+6", "ctrl+6"],
     ["global.go-logbook", "Logbook", "meta+7", "ctrl+7"],
     ["global.go-workshop", "Workshop", "meta+8", "ctrl+8"],
-    ["global.go-settings", "Settings", "meta+s", "ctrl+s"],
+    ["global.go-settings", "Settings", "meta+,", "ctrl+,"],
     ["global.start-chrome", "Start Chrome", "meta+`", "ctrl+`"],
     ["global.download-certificate", "Download Certificate", "meta+d", "ctrl+d"],
-    ["global.copy-certificate", "Copy Certificate", "meta+,", "ctrl+,"],
+    ["global.copy-certificate", "Copy Certificate", "meta+shift+,", "ctrl+shift+,"],
     ["global.jump-to-toast", "Jump to Toast", "meta+.", "ctrl+."],
     ["global.open-project", "Open Project", "meta+o", "ctrl+o"],
     ["global.setup-listener", "Setup Listener", "meta+l", "ctrl+l"],
@@ -169,7 +169,7 @@ test("the keymap shows only the current platform's bindings", () => {
 
 test("the keymap finds the actions bound to a key", () => {
   const keymap = createKeymap(buildCatalog(), MACOS);
-  assert.deepEqual(keymap.actionsFor("meta+s"), ["global.go-settings"]);
+  assert.deepEqual(keymap.actionsFor("meta+,"), ["global.go-settings"]);
 });
 
 test("an override replaces an action's defaults and an empty override unbinds it", () => {

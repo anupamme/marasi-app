@@ -21,7 +21,9 @@
 		rowTemplate,
 		scrollToReveal,
 		shortType,
+		meetsFooter,
 		meetsHeader,
+		scrollToCenter,
 		sortAria,
 		sortMark,
 		sortTitle,
@@ -32,6 +34,8 @@
 	import { shortTime, statusClass } from "../launchpad/format.js";
 
 	/** The rows, top to bottom. */
+	/** True when the drawer's border runs right under the table. */
+	export let drawerBelow = false;
 	export let rows = [];
 	/** The focused pair's ID, or null. */
 	export let focusId = null;
@@ -125,15 +129,17 @@
 	}
 
 	/** Scrolls just enough to show the row with this ID. */
-	export function reveal(id) {
+	/**
+	 * Scrolls row `id` into view: as little as possible, or with `center`
+	 * (a jump) into the middle when it is out of view.
+	 */
+	export function reveal(id, { center = false } = {}) {
 		const index = rows.findIndex((row) => sameID(row.ID, id));
 		if (!viewport || index < 0) return;
 		// Measure now: the bound height lags on the first render.
 		const visible = Math.max(0, viewport.clientHeight - HEADER_HEIGHT);
-		viewport.scrollTop = scrollToReveal(
-			{ scrollTop: viewport.scrollTop, height: visible, rowHeight: ROW_HEIGHT },
-			index,
-		);
+		const view = { scrollTop: viewport.scrollTop, height: visible, rowHeight: ROW_HEIGHT };
+		viewport.scrollTop = center ? scrollToCenter(view, index) : scrollToReveal(view, index);
 	}
 	/** Scrolls a viewport's height down (1) or up (-1). */
 	export function page(direction) {
@@ -264,10 +270,13 @@
 			{#each shown as row, i (String(row.ID))}
 				{@const selected = selectedIds.has(String(row.ID))}
 				{@const focused = sameID(row.ID, focusId)}
+				{@const onDrawer = focused && drawerBelow && meetsFooter(range.start + i, scrollTop, ROW_HEIGHT, rowsHeight)}
 				{@const color = rowHighlight(row, palette)}
 				<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
 				<div
-					class="lg-row ledger-row relative border-b border-surface-300/50 dark:border-surface-700/60 {selected
+					class="lg-row ledger-row relative border-b {onDrawer
+						? 'border-transparent'
+						: 'border-surface-300/50 dark:border-surface-700/60'} {selected
 						? 'bg-primary-500/25'
 						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'}"
 					style="grid-template-columns: {template}; height: {ROW_HEIGHT}px;{color
@@ -290,7 +299,7 @@
 								ROW_HEIGHT,
 							)
 								? 'border-t-0'
-								: ''}"
+								: ''} {onDrawer ? 'border-b-0' : ''}"
 							aria-hidden="true"
 						></span>
 					{/if}

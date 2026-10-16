@@ -4,6 +4,7 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
+	import { tick } from "svelte";
 	import { get, writable } from "svelte/store";
 	import { lineWrap } from "../../stores";
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
@@ -72,7 +73,7 @@
 	import { activeHighlightCount, HIGHLIGHT_TERMS } from "../../lib/ledger/highlights.js";
 	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
-	import { rowHighlight } from "../../lib/ledger/table.js";
+	import { positionLabel, rowHighlight } from "../../lib/ledger/table.js";
 	import { launchpadStore } from "../../stores/launchpadStore";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
 	import { highlightMigrating, highlightPalette, renameHighlight } from "../../stores/highlightsStore";
@@ -114,6 +115,9 @@
 	const results = select(ledgerStore, (state) => state.results);
 	const sort = select(ledgerStore, (state) => state.sort);
 	const statusCount = select(ledgerStore, countLabel);
+	// The window rows in view, as the table reports them.
+	let inView = { first: 0, last: 0 };
+	$: position = positionLabel({ start: $results.start, ...inView, empty: $rows.length === 0 });
 	const indexNote = select(ledgerStore, indexWarning);
 	const newKind = select(ledgerStore, newMatchesKind);
 	// The live view: no query typed or running, newest first.
@@ -160,13 +164,21 @@
 		table?.scrollToTop();
 	}
 
-	function selectAndReveal(id) {
+	// A jump to a pair: it is selected and, once the drawer it opens has
+	// taken its space, scrolled to the middle when it was out of view. The
+	// pair being jumped to skips the keep-in-view scroll below, which would
+	// put it at an edge first.
+	let jumpingTo = null;
+	async function selectAndReveal(id) {
+		jumpingTo = String(id);
 		ledgerStore.selectPair(id);
-		table?.reveal(id);
+		await tick();
+		table?.reveal(id, { center: true });
+		jumpingTo = null;
 	}
 
 	// The focused row stays in view as the selection moves.
-	$: if (focusID != null) table?.reveal(focusID);
+	$: if (focusID != null && String(focusID) !== jumpingTo) table?.reveal(focusID);
 
 	function closeDrawer() {
 		ledgerStore.clearSelection();
@@ -701,22 +713,38 @@
 		handler: () => dock?.toggle(),
 	};
 
+	// Search, Filter and Open request, with the drawer open or closed.
+	const focusQuery = { icon: SearchIcon, handler: () => toggleFocus(document.getElementById("searchBox")) };
+	const focusExclusion = { icon: FilterIcon, handler: () => typesMenu?.focusFind() };
+	const openRequest = (toggleAction) => ({
+		icon: SquareArrowUpRightIcon,
+		handler: () => {
+			new Promise((resolve) => {
+				toggleModal("MenuInput", {
+					type: "component",
+					component: "MenuInput",
+					toggleAction,
+					title: "Open request",
+					response: resolve,
+				});
+			}).then((requestIndex) => {
+				if (!requestIndex) return;
+				ledgerStore.openNumber(parseInt(requestIndex)).then((pair) => {
+					if (pair) selectAndReveal(pair.ID);
+					else toastStore.trigger({ message: `No request ${requestIndex}`, background: "variant-filled-warning", timeout: 2000 });
+				});
+			});
+		},
+	});
+
 	let ledgerMenu = [
 		{
 			actionId: "ledger.drawer-closed.toggle-settings",
 			icon: ToggleLeftIcon,
 			handler: () => (queryFieldsOpen = !queryFieldsOpen),
 		},
-		{
-			actionId: "ledger.drawer-closed.focus-query",
-			icon: SearchIcon,
-			handler: () => toggleFocus(document.getElementById("searchBox")),
-		},
-		{
-			actionId: "ledger.drawer-closed.focus-exclusion",
-			icon: FilterIcon,
-			handler: () => typesMenu?.focusFind(),
-		},
+		{ actionId: "ledger.drawer-closed.focus-query", ...focusQuery },
+		{ actionId: "ledger.drawer-closed.focus-exclusion", ...focusExclusion },
 		{
 			actionId: "ledger.drawer-closed.next-page",
 			icon: ArrowRightIcon,
@@ -727,28 +755,7 @@
 			icon: ArrowLeftIcon,
 			handler: () => table?.page(-1),
 		},
-		{
-			actionId: "ledger.drawer-closed.open-request",
-			icon: SquareArrowUpRightIcon,
-			handler: () => {
-				if (drawerOpen) return;
-				new Promise((resolve) => {
-					toggleModal("MenuInput", {
-						type: "component",
-						component: "MenuInput",
-						toggleAction: "ledger.drawer-closed.open-request",
-						title: "Open request",
-						response: resolve,
-					});
-				}).then((requestIndex) => {
-					if (!requestIndex) return;
-					ledgerStore.openNumber(parseInt(requestIndex)).then((pair) => {
-						if (pair) selectAndReveal(pair.ID);
-						else toastStore.trigger({ message: `No request ${requestIndex}`, background: "variant-filled-warning", timeout: 2000 });
-					});
-				});
-			},
-		},
+		{ actionId: "ledger.drawer-closed.open-request", ...openRequest("ledger.drawer-closed.open-request") },
 		{ actionId: "ledger.drawer-closed.toggle-sidebar", ...toggleSidebar },
 	];
 
@@ -758,6 +765,9 @@
 	};
 
 	let drawerMenu = [
+		{ actionId: "ledger.drawer-open.focus-query", ...focusQuery },
+		{ actionId: "ledger.drawer-open.focus-exclusion", ...focusExclusion },
+		{ actionId: "ledger.drawer-open.open-request", ...openRequest("ledger.drawer-open.open-request") },
 		{
 			actionId: "ledger.drawer-open.next-request",
 			icon: ArrowRightIcon,
@@ -1017,6 +1027,7 @@
 		<LedgerSitemap
 			store={sitemapStore}
 			activeNode={sitemapNode}
+			queryText={$queryText}
 			bind:findInput={sitemapFind}
 			on:choose={(e) => applyQuery(chooseSitemapNode($queryText, e.detail))}
 			on:exclude={(e) => applyQuery(excludeSitemapNode($queryText, e.detail))}
@@ -1178,6 +1189,7 @@
 				>
 					<LedgerTable
 						bind:this={table}
+						drawerBelow={drawerOpen}
 						rows={$rows}
 						focusId={focusID}
 						selectedIds={$selection.ids}
@@ -1192,7 +1204,10 @@
 						on:step={(e) => ledgerStore.stepSelection(e.detail.step, { extend: e.detail.extend })}
 						on:selectall={() => ledgerStore.selectAll()}
 						on:menukey={openRowMenuAtFocus}
-						on:viewport={(e) => ledgerStore.setViewport(e.detail)}
+						on:viewport={(e) => {
+							inView = e.detail;
+							ledgerStore.setViewport(e.detail);
+						}}
 						on:sort={(e) => ledgerStore.sortBy(e.detail)}
 						on:menu={(e) => {
 							ledgerStore.contextRow(e.detail.id);
@@ -1259,7 +1274,9 @@
 		<div
 			class="ledger-status flex h-6 flex-none items-center gap-4 border-t border-surface-300-600-token bg-surface-100 px-3 text-[11px] tabular-nums dark:bg-surface-800"
 		>
-			<span id="ledgerCount" class="opacity-80">{$statusCount}</span>
+			<span id="ledgerCount" class="opacity-80"
+				>{$statusCount}{#if position}<span id="ledgerPosition" class="opacity-70">{` · ${position}`}</span>{/if}</span
+			>
 			{#if $hiddenCount}
 				<span class="opacity-60">{$hiddenCount.toLocaleString()} hidden by type</span>
 			{/if}

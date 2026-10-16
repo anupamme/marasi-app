@@ -13,7 +13,7 @@
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Settings`, or press `Command+S` from any route. The page shows `Marasi Settings`, the build version, and a sections list (`nav[aria-label="Settings sections"]`): Keyboard & Editor (default), Listener, Waypoints, Browser, Highlights, Content Types, Maintenance and About. Only the selected section is rendered; pick one with `{"click":"nav[aria-label=\"Settings sections\"] button","hasText":"Waypoints"}`.
+Select the rail item titled `Settings`, or press `Command+,` from any route (`⌘S` is the Ledger's Search). The page shows `Marasi Settings`, the build version, and a sections list (`nav[aria-label="Settings sections"]`): Keyboard & Editor (default), Listener, Waypoints, Browser, Highlights, Content Types, Maintenance and About. Only the selected section is rendered; pick one with `{"click":"nav[aria-label=\"Settings sections\"] button","hasText":"Waypoints"}`.
 
 Shortcuts: every menu shortcut for this feature is a catalog action in context `global` (Settings has no page menu) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
 

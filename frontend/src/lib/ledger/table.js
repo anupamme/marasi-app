@@ -75,6 +75,37 @@ export function meetsHeader(index, scrollTop, rowHeight) {
 }
 
 /**
+ * The status bar's position readout: which rows of the results are in view,
+ * "rows 40,011–40,047". `start` is the loaded window's offset in the results
+ * (null when unknown) and `first`/`last` the window rows in view. "" when
+ * unknown or empty.
+ */
+export function positionLabel({ start, first, last, empty = false }) {
+  if (start == null || empty) return "";
+  return `rows ${(start + first + 1).toLocaleString()}–${(start + last + 1).toLocaleString()}`;
+}
+
+/**
+ * True when row `index`'s bottom edge sits on the viewport's bottom (`height`
+ * px of rows below the header), so its focus frame needs no bottom edge:
+ * the drawer's border or the status bar is there.
+ */
+export function meetsFooter(index, scrollTop, rowHeight, height) {
+  return (index + 1) * rowHeight === Math.round(scrollTop) + Math.round(height);
+}
+
+/**
+ * The scroll position, measured from the first row, that a jump to row
+ * `index` uses: unchanged when the row is fully in view, else the one that
+ * puts the row in the middle (never above the first row).
+ */
+export function scrollToCenter({ scrollTop, height, rowHeight }, index) {
+  const top = index * rowHeight;
+  if (top >= scrollTop && top + rowHeight <= scrollTop + height) return scrollTop;
+  return Math.max(0, top - (height - rowHeight) / 2);
+}
+
+/**
  * The rows a windowed list renders: those in view and `overscan` more on
  * either side. `scrollTop` is measured from the first row. `end` is exclusive.
  */

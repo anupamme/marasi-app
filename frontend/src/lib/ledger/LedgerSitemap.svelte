@@ -11,6 +11,7 @@
 		ChevronRight,
 		ChevronsDownUp,
 		CircleAlert,
+		Eye,
 		EyeOff,
 		FileText,
 		Folder,
@@ -20,13 +21,15 @@
 		Search,
 		X,
 	} from "lucide-svelte";
-	import { isPlaceholder, sitemapExcludeTerm, sitemapTerm } from "./sitemap.js";
+	import { isPlaceholder, isSitemapExcluded, sitemapExcludeTerm, sitemapTerm } from "./sitemap.js";
 	import { primaryVariant } from "../launchpad/format.js";
 	import { hostCountLabel, sitemapRows, sitemapScope, STEP } from "../../stores/sitemapStore";
 
 	export let store;
 	/** The node the query narrows to, or null. */
 	export let activeNode = null;
+	/** The query's text: the eye button shows which nodes it leaves out. */
+	export let queryText = "";
 	/** The find box, focused by the dock strip's search button. */
 	export let findInput = null;
 
@@ -135,6 +138,7 @@
 				{@const n = row.node}
 				{@const origin = row.depth === 0}
 				{@const active = n.Name === activeNode}
+				{@const hidden = isSitemapExcluded(queryText, n.Name)}
 				<div
 					data-sitemap-node={n.Name}
 					class="ledger-sitemap-node group flex items-center gap-1 border-l-4 pr-2 {origin
@@ -174,13 +178,20 @@
 					>
 						{origin ? n.Segment : "/" + n.Segment}
 					</button>
+					<!-- The eye toggles the node's sitemap != term; while the query
+					     leaves the node out, it stays shown, in the primary colour. -->
 					<button
-						class="hidden flex-none opacity-50 hover:opacity-100 group-hover:block"
-						title="Leave out of the query: {sitemapExcludeTerm(n.Name)}"
-						aria-label="Leave {n.Name} out of the query"
+						class="ledger-sitemap-hide flex-none {hidden
+							? 'text-primary-500'
+							: 'hidden opacity-50 hover:opacity-100 group-hover:block'}"
+						title={hidden
+							? `Show again: remove ${sitemapExcludeTerm(n.Name)}`
+							: `Leave out of the query: ${sitemapExcludeTerm(n.Name)}`}
+						aria-label={hidden ? `Show ${n.Name} again` : `Leave ${n.Name} out of the query`}
+						aria-pressed={hidden}
 						on:click={() => dispatch("exclude", n.Name)}
 					>
-						<EyeOff size={11} />
+						{#if hidden}<Eye size={11} />{:else}<EyeOff size={11} />{/if}
 					</button>
 					{#if n.Errors}
 						<span class="flex-none text-[10px] text-error-500" title="Server errors (5xx)">{count(n.Errors)}</span>

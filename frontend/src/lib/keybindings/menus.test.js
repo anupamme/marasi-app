@@ -48,13 +48,19 @@ const websocketUpgrade = { metadata: { protocol: "websocket" } };
 
 const mac = () => createDispatcher({ catalog: buildCatalog(), platform: MACOS });
 
-test("⌘⇧F filters the Ledger with its drawer closed and creates a finding with it open", () => {
+test("⌘S searches, ⌘F filters and ⌘⇧O opens a request on the Ledger, drawer open or closed", () => {
   const dispatcher = mac();
-  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
-  assert.equal(
-    dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger", requestDrawer())),
-    "ledger.drawer-open.create-finding",
-  );
+  const closed = on("/ledger");
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), closed), "ledger.drawer-closed.focus-query");
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), open), "ledger.drawer-open.focus-query");
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), closed), "ledger.drawer-closed.focus-exclusion");
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), open), "ledger.drawer-open.focus-exclusion");
+  assert.equal(dispatcher.resolve(cmdShift("O", "KeyO"), open), "ledger.drawer-open.open-request");
+  // ⌘⇧F still creates a finding with the drawer open; Settings moved to ⌘,.
+  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), open), "ledger.drawer-open.create-finding");
+  assert.equal(dispatcher.resolve(cmd(",", "Comma"), closed), "global.go-settings");
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), on("/launchpad")), null, "⌘S is the Ledger's alone now");
 });
 
 test("with a selection, the row menu's shortcuts reach its actions", () => {
@@ -82,7 +88,7 @@ test("⌘\\ toggles the Ledger's sitemap dock with the drawer open or closed", (
 test("a Skeleton drawer over the Ledger, such as an extension's, is not the Ledger drawer", () => {
   const dispatcher = mac();
   const state = { ...on("/ledger"), drawer: { open: true, id: "extension-drawer", meta: {} } };
-  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), state), "ledger.drawer-closed.focus-exclusion");
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), state), "ledger.drawer-closed.focus-exclusion");
 });
 
 test("opening the Ledger drawer replaces the page's actions; closing it restores them", () => {
@@ -98,11 +104,16 @@ test("opening the Ledger drawer replaces the page's actions; closing it restores
   assert.deepEqual(calls, ["ledger.drawer-closed.toggle-settings"]);
 });
 
-test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer", () => {
+test("⌘⇧G opens the WebSocket stream only from an upgrade request's drawer", () => {
   const dispatcher = mac();
-  const press = () => cmdShift("O", "KeyO");
-  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.open-request");
+  const press = () => cmdShift("G", "KeyG");
+  assert.equal(dispatcher.resolve(cmdShift("O", "KeyO"), on("/ledger")), "ledger.drawer-closed.open-request");
   assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), null);
+  assert.equal(
+    dispatcher.resolve(cmdShift("O", "KeyO"), on("/ledger", requestDrawer(websocketUpgrade))),
+    "ledger.drawer-open.open-request",
+    "⌘⇧O opens a request on an upgrade row too",
+  );
   assert.equal(
     dispatcher.resolve(press(), on("/ledger", requestDrawer(websocketUpgrade))),
     "ledger.drawer-open.websocket.open-stream",
@@ -113,9 +124,9 @@ test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer",
   );
 });
 
-test("⌘⇧O does not open a stream for a failed or dropped upgrade", () => {
+test("⌘⇧G does not open a stream for a failed or dropped upgrade", () => {
   const dispatcher = mac();
-  const press = () => cmdShift("O", "KeyO");
+  const press = () => cmdShift("G", "KeyG");
   for (const state of ["failed", "dropped"]) {
     const meta = { metadata: { protocol: "websocket", "websocket.state": state } };
     assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer(meta))), null, state);
@@ -179,7 +190,8 @@ test("global actions stay available on pages and in drawers", () => {
 test("Windows/Linux page shortcuts use Ctrl", () => {
   const dispatcher = createDispatcher({ catalog: buildCatalog(), platform: WINDOWS_LINUX });
   const ctrlShift = (key, code) => keydown(key, code, { ctrlKey: true, shiftKey: true });
-  assert.equal(dispatcher.resolve(ctrlShift("F", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
+  const ctrl = (key, code) => keydown(key, code, { ctrlKey: true });
+  assert.equal(dispatcher.resolve(ctrl("f", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
   assert.equal(dispatcher.resolve(ctrlShift("F", "KeyF"), on("/ledger", requestDrawer())), "ledger.drawer-open.create-finding");
   assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger")), null);
 });
@@ -375,14 +387,15 @@ test("a modal closes on its opening action's binding for the current platform", 
   assert.equal(dispatcher.isModalToggle(cmdShift("F", "KeyF"), toggle, armory), false);
 });
 
-test("the WebSocket modal closes on ⌘⇧O except where its open tab binds the key", () => {
+test("the WebSocket modal closes on ⌘⇧G from every tab; ⌘⇧O stays the Inject tab's", () => {
   const dispatcher = mac();
   dispatcher.register("websocket.inject.cycle-opcode", () => {});
   const toggle = "ledger.drawer-open.websocket.open-stream";
-  const press = () => cmdShift("O", "KeyO");
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("stream")), true);
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("checkpoint")), true);
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("inject")), false);
+  const press = () => cmdShift("G", "KeyG");
+  for (const tab of ["stream", "checkpoint", "inject"]) {
+    assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal(tab)), true, tab);
+  }
+  assert.equal(dispatcher.isModalToggle(cmdShift("O", "KeyO"), toggle, websocketModal("inject")), false);
 });
 
 test("an extension's menu actions run only on that extension's page", () => {

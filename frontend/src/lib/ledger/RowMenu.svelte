@@ -34,7 +34,7 @@
 	import { placeMenu, placeSubmenu } from "./menuPlacement.js";
 	import { filterMenu, isPartialSelection, isRunnable, isSwatchRow, menuFor, selectionSummary } from "./rowMenu.js";
 	import { menuDispatcher } from "../keybindings/app.js";
-	import { formatBinding } from "../keybindings/keys.js";
+	import { shortcutLabel } from "../keybindings/keys.js";
 	import { statusClass } from "../launchpad/format.js";
 	import { plural } from "./counts.js";
 	import { statusText } from "./table.js";
@@ -285,10 +285,7 @@
 
 	// The item's current shortcut from the keybinding profile, if it has one.
 	function shortcut(item, keymap) {
-		if (item.kbd) return item.kbd;
-		if (!item.actionId) return "";
-		const binding = keymap.bindingsFor(item.actionId)[0];
-		return binding ? formatBinding(binding, keymap.platform) : "";
+		return item.kbd || shortcutLabel(keymap, item.actionId);
 	}
 
 	// A ⌘A selection counts every match, not just the loaded pairs. While it

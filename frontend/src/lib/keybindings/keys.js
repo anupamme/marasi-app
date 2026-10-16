@@ -224,3 +224,14 @@ export function formatBinding(binding, platform) {
   else if (isSingleCharacter(key)) keyLabel = key.toUpperCase();
   return [...parts.map((m) => labels[m] ?? m), keyLabel].join("+");
 }
+
+/**
+ * The display label of an action's current shortcut in `keymap` (the
+ * dispatcher's live keymap, `$menuDispatcher`): its first binding, or ""
+ * when it has none.
+ */
+export function shortcutLabel(keymap, actionId) {
+  if (!actionId) return "";
+  const binding = keymap.bindingsFor(actionId)[0];
+  return binding ? formatBinding(binding, keymap.platform) : "";
+}

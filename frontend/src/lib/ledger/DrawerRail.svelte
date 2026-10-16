@@ -88,16 +88,17 @@
 	$: ExpandIcon = expanded ? PanelLeftClose : PanelLeftOpen;
 	$: hasResponse = Number(pair.StatusCode) > 0;
 
-	// The note button's dot: the primary colour when the pair has a note,
-	// amber while an edit is unsaved or saving, red when a save failed
-	// (closing the note, or the next edit, tries again).
+	// The note button's dot: neutral grey when the pair has a note (the
+	// primary colour is red, so it would read as the failure), amber while
+	// an edit is unsaved or saving, red when a save failed (closing the
+	// note, or the next edit, tries again).
 	$: noteDot =
 		noteStatus === "failed"
 			? "bg-error-500"
 			: noteStatus !== "saved"
 				? "bg-warning-500"
 				: hasNote
-					? "bg-primary-500"
+					? "bg-surface-500 dark:bg-surface-300"
 					: "";
 	$: noteTitle =
 		noteStatus === "failed"
@@ -110,7 +111,8 @@
 						? "Note"
 						: "Add a note";
 	const STATUS = { unsaved: "Edited", saving: "Saving…", failed: "Not saved" };
-	// The column's Note heading takes the same colour while the note is open.
+	// While the note is open, the column's Note heading follows the dot:
+	// undimmed when saved, amber or red otherwise.
 	$: noteTint =
 		pane !== "note"
 			? ""
@@ -118,7 +120,7 @@
 				? "text-error-500 !opacity-100"
 				: noteStatus !== "saved"
 					? "text-warning-500 !opacity-100"
-					: "text-primary-500 !opacity-100";
+					: "text-surface-900 dark:text-surface-50 !opacity-100";
 	const INDEXING = "Indexing data: some bodies may not show prettified yet";
 	const indexingDot = "absolute right-1.5 top-1 h-1.5 w-1.5 rounded-full bg-warning-500";
 

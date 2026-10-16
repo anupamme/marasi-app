@@ -18,6 +18,7 @@ import { launchpadStore } from "./stores/launchpadStore";
 import { readHighlights } from "./stores/highlightsStore";
 import { ledgerStore } from "./stores/ledgerStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
+import { savedQueriesStore } from "./stores/savedQueriesStore";
 
 // Startup
 export const appState = writable({
@@ -145,6 +146,8 @@ export async function openProject() {
   waypoints.set({});
   ledgerStore.clear();
   recentTraffic.clear();
+  // Project saved queries belong to the project just opened.
+  savedQueriesStore.loadProject();
   extensions.set([]);
   extensions_ui.set({});
   testCaseStore.clear();

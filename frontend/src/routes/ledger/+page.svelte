@@ -43,6 +43,8 @@
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
 	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
+	import SavedQueriesMenu from "../../lib/ledger/SavedQueriesMenu.svelte";
+	import { readyMadeQueries } from "../../stores/savedQueriesStore";
 	import { appendToQuery } from "../../lib/ledgerQueryFields";
 	import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions } from "../../lib/keybindings/app.js";
@@ -573,6 +575,13 @@
 	}
 	$: activeMarks = activeMarkCount($queryText);
 
+	// Runs a saved query the menu chose, or returns to the live view for "".
+	function applySavedQuery(text) {
+		if (!text) return ledgerStore.clearQuery();
+		ledgerStore.setQueryText(text);
+		ledgerStore.runQuery(text);
+	}
+
 	// Closes the toolbar's panels on a click outside them.
 	function onWindowPointerDown(event) {
 		if (queryFieldsOpen && !event.target.closest?.(".ledger-query-fields, #ledgerQueryFieldsToggle")) {
@@ -618,6 +627,7 @@
 				<LedgerQueryBox
 					value={$queryText}
 					error={queryBoxError}
+					readyMade={$readyMadeQueries}
 					on:change={(e) => {
 						ledgerStore.setQueryText(e.detail);
 						ledgerStore.scheduleQuery(e.detail);
@@ -670,6 +680,11 @@
 					<CircleHelp size={15} />
 				</button>
 			</div>
+			<SavedQueriesMenu
+				queryText={$queryText}
+				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}
+				on:apply={(e) => applySavedQuery(e.detail)}
+			/>
 			<ToolbarMenu
 				id="ledgerMarks"
 				label="Marks"

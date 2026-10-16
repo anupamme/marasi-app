@@ -17,6 +17,8 @@
 	export let panelClass = "w-72";
 	/** Prefix for the button's and panel's ids. */
 	export let id;
+	/** Keeps the menu open on a click outside, such as in a dialog the menu opened. */
+	export let stayOpen = false;
 
 	const dispatch = createEventDispatcher();
 	let root;
@@ -33,7 +35,7 @@
 	}
 
 	function onWindowPointerDown(event) {
-		if (open && root && !root.contains(event.target)) close();
+		if (open && !stayOpen && root && !root.contains(event.target)) close();
 	}
 
 	function onKeydown(event) {
@@ -62,7 +64,7 @@
 		{#if icon}<svelte:component this={icon} size={15} class="opacity-70" />{/if}
 		{label}
 		{#if badge !== ""}
-			<span class="badge {primary} px-1.5 py-0 text-[10px]">{badge}</span>
+			<span class="badge {primary} max-w-[9rem] truncate px-1.5 py-0 text-[10px]">{badge}</span>
 		{/if}
 	</button>
 	{#if open}

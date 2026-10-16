@@ -62,6 +62,10 @@ type Config struct {
 	contentTypeExclusion []string
 	// highlights is the 8 highlight colours and app labels (highlights.go).
 	highlights []Highlight
+	// savedQueries and hiddenBuiltinQueries are the app-wide saved queries
+	// and the hidden built-in ids (saved_queries.go).
+	savedQueries         []SavedQuery
+	hiddenBuiltinQueries []string
 }
 
 const appConfigName = "marasi_appconfig"
@@ -201,6 +205,8 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 		log.Printf("[!] %s in %s left untouched, using the seeded default: %v", contentTypeExclusionConfigKey, config.path(), err)
 	}
 	config.highlights = parseHighlights(documentValue(doc, highlightsKey))
+	config.savedQueries = parseSavedQueries(documentValue(doc, savedQueriesKey))
+	config.hiddenBuiltinQueries = parseHiddenBuiltins(documentValue(doc, hiddenBuiltinQueriesKey))
 
 	if err := loadTestCases(appConfigDir, config); err != nil {
 		return nil, fmt.Errorf("loading test cases: %w", err)

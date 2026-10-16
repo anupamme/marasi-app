@@ -10,7 +10,7 @@
 
 ## How to get to it (user POV)
 
-Launch Marasi or select the rail item titled `Home`. The command shortcut is `Command+1`. A ready scratchpad shows `scratchpad Project Dashboard`, listener address and port, `Open Project`, `Download Certificate`, `Start Chrome`, and an application log table with ID, Level, Message, Request Response ID, Extension, and Timestamp columns.
+Launch Marasi or select the rail item titled `Home`. The command shortcut is `Command+1`. While Marasi counts the project (`CountNotes`) and reads the scope rules, those cards show pulsing ghost bars (`.dashboard-ghost`) in place of their figures; Test Cases and Findings come from the app's stores and show at once. A ready scratchpad shows `scratchpad Project Dashboard`, listener address and port, `Open Project`, `Download Certificate`, `Start Chrome`, and an application log table with ID, Level, Message, Request Response ID, Extension, and Timestamp columns.
 
 Shortcuts: every menu shortcut for this feature is a catalog action in context `global` (Home has no page menu; its buttons share the global actions) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
 

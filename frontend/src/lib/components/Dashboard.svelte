@@ -42,26 +42,46 @@
 	// onMount doubled CountNotes, which holds up every other call to Marasi
 	// while it counts a large project.)
 	$: if ($activeProject) {
-		console.log("Active");
 		refreshDashboard();
 	}
 
+	// While a figure is read its card shows a ghost bar instead; a newer
+	// refresh (a project switch) wins over a slower older one.
+	let countsLoading = true;
+	let scopeLoading = true;
+	let refreshes = 0;
+	const ghost =
+		"dashboard-ghost inline-block h-7 w-16 animate-pulse rounded-sm bg-surface-300 align-middle dark:bg-surface-600";
+
 	// Refresh dashboard data
 	function refreshDashboard() {
-		CountNotes().then((dashboard) => {
-			console.log(dashboard);
-			totalRequests = dashboard.Requests;
-			notes = dashboard.Notes;
-			launchpads = dashboard.Launchpads;
-			intercepted = dashboard.Interceptions || 0;
-		});
+		const run = ++refreshes;
+		countsLoading = true;
+		scopeLoading = true;
+		CountNotes()
+			.then((dashboard) => {
+				if (run !== refreshes) return;
+				totalRequests = dashboard.Requests;
+				notes = dashboard.Notes;
+				launchpads = dashboard.Launchpads;
+				intercepted = dashboard.Interceptions || 0;
+			})
+			.catch((err) => console.error("Counting the dashboard failed:", err))
+			.finally(() => {
+				if (run === refreshes) countsLoading = false;
+			});
 
-		GetScopeRules().then((scopeData) => {
-			console.log(scopeData);
-			defaultAllow = scopeData.defaultAllow;
-			includeRulesCount = scopeData.includeRules.length;
-			excludeRulesCount = scopeData.excludeRules.length;
-		});
+		GetScopeRules()
+			.then((scopeData) => {
+				if (run !== refreshes) return;
+				defaultAllow = scopeData.defaultAllow;
+				includeRulesCount = scopeData.includeRules.length;
+				excludeRulesCount = scopeData.excludeRules.length;
+			})
+			.catch((err) => console.error("Reading the scope rules failed:", err))
+			.finally(() => {
+				if (run === refreshes) scopeLoading = false;
+			});
 	}
 
 </script>
@@ -91,7 +111,7 @@
 							Total Requests
 						</p>
 						<p class="text-3xl font-bold">
-							{totalRequests}
+							{#if countsLoading}<span class={ghost}></span>{:else}{totalRequests}{/if}
 						</p>
 					</div>
 				</div>
@@ -116,7 +136,7 @@
 							Notes
 						</p>
 						<p class="text-3xl font-bold">
-							{notes}
+							{#if countsLoading}<span class={ghost}></span>{:else}{notes}{/if}
 						</p>
 					</div>
 				</div>
@@ -141,7 +161,7 @@
 							Launchpads
 						</p>
 						<p class="text-3xl font-bold">
-							{launchpads}
+							{#if countsLoading}<span class={ghost}></span>{:else}{launchpads}{/if}
 						</p>
 					</div>
 				</div>
@@ -166,7 +186,7 @@
 							Intercepted
 						</p>
 						<p class="text-3xl font-bold">
-							{intercepted}
+							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted}{/if}
 						</p>
 					</div>
 				</div>
@@ -249,9 +269,9 @@
 							Default Policy
 						</p>
 						<p class="text-3xl font-bold">
-							{defaultAllow
-								? "Allow"
-								: "Deny"}
+							{#if scopeLoading}<span class={ghost}></span>{:else}{defaultAllow
+									? "Allow"
+									: "Deny"}{/if}
 						</p>
 					</div>
 				</div>
@@ -276,7 +296,7 @@
 							Include Rules
 						</p>
 						<p class="text-3xl font-bold">
-							{includeRulesCount}
+							{#if scopeLoading}<span class={ghost}></span>{:else}{includeRulesCount}{/if}
 						</p>
 					</div>
 				</div>
@@ -301,7 +321,7 @@
 							Exclude Rules
 						</p>
 						<p class="text-3xl font-bold">
-							{excludeRulesCount}
+							{#if scopeLoading}<span class={ghost}></span>{:else}{excludeRulesCount}{/if}
 						</p>
 					</div>
 				</div>

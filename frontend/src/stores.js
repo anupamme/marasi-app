@@ -17,6 +17,7 @@ import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
 import { readHighlights } from "./stores/highlightsStore";
 import { ledgerStore, liveViewItems } from "./stores/ledgerStore";
+import { savedQueriesStore } from "./stores/savedQueriesStore";
 
 // Startup
 export const appState = writable({
@@ -147,6 +148,8 @@ export async function openProject() {
   workshopCode.set("");
   waypoints.set({});
   ledgerStore.clear();
+  // Project saved queries belong to the project just opened.
+  savedQueriesStore.loadProject();
   extensions.set([]);
   extensions_ui.set({});
   testCaseStore.clear();

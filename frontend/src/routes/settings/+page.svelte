@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Wrench, X } from "lucide-svelte";
+	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Search, Wrench, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -43,9 +43,7 @@
 	import { select } from "../../lib/storeSelect.js";
 	import { groupBuilding, jobLabel, jobsStore, jobStatus } from "../../stores/jobsStore";
 	import {
-		groupOf,
-		isExclusionValue,
-		normalizeContentType,
+		exclusionGroups,
 	} from "../../lib/ledger/contentTypes.js";
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
@@ -76,14 +74,14 @@
 	let chromePaths = [];
 	let chromeProfiles = [];
 	let buildInfo = null;
-	let newContentType = "";
+	// Settings → Content Types' one box: it filters the list, and Enter adds
+	// what it holds when that is a new type/subtype or type/*.
+	let contentTypeFind = "";
 
 	// The app default content-type exclusion, which every project follows
 	// until it keeps its own list from the Ledger's Types menu.
 	const defaultExclusion = select(ledgerStore, (state) => state.defaultExclusion ?? []);
-	$: newContentTypeValue = normalizeContentType(newContentType);
-	$: canAddContentType =
-		isExclusionValue(newContentTypeValue) && !$defaultExclusion.includes(newContentTypeValue);
+	$: contentTypeList = exclusionGroups($defaultExclusion, contentTypeFind);
 
 	$: primary = primaryVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
@@ -196,9 +194,9 @@
 		});
 	}
 	function addDefaultContentType() {
-		if (!canAddContentType) return;
-		saveDefaultExclusion([...$defaultExclusion, newContentTypeValue]);
-		newContentType = "";
+		if (!contentTypeList.addable) return;
+		saveDefaultExclusion([...$defaultExclusion, contentTypeList.addable]);
+		contentTypeFind = "";
 	}
 
 	// Rebuilding resets the job and redoes it over every pair; the notices
@@ -452,65 +450,78 @@
 					</table>
 				</div>
 			{:else if section === "content-types"}
-				<h3 class="text-xl font-bold">Content Types</h3>
-				<p class="mb-4 text-sm opacity-70">
-					The Ledger hides these content types in every project that follows the app default. A value is
-					an exact type (text/css) or a whole major type (image/*). A project whose list is edited in the
-					Ledger's Types menu keeps its own until it is reset to the default.
-				</p>
-				<div class="table-container">
-					<table class="table" id="settingsDefaultContentTypes">
-						<thead>
-							<tr>
-								<th class="w-[60%]">Content type</th>
-								<th class="w-[25%]">Group</th>
-								<th class="w-[15%]"></th>
-							</tr>
-						</thead>
-						<tbody>
-							{#each $defaultExclusion as type (type)}
-								<tr data-type={type}>
-									<td class="font-mono">{type}</td>
-									<td class="opacity-70">{groupOf(type)?.label ?? ""}</td>
-									<td class="text-center">
+				<div class="sticky -top-4 z-10 -mt-4 bg-surface-50-900-token pb-3 pt-4">
+					<h3 class="text-xl font-bold">Content Types</h3>
+					<p class="mb-3 text-sm opacity-70">
+						The Ledger hides these types in every project that follows the app default. A project
+						whose list is edited in the Ledger's Types menu keeps its own until it is reset.
+					</p>
+					<div class="flex items-stretch gap-2">
+						<div class="input-group input-group-divider flex-1 grid-cols-[auto_minmax(0,1fr)]">
+							<div class="input-group-shim"><Search size={15} /></div>
+							<input
+								id="settingsNewContentType"
+								type="text"
+								placeholder="Filter, or add a type (text/css or image/*)"
+								class="font-mono text-sm"
+								spellcheck="false"
+								autocomplete="off"
+								bind:value={contentTypeFind}
+								on:keydown={(e) => {
+									if (e.key === "Enter") addDefaultContentType();
+									if (e.key === "Escape") contentTypeFind = "";
+								}}
+							/>
+						</div>
+						<button
+							type="button"
+							class="btn shrink-0 {primary}"
+							disabled={!contentTypeList.addable}
+							on:click={addDefaultContentType}
+							>{contentTypeList.addable ? `Add ${contentTypeList.addable}` : "Add"}</button
+						>
+					</div>
+					<p class="mt-1.5 text-xs opacity-60" id="settingsContentTypeCount">
+						{#if contentTypeList.exists}
+							Already hidden.
+						{:else if contentTypeFind.trim()}
+							{contentTypeList.shown} of {$defaultExclusion.length} match.{contentTypeList.addable
+								? ` Enter adds ${contentTypeList.addable}.`
+								: ""}
+						{:else}
+							{$defaultExclusion.length} types hidden.
+						{/if}
+					</p>
+				</div>
+				<div id="settingsDefaultContentTypes" class="columns-[18rem] gap-x-8">
+					{#each contentTypeList.groups as group (group.label)}
+						<section data-group={group.label} class="mb-4 break-inside-avoid">
+							<h4 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-60">
+								{group.label} <span class="font-normal">{group.types.length}</span>
+							</h4>
+							<ul>
+								{#each group.types as type (type)}
+									<li
+										data-type={type}
+										class="group flex items-center justify-between gap-2 border-b border-surface-300/60 py-1 pl-1 dark:border-surface-600/60"
+									>
+										<span class="truncate font-mono text-sm" title={type}>{type}</span>
 										<button
 											type="button"
-											class={iconButton}
+											class="rounded p-0.5 opacity-40 hover:bg-surface-300 hover:opacity-100 group-hover:opacity-80 dark:hover:bg-surface-600"
 											title="Remove {type}"
 											aria-label="Remove {type}"
 											on:click={() =>
 												saveDefaultExclusion($defaultExclusion.filter((t) => t !== type))}
-											><X size={15} /></button
+											><X size={14} /></button
 										>
-									</td>
-								</tr>
-							{/each}
-						</tbody>
-						<tfoot>
-							<tr>
-								<td colspan="2">
-									<input
-										id="settingsNewContentType"
-										type="text"
-										placeholder="Enter a content type (type/subtype or type/*)"
-										class="{tableField} font-mono"
-										spellcheck="false"
-										autocomplete="off"
-										bind:value={newContentType}
-										on:keydown={(e) => e.key === "Enter" && addDefaultContentType()}
-									/>
-								</td>
-								<td>
-									<button
-										type="button"
-										class="btn w-full {primary}"
-										disabled={!canAddContentType}
-										on:click={addDefaultContentType}>Add</button
-									>
-								</td>
-							</tr>
-						</tfoot>
-					</table>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{:else}
+						{#if !contentTypeFind.trim()}<p class="text-sm opacity-60">The Ledger hides no types.</p>{/if}
+					{/each}
 				</div>
 			{:else if section === "browser"}
 				<h3 class="text-xl font-bold">Browser</h3>

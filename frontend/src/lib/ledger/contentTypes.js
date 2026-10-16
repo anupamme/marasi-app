@@ -182,3 +182,31 @@ export function typeLists(counts, exclusion, find = "") {
   const addable = isExclusionValue(candidate) && !known ? candidate : null;
   return { shown, hidden, idle, addable };
 }
+
+/**
+ * The exclusion as Settings → Content Types lists it, filtered by `find`.
+ *
+ * `find` matches a value or its group label, ignoring case. Returns:
+ * - groups: [{ label, types }] in menu order with "Other" last, each
+ *   group's values sorted; empty groups are left out;
+ * - shown: how many values the groups list;
+ * - exists: `find`, normalised, is already in the exclusion;
+ * - addable: `find`, normalised, when it is a type or major/* not yet in it.
+ */
+export function exclusionGroups(exclusion, find = "") {
+  const needle = find.trim().toLowerCase();
+  const byLabel = new Map([...CONTENT_TYPE_GROUPS.map((g) => [g.label, []]), ["Other", []]]);
+  for (const value of [...new Set(exclusion)].sort()) {
+    const label = groupOf(value)?.label ?? "Other";
+    if (!needle || value.includes(needle) || label.toLowerCase().includes(needle)) byLabel.get(label).push(value);
+  }
+  const groups = [...byLabel].filter(([, types]) => types.length).map(([label, types]) => ({ label, types }));
+  const candidate = normalizeContentType(needle);
+  const exists = exclusion.includes(candidate);
+  return {
+    groups,
+    shown: groups.reduce((n, g) => n + g.types.length, 0),
+    exists,
+    addable: isExclusionValue(candidate) && !exists ? candidate : null,
+  };
+}

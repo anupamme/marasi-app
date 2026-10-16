@@ -11,6 +11,7 @@ import {
   toggleType,
   typeLabel,
   typeLists,
+  exclusionGroups,
 } from "./contentTypes.js";
 
 const group = (label) => CONTENT_TYPE_GROUPS.find((g) => g.label === label);
@@ -169,4 +170,32 @@ test("an exclusion value is a type/subtype or type/*, in any case", () => {
   assert.ok(!isExclusionValue("image"));
   assert.ok(!isExclusionValue("image/*x"));
   assert.ok(!isExclusionValue(""));
+});
+
+const labels = (r) => r.groups.map((g) => [g.label, g.types]);
+
+test("Settings lists the exclusion by group, in menu order, Other last, types sorted", () => {
+  const r = exclusionGroups(["video/mp4", "application/x-protobuf", "image/png", "audio/*", "image/gif"], "");
+  assert.deepEqual(labels(r), [
+    ["Images", ["image/gif", "image/png"]],
+    ["Audio", ["audio/*"]],
+    ["Video", ["video/mp4"]],
+    ["Other", ["application/x-protobuf"]],
+  ]);
+  assert.equal(r.shown, 5);
+});
+
+test("the Settings box filters by type or group label, ignoring case", () => {
+  const exclusion = ["image/png", "font/woff2", "text/css"];
+  assert.deepEqual(labels(exclusionGroups(exclusion, "WOFF")), [["Fonts", ["font/woff2"]]]);
+  assert.deepEqual(labels(exclusionGroups(exclusion, "styles")), [["Styles", ["text/css"]]]);
+  assert.equal(exclusionGroups(exclusion, "zzz").shown, 0);
+});
+
+test("the Settings box can add a valid value the list doesn't have", () => {
+  assert.equal(exclusionGroups(["image/png"], " Application/X-Protobuf; q=1").addable, "application/x-protobuf");
+  assert.equal(exclusionGroups(["image/png"], "image/png").addable, null);
+  assert.equal(exclusionGroups(["image/png"], "image/png").exists, true);
+  assert.equal(exclusionGroups(["image/png"], "image").addable, null);
+  assert.equal(exclusionGroups(["image/png"], "").addable, null);
 });

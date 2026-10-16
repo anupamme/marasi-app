@@ -16,7 +16,8 @@ export const jobsStore = createJobsStore(
   },
   {
     onFinished: (group) => {
-      if (group === "index") ledgerStore.reload();
+      // refresh() keeps the view where it is.
+      if (group === "index") ledgerStore.refresh();
       if (group === "sitemap") sitemapStore.reload();
     },
   },

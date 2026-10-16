@@ -197,6 +197,11 @@
 		return viewport?.querySelector(selector)?.getBoundingClientRect() ?? null;
 	}
 
+	// Dimmed cells use a translucent text colour, not opacity: WebKit paints
+	// an element with opacity as its own layer, sized to the cell's
+	// cap-trimmed box, which cut off the tops of its glyphs.
+	const dim = "text-black/60 dark:text-surface-50/60";
+
 	// The full content type under the pointer, in one fixed-positioned
 	// tooltip for the whole table so the cell doesn't clip it (as the
 	// badges' "+N" list does). It hangs from the cell's right edge: Type
@@ -276,23 +281,23 @@
 					on:pointerenter={() => onRowPointerEnter(row.ID)}
 					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
 				>
-					<span class="text-right tabular-nums opacity-60"
+					<span class="text-right tabular-nums {dim}"
 						>{row.Number || ""}</span
 					>
 					<span class="flex items-center !overflow-visible !pl-1"><RowBadges {row} /></span>
-					<span class="opacity-60">{shortTime(row.RequestedAt)}</span>
+					<span class={dim}>{shortTime(row.RequestedAt)}</span>
 					<span class={METHOD_CLASS[row.Method] ?? ""}>{row.Method ?? ""}</span>
 					<span title={row.Host}>{row.Host ?? ""}</span>
 					<span title={row.Path}>{row.Path ?? ""}</span>
 					<span class="text-right {statusClass(row.StatusCode)}">{statusText(row.StatusCode)}</span>
 					<!-- svelte-ignore a11y-no-static-element-interactions -->
 					<span
-						class="ledger-type opacity-60"
+						class="ledger-type {dim}"
 						aria-label={row.ContentType || undefined}
 						on:mouseenter={(event) => showTypeTip(event, row.ContentType)}
 						on:mouseleave={() => (typeTip = null)}>{shortType(row.ContentType)}</span
 					>
-					<span class="text-right opacity-60">{formatSize(row.Length)}</span>
+					<span class="text-right {dim}">{formatSize(row.Length)}</span>
 				</div>
 			{/each}
 		</div>

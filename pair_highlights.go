@@ -42,29 +42,17 @@ type HighlightMigration struct {
 // many pairs changed. marasi publishes no event for it: the caller refreshes
 // its own view.
 func (a *App) SetHighlight(sel domain.Selection, highlight int) (int, error) {
-	traffic, err := a.Proxy.GetTrafficRepo()
-	if err != nil {
-		return 0, fmt.Errorf("setting highlight: %w", err)
-	}
-	changed, err := traffic.SetHighlight(sel, highlight)
-	if err != nil {
-		return 0, fmt.Errorf("setting highlight %d: %w", highlight, err)
-	}
-	return changed, nil
+	return a.bulk(fmt.Sprintf("setting highlight %d", highlight), func(repo domain.TrafficRepository) (int, error) {
+		return repo.SetHighlight(sel, highlight)
+	})
 }
 
 // ClearHighlight removes the highlight of every pair in sel and returns how
 // many pairs had one.
 func (a *App) ClearHighlight(sel domain.Selection) (int, error) {
-	traffic, err := a.Proxy.GetTrafficRepo()
-	if err != nil {
-		return 0, fmt.Errorf("clearing highlights: %w", err)
-	}
-	cleared, err := traffic.ClearHighlight(sel)
-	if err != nil {
-		return 0, fmt.Errorf("clearing highlights: %w", err)
-	}
-	return cleared, nil
+	return a.bulk("clearing highlights", func(repo domain.TrafficRepository) (int, error) {
+		return repo.ClearHighlight(sel)
+	})
 }
 
 // MigrateOldHighlights turns the project's old hex highlights into highlight

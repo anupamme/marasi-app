@@ -105,6 +105,33 @@ func TestResetContentTypeExclusionFollowsTheAppDefaultAgain(t *testing.T) {
 	assertStrings(t, []string{"text/plain"}, projectExclusion(t, app))
 }
 
+func TestHasOwnContentTypeExclusionTellsWhetherTheProjectKeepsItsOwnList(t *testing.T) {
+	app := newScratchpadApp(t)
+	hasOwn := func() bool {
+		t.Helper()
+		own, err := app.HasOwnContentTypeExclusion()
+		if err != nil {
+			t.Fatalf("reading whether the project has its own exclusion: %v", err)
+		}
+		return own
+	}
+	if hasOwn() {
+		t.Fatal("wanted a new project to follow the app default")
+	}
+	if err := app.SetContentTypeExclusion([]string{}); err != nil {
+		t.Fatalf("setting project exclusion: %v", err)
+	}
+	if !hasOwn() {
+		t.Fatal("wanted an edited project, even with an empty list, to keep its own")
+	}
+	if err := app.ResetContentTypeExclusion(); err != nil {
+		t.Fatalf("resetting project exclusion: %v", err)
+	}
+	if hasOwn() {
+		t.Fatal("wanted a reset project to follow the app default again")
+	}
+}
+
 func TestQueryTrafficExcludesAWholeMajorType(t *testing.T) {
 	app := newScratchpadApp(t)
 	page := capturePair(t, app, capturedPair{host: "a.test", path: "/", statusCode: 200, contentType: "text/html"})

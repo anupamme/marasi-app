@@ -19,7 +19,7 @@ if (!mode || !Number.isInteger(port) || !appURL || !evidenceDir || !Number.isInt
 // always visible, so a bare feature name proves nothing.
 const routes = {
 	dashboard: { selector: '[title="Home"]', path: "/", expected: "Project Dashboard" },
-	ledger: { selector: '[title="Ledger"]', path: "/ledger", expected: "Sitemap" },
+	ledger: { selector: '[title="Ledger"]', path: "/ledger", expected: "Saved queries" },
 	compass: { selector: '[title="Compass"]', path: "/compass", expected: "Compass Settings" },
 	checkpoint: { selector: '[title="Checkpoint"]', path: "/checkpoint", expected: "Checkpoint Settings" },
 	launchpad: { selector: '[title="Launchpad"]', path: "/launchpad", expected: "Group by status" },
@@ -196,16 +196,51 @@ async function capture(prefix, state = null) {
 	return captured;
 }
 
-async function clickPoint(point, button = "left") {
-	await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
-	await send("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button, clickCount: 1 });
-	await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button, clickCount: 1 });
+// CDP modifier bits for a click held with keys down.
+const MODIFIER_BITS = { alt: 1, ctrl: 2, meta: 4, shift: 8 };
+
+// clicks 2 is a double-click: two press/release pairs, the second with
+// clickCount 2, so the page sees click, click, dblclick. `modifiers` is
+// CDP's bitmask (see clickModifiers).
+async function clickPoint(point, button = "left", clicks = 1, modifiers = 0) {
+	await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y, modifiers });
+	for (let clickCount = 1; clickCount <= clicks; clickCount += 1) {
+		await send("Input.dispatchMouseEvent", { type: "mousePressed", x: point.x, y: point.y, button, clickCount, modifiers });
+		await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button, clickCount, modifiers });
+	}
 }
 
 async function clickTarget(spec, options = {}) {
 	const point = await waitForTarget(spec, options);
-	await clickPoint(point, options.button);
+	await clickPoint(point, options.button, options.clicks, options.modifiers);
 	return point;
+}
+
+// ["cmd", "shift"] as CDP's bitmask; cmd is Meta on macOS, Ctrl elsewhere.
+function clickModifiers(names = []) {
+	let bits = 0;
+	for (const name of names) {
+		const key = name === "cmd" ? (PRIMARY_IS_CTRL ? "ctrl" : "meta") : name;
+		if (!(key in MODIFIER_BITS)) throw new Error(`unknown modifier ${name}: use cmd, shift, alt, ctrl or meta`);
+		bits |= MODIFIER_BITS[key];
+	}
+	return bits;
+}
+
+// Press on one match, move onto another with the button held, release there.
+async function dragTarget(from, to, { timeoutMs } = {}) {
+	const start = await waitForTarget(from, { timeoutMs });
+	const end = await waitForTarget(to, { timeoutMs });
+	await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: start.x, y: start.y });
+	await send("Input.dispatchMouseEvent", { type: "mousePressed", x: start.x, y: start.y, button: "left", buttons: 1, clickCount: 1 });
+	const steps = 4;
+	for (let i = 1; i <= steps; i += 1) {
+		const x = start.x + ((end.x - start.x) * i) / steps;
+		const y = start.y + ((end.y - start.y) * i) / steps;
+		await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
+	}
+	await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: end.x, y: end.y, button: "left", buttons: 0, clickCount: 1 });
+	return { from: start, to: end };
 }
 
 // Recipes write cmd+/⌘ for the primary modifier. On macOS that is Meta; on
@@ -475,7 +510,22 @@ async function runStep(step) {
 		const spec = step.click ? { selector: step.click, ...scope } : { text: step.text, ...scope };
 		const button = step.button || "left";
 		if (!["left", "right"].includes(button)) throw new Error(`button must be left or right: ${JSON.stringify(step)}`);
-		return { click: await clickTarget(spec, { timeoutMs, nth: step.nth, button }) };
+		const clicks = step.clickCount ?? 1;
+		if (![1, 2].includes(clicks)) throw new Error(`clickCount must be 1 or 2: ${JSON.stringify(step)}`);
+		const modifiers = clickModifiers(step.modifiers);
+		return { click: await clickTarget(spec, { timeoutMs, nth: step.nth, button, clicks, modifiers }) };
+	}
+	if (step.drag) {
+		const from = { selector: step.drag, ...scope };
+		const to = { selector: step.to ?? step.drag, ...(step.within ? { within: step.within } : {}), ...(step.toHasText ? { hasText: step.toHasText } : {}) };
+		return { drag: await dragTarget(from, to, { timeoutMs }) };
+	}
+	if (step.hover) {
+		// A real pointer move onto the one actionable match, for controls that
+		// only show on hover. The pointer stays there until the next click.
+		const point = await waitForTarget({ selector: step.hover, ...scope }, { timeoutMs, nth: step.nth });
+		await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
+		return { hover: point };
 	}
 	if (step.key) return void await pressShortcut(step.key);
 	if (typeof step.insert === "string") return void await insertText(step.insert);

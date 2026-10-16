@@ -166,10 +166,7 @@ test("a highlighted row takes its highlight's colour from the palette", () => {
   assert.equal(rowHighlight({}, palette), null);
 });
 
-test("an old hex highlight in metadata shows its palette colour, or the hex itself", () => {
+test("an old hex highlight in metadata isn't drawn; the migration makes it a number", () => {
   const palette = effectivePalette([{ color: "#111111" }]);
-  assert.equal(rowHighlight({ Metadata: { highlight: "#EF4444" } }, palette), "#111111");
-  assert.equal(rowHighlight({ Metadata: { highlight: "#3B82F6" } }, palette), "#3b82f6");
-  assert.equal(rowHighlight({ Metadata: { highlight: "#123456" } }, palette), "#123456");
-  assert.equal(rowHighlight({ Metadata: { highlight: "" } }, palette), null);
+  assert.equal(rowHighlight({ Metadata: { highlight: "#EF4444" } }, palette), null);
 });

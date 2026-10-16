@@ -1,20 +1,26 @@
-// Saved queries: the app-wide ones (the app config YAML), and the built-ins
-// that ship with the app, which can be hidden. Backend calls go through the
-// injected `api`, so tests run against a fake:
+// Saved queries: the open project's own (client settings
+// `ledger.saved_query.<uuid>`, each { name, query, order }, ADR 0004), the
+// app-wide ones (the app config YAML), and the built-ins that ship with the
+// app, which can be hidden. Backend calls go through the injected `api`, so
+// tests run against a fake:
 //
 //   getAppSavedQueries()        -> { queries: [{ id, name, query, order }], hidden_builtins: [id] }
 //   saveAppSavedQueries(list)   -> the saved list, in order
 //   setHiddenBuiltins(ids)      -> the saved ids
 //   countMatches(query)         -> { Count, Capped, QueryError } (CountTraffic)
+//   listClientSettings(prefix)  -> [{ key, value }] (the project's settings)
+//   setClientSetting(key, value), deleteClientSetting(key)
 //
 // Each writable source is an adapter in `sources` with add, update and
-// remove; its entries live in state.queries[source]. A project source
-// (client settings `ledger.saved_query.<uuid>`) joins as another adapter and
-// another entry in SOURCES.
+// remove; its entries live in state.queries[source].
 import { writable } from "svelte/store";
+
+/** The client-setting key prefix of the project's saved queries. */
+export const PROJECT_QUERY_PREFIX = "ledger.saved_query.";
 
 /** The menu's groups, in order. Only "builtin" is read-only. */
 export const SOURCES = [
+  { key: "project", label: "This project" },
   { key: "app", label: "All projects" },
   { key: "builtin", label: "Built-in" },
 ];
@@ -39,7 +45,7 @@ const UNNAMED_LENGTH = 32;
 function initialState() {
   return {
     // Each writable source's entries ({ id, name, query, order, source }), in order.
-    queries: { app: [] },
+    queries: { project: [], app: [] },
     // Ids of the hidden built-ins.
     hiddenBuiltins: [],
     // Match counts by query text: { count, capped }, or { error } for a
@@ -85,6 +91,31 @@ export function canSaveQuery(state, text, valid) {
   return Boolean(valid && text.trim() && !activeSavedQuery(state, text));
 }
 
+/**
+ * The project's saved queries from its client settings, in order, skipping
+ * unusable values so one bad key does not hide the others.
+ */
+function parseProjectQueries(settings) {
+  const out = [];
+  for (const setting of settings ?? []) {
+    let value = setting?.value;
+    try {
+      if (typeof value === "string") value = JSON.parse(value);
+    } catch {
+      value = null;
+    }
+    const id = String(setting?.key ?? "").slice(PROJECT_QUERY_PREFIX.length);
+    const name = typeof value?.name === "string" ? value.name.trim() : "";
+    const query = typeof value?.query === "string" ? value.query.trim() : "";
+    if (!id || !name || !query) {
+      console.error(`skipping unusable saved query ${setting?.key}`);
+      continue;
+    }
+    out.push({ id, name, query, order: Number.isFinite(value.order) ? value.order : 0 });
+  }
+  return out.sort((a, b) => a.order - b.order);
+}
+
 /** The name a query saved without one gets. */
 function defaultName(query) {
   return query.length > UNNAMED_LENGTH ? `${query.slice(0, UNNAMED_LENGTH).trimEnd()}…` : query;
@@ -108,9 +139,26 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
     setSource("app", saved ?? []);
   }
 
+  // One project query per client setting, so a change rewrites only its key.
+  const projectKey = (entry) => `${PROJECT_QUERY_PREFIX}${entry.id}`;
+  async function writeProject(entry) {
+    const { name, query, order } = entry;
+    await api.setClientSetting(projectKey(entry), { name, query, order });
+    const others = current.queries.project.filter((q) => q.id !== entry.id);
+    setSource("project", [...others, entry].sort((a, b) => a.order - b.order));
+  }
+
   // The writable sources. Each change goes to the backend first; the menu
   // changes only once the write succeeds.
   const sources = {
+    project: {
+      add: writeProject,
+      update: writeProject,
+      remove: async (entry) => {
+        await api.deleteClientSetting(projectKey(entry));
+        setSource("project", current.queries.project.filter((q) => q.id !== entry.id));
+      },
+    },
     app: {
       add: (entry) => writeApp([...current.queries.app, entry]),
       update: (entry) => writeApp(current.queries.app.map((q) => (q.id === entry.id ? entry : q))),
@@ -118,9 +166,29 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
     },
   };
 
+  let projectRun = 0;
+  /**
+   * Reads the open project's saved queries, replacing the last project's.
+   * A newer read wins; a failed read leaves the project with none.
+   */
+  async function loadProject() {
+    const run = ++projectRun;
+    let entries = [];
+    try {
+      entries = parseProjectQueries(await api.listClientSettings(PROJECT_QUERY_PREFIX));
+    } catch (error) {
+      console.error("reading the project's saved queries:", error);
+    }
+    if (run === projectRun) setSource("project", entries);
+  }
+
   let loading = null;
-  /** Reads the app-wide saved queries once; later calls share the first read. */
+  /**
+   * Reads the project's saved queries, and the app-wide ones once; later
+   * calls share the first app-wide read.
+   */
   function load() {
+    const project = loadProject();
     loading ??= (async () => {
       try {
         const saved = await api.getAppSavedQueries();
@@ -131,22 +199,41 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
         loading = null;
       }
     })();
-    return loading;
+    return Promise.all([project, loading]).then(() => {});
   }
 
   /** Saves `query` as `name` in `source`, after its other queries. Resolves to the entry. */
   async function save(name, query, source = "app") {
     const text = query.trim();
-    const entries = current.queries[source];
     const entry = {
       id: newId(),
       name: name.trim() || defaultName(text),
       query: text,
-      order: entries.reduce((max, q) => Math.max(max, q.order + 1), 0),
+      order: nextOrder(source),
       source,
     };
     await sources[source].add(entry);
     return entry;
+  }
+
+  const nextOrder = (source) => current.queries[source].reduce((max, q) => Math.max(max, q.order + 1), 0);
+
+  /**
+   * Moves a saved query to `target` ("project" or "app"), after its
+   * queries: writes the new copy, then deletes the old one. If the delete
+   * fails the new copy is taken back, so one copy remains, and it rejects.
+   */
+  async function move(entry, target) {
+    if (entry.source === target || !sources[target]) return;
+    const { hidden, ...stored } = entry;
+    const moved = { ...stored, order: nextOrder(target), source: target };
+    await sources[target].add(moved);
+    try {
+      await sources[entry.source].remove(entry);
+    } catch (error) {
+      await sources[target].remove(moved).catch((undo) => console.error("taking back a moved query:", undo));
+      throw error;
+    }
   }
 
   /** Renames a saved query; a blank name changes nothing. */
@@ -195,5 +282,5 @@ export function createSavedQueriesStore(api, { newId = () => crypto.randomUUID()
     }
   }
 
-  return { subscribe, load, save, rename, remove, setBuiltinHidden, loadCounts };
+  return { subscribe, load, loadProject, save, rename, remove, move, setBuiltinHidden, loadCounts };
 }

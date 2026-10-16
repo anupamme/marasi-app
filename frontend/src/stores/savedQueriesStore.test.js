@@ -13,11 +13,28 @@ import {
 
 // An in-memory config file: the app-wide saved queries and hidden built-in
 // ids, as the Go side keeps them (sorted by order on save), plus match
-// counts by query text. Calls are recorded in `api.calls`.
-function fakeApi({ queries = [], hidden = [], counts = {} } = {}) {
+// counts by query text, plus the open project's client settings
+// (`api.settings`, key -> value). Calls are recorded in `api.calls`.
+function fakeApi({ queries = [], hidden = [], counts = {}, settings = {} } = {}) {
   const calls = [];
   const api = {
     calls,
+    settings,
+    listClientSettings: async (prefix) =>
+      Object.keys(api.settings)
+        .filter((key) => key.startsWith(prefix))
+        .sort()
+        .map((key) => ({ client: "marasi-app", key, value: structuredClone(api.settings[key]) })),
+    setClientSetting: async (key, value) => {
+      calls.push(["setClientSetting", key, value]);
+      api.settings = { ...api.settings, [key]: structuredClone(value) };
+      return { client: "marasi-app", key, value };
+    },
+    deleteClientSetting: async (key) => {
+      calls.push(["deleteClientSetting", key]);
+      const { [key]: _, ...rest } = api.settings;
+      api.settings = rest;
+    },
     getAppSavedQueries: async () => ({
       queries: queries.map((q) => ({ ...q })),
       hidden_builtins: [...hidden],
@@ -55,6 +72,12 @@ async function loadedStore(api) {
 }
 
 const names = (items) => items.map((q) => q.name);
+
+// A project saved query as a client setting, keyed ledger.saved_query.<uuid>.
+const projectSetting = (id, name, query, order) => ({
+  [`ledger.saved_query.${id}`]: { name, query, order },
+});
+const group = (store, key) => savedQueryGroups(get(store)).find((g) => g.key === key);
 
 test("the built-ins are the spec's six", () => {
   assert.deepEqual(
@@ -280,4 +303,157 @@ test("load reads the config once; a failed read leaves the built-ins", async () 
 test("hidden ids that no built-in has don't count as hidden built-ins", async () => {
   const store = await loadedStore(fakeApi({ hidden: ["writes", "retired-built-in"] }));
   assert.equal(hiddenBuiltinCount(get(store)), 1);
+});
+
+test("load groups the project's own queries under This project, first", async () => {
+  const api = fakeApi({
+    queries: [noise],
+    settings: {
+      ...projectSetting("p2", "Admin denied", "status_code = 403", 1),
+      ...projectSetting("p1", "Login", 'path = "/login"', 0),
+      "ledger.exclusion": ["image/*"],
+    },
+  });
+  const store = await loadedStore(api);
+
+  const groups = savedQueryGroups(get(store));
+  assert.deepEqual(
+    groups.map((g) => g.label),
+    ["This project", "All projects", "Built-in"],
+  );
+  assert.deepEqual(
+    groups[0].items.map((q) => [q.id, q.name, q.query, q.source]),
+    [
+      ["p1", "Login", 'path = "/login"', "project"],
+      ["p2", "Admin denied", "status_code = 403", "project"],
+    ],
+  );
+});
+
+test("saving to the project writes one client setting after its other queries", async () => {
+  const api = fakeApi({
+    queries: [noise],
+    settings: projectSetting("p1", "Login", 'path = "/login"', 0),
+  });
+  const store = await loadedStore(api);
+
+  const saved = await store.save(" Admin denied ", "status_code = 403", "project");
+
+  assert.equal(saved.source, "project");
+  assert.deepEqual(api.calls, [
+    ["setClientSetting", `ledger.saved_query.${saved.id}`, { name: "Admin denied", query: "status_code = 403", order: 1 }],
+  ]);
+  assert.deepEqual(names(group(store, "project").items), ["Login", "Admin denied"]);
+  assert.deepEqual(names(group(store, "app").items), ["Third-party noise"], "the app list is untouched");
+});
+
+test("renaming and deleting a project query rewrite only its own key", async () => {
+  const api = fakeApi({
+    settings: {
+      ...projectSetting("p1", "Login", 'path = "/login"', 0),
+      ...projectSetting("p2", "Admin denied", "status_code = 403", 1),
+    },
+  });
+  const store = await loadedStore(api);
+
+  await store.rename(group(store, "project").items[1], "Forbidden");
+  assert.deepEqual(api.calls.at(-1), [
+    "setClientSetting",
+    "ledger.saved_query.p2",
+    { name: "Forbidden", query: "status_code = 403", order: 1 },
+  ]);
+  assert.deepEqual(names(group(store, "project").items), ["Login", "Forbidden"]);
+
+  await store.remove(group(store, "project").items[0]);
+  assert.deepEqual(api.calls.at(-1), ["deleteClientSetting", "ledger.saved_query.p1"]);
+  assert.deepEqual(names(group(store, "project").items), ["Forbidden"]);
+  assert.deepEqual(Object.keys(api.settings), ["ledger.saved_query.p2"]);
+});
+
+test("moving a query between this project and all projects leaves exactly one copy", async () => {
+  const api = fakeApi({
+    queries: [noise, marked],
+    settings: projectSetting("p1", "Login", 'path = "/login"', 0),
+  });
+  const store = await loadedStore(api);
+
+  await store.move(group(store, "app").items[0], "project");
+  assert.deepEqual(names(group(store, "project").items), ["Login", "Third-party noise"]);
+  assert.deepEqual(names(group(store, "app").items), ["Highlighted"]);
+  assert.deepEqual(api.settings["ledger.saved_query.n"], { name: "Third-party noise", query: noise.query, order: 1 });
+  assert.deepEqual(names((await api.getAppSavedQueries()).queries), ["Highlighted"]);
+
+  await store.move(group(store, "project").items[0], "app");
+  assert.deepEqual(names(group(store, "project").items), ["Third-party noise"]);
+  assert.deepEqual(names(group(store, "app").items), ["Highlighted", "Login"]);
+  assert.deepEqual(Object.keys(api.settings), ["ledger.saved_query.n"]);
+  assert.deepEqual(
+    (await api.getAppSavedQueries()).queries.map((q) => [q.id, q.name, q.order]),
+    [
+      ["m", "Highlighted", 1],
+      ["p1", "Login", 2],
+    ],
+  );
+});
+
+test("opening another project shows only that project's queries", async () => {
+  const api = fakeApi({ queries: [noise], settings: projectSetting("p1", "Login", 'path = "/login"', 0) });
+  const store = await loadedStore(api);
+
+  api.settings = projectSetting("q1", "Uploads", 'path:"/upload"', 0);
+  await store.loadProject();
+  assert.deepEqual(names(group(store, "project").items), ["Uploads"]);
+
+  api.settings = {};
+  await store.load();
+  assert.equal(group(store, "project"), undefined);
+  assert.deepEqual(names(group(store, "app").items), ["Third-party noise"]);
+
+  api.listClientSettings = async () => {
+    throw new Error("no project is open");
+  };
+  api.settings = projectSetting("q1", "Uploads", 'path:"/upload"', 0);
+  await store.loadProject();
+  assert.equal(group(store, "project"), undefined, "a failed read shows none");
+});
+
+test("a project read that a newer one overtakes is dropped", async () => {
+  const api = fakeApi();
+  const store = await loadedStore(api);
+  let release;
+  const gate = new Promise((resolve) => (release = resolve));
+  const list = api.listClientSettings;
+  api.listClientSettings = (prefix) => gate.then(() => [{ key: "ledger.saved_query.old", value: { name: "Old", query: "a", order: 0 } }]);
+  const first = store.loadProject();
+  api.listClientSettings = list;
+  api.settings = projectSetting("new", "New", "b", 0);
+  await store.loadProject();
+  release();
+  await first;
+  assert.deepEqual(names(group(store, "project").items), ["New"]);
+});
+
+test("unusable project values are skipped", async () => {
+  const api = fakeApi({
+    settings: {
+      "ledger.saved_query.ok": { name: "Ok", query: "a", order: 0 },
+      "ledger.saved_query.noquery": { name: "No query", query: " ", order: 1 },
+      "ledger.saved_query.junk": "not an object",
+    },
+  });
+  const store = await loadedStore(api);
+  assert.deepEqual(names(group(store, "project").items), ["Ok"]);
+});
+
+test("a move whose delete fails takes back the new copy and rejects", async () => {
+  const api = fakeApi({ queries: [noise] });
+  api.saveAppSavedQueries = async () => {
+    throw new Error("disk full");
+  };
+  const store = await loadedStore(api);
+
+  await assert.rejects(store.move(group(store, "app").items[0], "project"), /disk full/);
+  assert.equal(group(store, "project"), undefined, "no project copy is left");
+  assert.deepEqual(api.settings, {});
+  assert.deepEqual(names(group(store, "app").items), ["Third-party noise"]);
 });

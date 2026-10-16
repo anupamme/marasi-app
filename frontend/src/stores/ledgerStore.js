@@ -1,6 +1,7 @@
 // The app's Ledger store, bound to the Wails backend. The logic lives in
 // createLedgerStore.js, which tests load with a fake API.
 import {
+  ClearHighlight,
   CountContentTypes,
   CountTraffic,
   CreateLaunchpadEntry,
@@ -11,7 +12,6 @@ import {
   GetMetadata,
   GetNote,
   GetRawDetails,
-  HighlightRow,
   LinkRequestToLaunchpad,
   ListClientSettings,
   QueryTraffic,
@@ -19,6 +19,7 @@ import {
   SetClientSetting,
   SetContentTypeExclusion,
   SetDefaultContentTypeExclusion,
+  SetHighlight,
 } from "../lib/wailsjs/go/main/App";
 import { armoryStore } from "./armoryStore";
 import { findingStore } from "./findingStore";
@@ -65,7 +66,9 @@ export const ledgerStore = createLedgerStore({
   getRawDetails: (id) => GetRawDetails(id),
   getMetadata: (id) => GetMetadata(id),
   getNote: (id) => GetNote(id),
-  highlight: (id, color) => HighlightRow(id, color),
+  // selection is { ids }; each resolves to how many pairs changed.
+  setHighlight: (selection, highlight) => SetHighlight(selection, highlight),
+  clearHighlight: (selection) => ClearHighlight(selection),
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
   linkToLaunchpad: (requestId, launchpadId) =>
     LinkRequestToLaunchpad(requestId, launchpadId),

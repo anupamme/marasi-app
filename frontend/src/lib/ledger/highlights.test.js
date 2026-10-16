@@ -1,6 +1,12 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { DEFAULT_HIGHLIGHTS, effectivePalette } from "./highlights.js";
+import {
+  activeHighlightCount,
+  ANY_HIGHLIGHT_TERM,
+  DEFAULT_HIGHLIGHTS,
+  effectivePalette,
+  highlightTerm,
+} from "./highlights.js";
 
 const app = [
   { color: "#ef4444", label: "" },
@@ -74,4 +80,16 @@ test("before the app config loads, the palette is the defaults", () => {
     palette.map((h) => [h.color, h.label]),
     DEFAULT_HIGHLIGHTS.map((h) => [h.color, h.name]),
   );
+});
+
+test("the menu's query terms: any highlight, then one per number", () => {
+  assert.equal(ANY_HIGHLIGHT_TERM, "highlight:*");
+  assert.equal(highlightTerm(3), "highlight = 3");
+});
+
+test("the badge counts highlight terms that are conditions of their own", () => {
+  assert.equal(activeHighlightCount(""), 0);
+  assert.equal(activeHighlightCount('highlight = 3 AND host = "a"'), 1);
+  assert.equal(activeHighlightCount("highlight:* AND highlight = 2 AND highlight = 7"), 3);
+  assert.equal(activeHighlightCount('note:"highlight = 3"'), 0);
 });

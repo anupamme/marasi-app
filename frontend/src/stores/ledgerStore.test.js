@@ -346,6 +346,19 @@ test("in the newest-first live view at the top, new pairs appear at the top", as
   assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
 });
 
+test("a request event that arrives twice joins the top once", async () => {
+  const api = fakeApi({ traffic: pairs(2) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 0);
+  api.capture(pair(3));
+  store.onRequest(pair(3, { StatusCode: 0, ContentType: "" }));
+  store.onRequest(pair(3, { StatusCode: 0, ContentType: "" }));
+  store.flush();
+  assert.deepEqual(ids(get(store)), [idOf(3), idOf(2), idOf(1)]);
+  assert.equal(countLabel(get(store)), "3 in the live view");
+});
+
 test("scrolled down in the live view, rows don't move and an N new count waits", async () => {
   const api = fakeApi({ traffic: pairs(50) });
   const store = createLedgerStore(api);

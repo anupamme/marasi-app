@@ -993,9 +993,14 @@ export function createLedgerStore(api) {
         });
       }
       if (!showAtTop || requests.length === 0) return { ...r, chunks };
+      // A pair joins once, however many times its request event came.
       const loaded = pairIDSet(tableRows({ results: { chunks } }));
-      const arrived = requests
-        .filter((req) => !loaded.has(String(req.ID)))
+      const fresh = requests.filter((req) => {
+        if (loaded.has(String(req.ID))) return false;
+        loaded.add(String(req.ID));
+        return true;
+      });
+      const arrived = fresh
         .map((req) => withoutBodies(responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req))
         .filter((pair) => !hiddenBy(pair.ContentType, exclusion))
         .sort((a, b) => (String(a.ID) < String(b.ID) ? 1 : -1));

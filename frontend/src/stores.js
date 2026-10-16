@@ -17,6 +17,7 @@ import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
 import { highlightsStore, readHighlights } from "./stores/highlightsStore";
 import { ledgerStore } from "./stores/ledgerStore";
+import { sitemapStore } from "./stores/sitemapStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
 
@@ -145,6 +146,7 @@ export async function openProject() {
   workshopCode.set("");
   waypoints.set({});
   ledgerStore.clear();
+  sitemapStore.clear();
   recentTraffic.clear();
   // Project saved queries belong to the project just opened.
   savedQueriesStore.loadProject();

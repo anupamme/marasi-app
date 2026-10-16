@@ -15,13 +15,3 @@ export const MARKS = [
 export function activeMarkCount(text) {
   return MARKS.filter((mark) => hasQueryTerm(text, mark.term)).length;
 }
-
-/**
- * A menu row's match count: "…" while loading (undefined), "–" when it
- * couldn't be counted (null), "100,000+" past marasi's cap.
- */
-export function matchCountText(count) {
-  if (count === undefined) return "…";
-  if (count === null) return "–";
-  return count.count.toLocaleString("en-US") + (count.capped ? "+" : "");
-}

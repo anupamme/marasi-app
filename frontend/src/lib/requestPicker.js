@@ -1,8 +1,42 @@
 // The request pickers in the finding and test case modals search the
 // project's traffic through QueryTraffic instead of holding every pair.
+import { writable } from "svelte/store";
 
 /** How many pairs a picker offers at once. */
 export const PICKER_LIMIT = 100;
+
+/** How long typing must pause before a picker searches. */
+export const PICKER_DELAY_MS = 200;
+
+/**
+ * A picker's options as the researcher types: a store of the options for
+ * the latest text. `search(text)` searches once typing pauses for
+ * PICKER_DELAY_MS, through `searchText(text)` (resolving to options); an
+ * older search that lands late is dropped, and blank text offers nothing.
+ * `cancel()` drops a search still waiting.
+ */
+export function createRequestPicker(searchText) {
+  const options = writable([]);
+  let timer = null;
+  let latest = 0;
+  function cancel() {
+    clearTimeout(timer);
+    latest++;
+  }
+  function search(text) {
+    cancel();
+    if (!String(text ?? "").trim()) {
+      options.set([]);
+      return;
+    }
+    const run = latest;
+    timer = setTimeout(async () => {
+      const found = await searchText(text);
+      if (run === latest) options.set(found);
+    }, PICKER_DELAY_MS);
+  }
+  return { subscribe: options.subscribe, search, cancel };
+}
 
 /**
  * The traffic query for the picker's text: the text anywhere in the host or

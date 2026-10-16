@@ -24,7 +24,7 @@
 		sortMark,
 		visibleRange,
 	} from "./table.js";
-	import { sameID } from "../../stores/createLedgerStore.js";
+	import { sameID } from "./pairs.js";
 	import { shortTime, statusClass } from "../launchpad/format.js";
 
 	/** The rows, top to bottom. */

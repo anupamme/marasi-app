@@ -33,8 +33,6 @@ export const appState = writable({
 export const extensions = writable([]);
 export const extensions_ui = writable({});
 
-// Ledger Stores. The rest of the Ledger's state is in ledgerStore.
-
 // Logbook Stores
 export const logbookSearchInput = writable("");
 export const reportMetadata = writable({

@@ -32,13 +32,15 @@
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
 	import { chromeError } from "../../lib/globalActions.js";
+	import { toastError } from "../../lib/toasts.js";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
 	import {
 		highlightPalette,
 		resetHighlights,
 		saveHighlights,
 	} from "../../stores/highlightsStore.js";
-	import { ledgerStore, select } from "../../stores/ledgerStore";
+	import { ledgerStore } from "../../stores/ledgerStore";
+	import { select } from "../../lib/storeSelect.js";
 	import { groupBuilding, jobLabel, jobsStore, jobStatus } from "../../stores/jobsStore";
 	import {
 		groupOf,
@@ -173,12 +175,7 @@
 	function saveHighlight(number, change) {
 		const next = $highlightPalette.map((h) => ({ color: h.color, label: h.appLabel ?? "" }));
 		next[number - 1] = { ...next[number - 1], ...change };
-		saveHighlights(next).catch((error) => {
-			toastStore.trigger({
-				message: `Error saving highlights: ${error}`,
-				background: "variant-filled-error",
-			});
-		});
+		saveHighlights(next).catch((error) => toastError(toastStore, "Error saving highlights", error));
 	}
 	function confirmResetHighlights() {
 		modalStore.trigger({
@@ -187,22 +184,14 @@
 			body: "Restores the default colours and clears every app-wide label. Project labels are kept.",
 			response: (ok) => {
 				if (!ok) return;
-				resetHighlights().catch((error) => {
-					toastStore.trigger({
-						message: `Error resetting highlights: ${error}`,
-						background: "variant-filled-error",
-					});
-				});
+				resetHighlights().catch((error) => toastError(toastStore, "Error resetting highlights", error));
 			},
 		});
 	}
 
 	function saveDefaultExclusion(types) {
 		ledgerStore.saveDefaultExclusion(types).catch((error) => {
-			toastStore.trigger({
-				message: `Error saving the default content types: ${error}`,
-				background: "variant-filled-error",
-			});
+			toastError(toastStore, "Error saving the default content types", error);
 			ledgerStore.loadDefaultExclusion().catch(() => {});
 		});
 	}
@@ -231,12 +220,7 @@
 			buttonTextConfirm: "Rebuild",
 			response: (ok) => {
 				if (!ok) return;
-				jobsStore.rebuild(group).catch((error) => {
-					toastStore.trigger({
-						message: `Error starting the rebuild: ${error}`,
-						background: "variant-filled-error",
-					});
-				});
+				jobsStore.rebuild(group).catch((error) => toastError(toastStore, "Error starting the rebuild", error));
 			},
 		});
 	}

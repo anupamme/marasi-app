@@ -6,6 +6,9 @@ import { writable } from "svelte/store";
 /** How many of the newest pairs the store holds. */
 export const RECENT_TRAFFIC_LIMIT = 1000;
 
+/** How often buffered request and response events reach the list. */
+export const RECENT_TRAFFIC_FLUSH_MS = 200;
+
 export function createRecentTrafficStore(api, limit = RECENT_TRAFFIC_LIMIT) {
   const { subscribe, set, update } = writable([]);
   let version = 0;

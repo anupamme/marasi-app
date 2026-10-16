@@ -78,7 +78,9 @@ test("the origins load once the ledger's first rows have", async () => {
   store.setContext(LIVE);
   await store.settled();
   assert.deepEqual(nodeRows(get(store)), [API, "https://www.acme.test"]);
-  assert.deepEqual(api.calls, [{ Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "", AsOf: "", Matching: false }]);
+  assert.deepEqual(api.calls, [
+    { Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "", AsOf: "", Matching: false, Exclusion: [] },
+  ]);
   assert.equal(hostCountLabel(get(store)), "2 hosts");
 
   // Later reads of the table, such as a new sort, don't read it again.
@@ -86,6 +88,14 @@ test("the origins load once the ledger's first rows have", async () => {
   store.setContext(LIVE);
   await store.settled();
   assert.equal(api.calls.length, 1);
+});
+
+test("the sitemap reads under the ledger's exclusion, not whatever is stored yet", async () => {
+  const api = fakeApi({ tree: { "": [child(API, 5)] } });
+  const store = await loadedStore(api);
+  store.setContext({ ...LIVE, exclusion: ["image/*"] });
+  await store.settled();
+  assert.deepEqual(api.calls.at(-1).Exclusion, ["image/*"]);
 });
 
 test("each level shows its busiest 10 children, then N more, 50 at a time", async () => {
@@ -185,7 +195,7 @@ test("Matching the query is only in effect while a query runs, with its results'
   await store.settled();
   assert.equal(sitemapScope(get(store)), "matching");
   assert.deepEqual(api.calls.at(-1), {
-    Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "status_code >= 500", AsOf: "pair-9", Matching: true,
+    Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "status_code >= 500", AsOf: "pair-9", Matching: true, Exclusion: [],
   });
   assert.deepEqual(nodeRows(get(store)), [API]);
 
@@ -200,7 +210,7 @@ test("All traffic with a query asks for matching counts and dims nodes without m
   const api = fakeApi({ tree: { "": [child(API, 5, { matching: 2 }), child("https://www.acme.test", 2, { matching: 0 })] } });
   const store = await loadedStore(api, { ...LIVE, query: "note:*", asOf: "pair-3" });
 
-  assert.deepEqual(api.calls.at(-1), { Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "note:*", AsOf: "pair-3", Matching: false });
+  assert.deepEqual(api.calls.at(-1), { Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "note:*", AsOf: "pair-3", Matching: false, Exclusion: [] });
   const rows = sitemapRows(get(store)).filter((row) => row.kind === "node");
   assert.deepEqual(
     rows.map((row) => [row.node.Segment, row.matching, row.dimmed]),

@@ -8,8 +8,9 @@ import {
   hiddenByTypeCount,
   indexWarning,
   isQueryActive,
-  markQueryError,
   newMatchesKind,
+  NEW_MATCHES_DELAY_MS,
+  NEW_MATCHES_MAX_WAIT_MS,
   PAGE_SIZE,
   MAX_WINDOW_ROWS,
   tableRows,
@@ -316,7 +317,6 @@ test("in the newest-first live view at the top, new pairs appear at the top", as
   let state = get(store);
   assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
   assert.equal(countLabel(state), "3 in the live view");
-  assert.equal(state.results.asOf, idOf(3), "later pages include the shown pair");
 
   // An excluded type leaves the live view once its response says so.
   await store.saveExclusion(["image/*"]);
@@ -438,7 +438,6 @@ test("an invalid query records the error and keeps the earlier results", async (
   assert.equal(state.query.ranQuery, "one");
   assert.deepEqual(ids(state), [idOf(1)]);
   assert.equal(countLabel(state), "1 matching");
-  assert.deepEqual(markQueryError(state.query.error), { before: "ba", at: "d", after: "" });
 
   await store.runQuery("one");
   assert.equal(get(store).query.error, null);
@@ -741,4 +740,154 @@ test("counting queries reads each count, capped, and marks a failed one null", a
     "launchpad:*": null,
   });
   assert.ok(countCalls(api).some((req) => req.Query === "note:*" && req.After === ""));
+});
+
+test("live pairs at the top leave the results' as_of alone, so later pages agree", async () => {
+  const api = fakeApi({ traffic: pairs(PAGE_SIZE * 2) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 0);
+  const asOf = get(store).results.asOf;
+
+  const arrived = PAGE_SIZE * 2 + 1;
+  api.capture(pair(arrived));
+  store.onRequest(pair(arrived));
+  store.flush();
+  assert.equal(ids(get(store))[0], idOf(arrived));
+  assert.equal(get(store).results.asOf, asOf, "every page of these results passes the same as_of");
+
+  await scrollTo(store, PAGE_SIZE - 20);
+  const forward = pageCalls(api).filter((req) => req.Cursor);
+  assert.ok(forward.length > 0);
+  assert.ok(forward.every((req) => req.AsOf === asOf));
+  const state = get(store);
+  assert.equal(tableRows(state).length, PAGE_SIZE * 2 + 1);
+  assert.equal(new Set(ids(state)).size, tableRows(state).length, "no row twice");
+
+  // Scrolled down, only pairs after the shown one are new matches.
+  api.capture(pair(arrived + 1));
+  store.onRequest(pair(arrived + 1));
+  store.flush();
+  await store.countNewMatches();
+  assert.equal(get(store).results.newCount, 1);
+  assert.deepEqual(countCalls(api).at(-1), { Query: "", After: idOf(arrived) });
+});
+
+test("⌘A after live pairs joined the top covers them", async () => {
+  const api = fakeApi({ traffic: pairs(3) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 0);
+  api.capture(pair(4));
+  store.onRequest(pair(4));
+  store.flush();
+  store.selectAll();
+  assert.equal(get(store).selection.query.asOf, idOf(4));
+  assert.ok(get(store).selection.ids.has(idOf(4)));
+});
+
+test("the live view stays within the window as pairs pour in at the top", async () => {
+  const api = fakeApi({ traffic: pairs(PAGE_SIZE) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 0);
+  const focus = idOf(PAGE_SIZE);
+  store.selectPair(focus);
+
+  let n = PAGE_SIZE;
+  for (let burst = 0; burst < 10; burst++) {
+    for (let k = 0; k < PAGE_SIZE; k++) {
+      n += 1;
+      api.capture(pair(n));
+      store.onRequest(pair(n, { Raw: "GET / HTTP/1.1\r\n\r\nbody", Prettified: "body" }));
+    }
+    store.flush();
+    await store.settled();
+  }
+  store.flush();
+  await store.settled();
+
+  let state = get(store);
+  assert.ok(tableRows(state).length <= MAX_WINDOW_ROWS, "the window stays bounded");
+  assert.equal(ids(state)[0], idOf(n), "the newest pair is at the top");
+  assert.ok(
+    tableRows(state).every((row) => row.Raw === undefined && row.Prettified === undefined),
+    "no bodies held",
+  );
+  assert.equal(state.results.hasAfter, true);
+  assert.equal(focusedPair(state)?.ID, focus, "the drawer keeps its pair");
+
+  // The dropped rows page back in by cursor.
+  for (let step = 0; step < 30 && get(store).results.hasAfter; step++) {
+    await scrollTo(store, tableRows(get(store)).length - 40);
+  }
+  state = get(store);
+  assert.equal(state.results.hasAfter, false);
+  assert.equal(ids(state).at(-1), idOf(1));
+});
+
+test("new-match counts wait for traffic to pause, but no longer than the max wait", async (t) => {
+  const api = fakeApi({ traffic: pairs(50) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await scrollTo(store, 10);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const counted = () => countCalls(api).filter((req) => req.After).length;
+
+  let n = 50;
+  const arrive = () => {
+    n += 1;
+    api.capture(pair(n));
+    store.onRequest(pair(n));
+    store.flush();
+  };
+  // Each new pair restarts the wait.
+  arrive();
+  t.mock.timers.tick(NEW_MATCHES_DELAY_MS - 100);
+  arrive();
+  t.mock.timers.tick(NEW_MATCHES_DELAY_MS - 100);
+  await store.settled();
+  assert.equal(counted(), 0, "still waiting for traffic to pause");
+  t.mock.timers.tick(100);
+  await store.settled();
+  assert.equal(counted(), 1);
+
+  // Steady traffic is still counted once the max wait runs out.
+  for (let elapsed = 0; elapsed < NEW_MATCHES_MAX_WAIT_MS; elapsed += NEW_MATCHES_DELAY_MS / 2) {
+    arrive();
+    t.mock.timers.tick(NEW_MATCHES_DELAY_MS / 2);
+  }
+  await store.settled();
+  assert.equal(counted(), 2);
+});
+
+test("the store says once the project's exclusion has loaded", async () => {
+  const api = fakeApi({ traffic: pairs(1), exclusion: ["image/*"] });
+  let release;
+  const read = api.getExclusion;
+  api.getExclusion = () => new Promise((resolve) => (release = () => resolve(read())));
+  const store = createLedgerStore(api);
+  const loading = store.populate();
+  await new Promise((resolve) => setTimeout(resolve, 0));
+  assert.equal(get(store).exclusionLoaded, false);
+  release();
+  await loading;
+  assert.equal(get(store).exclusionLoaded, true);
+  assert.deepEqual(get(store).exclusion, ["image/*"]);
+  store.clear();
+  assert.equal(get(store).exclusionLoaded, false);
+});
+
+test("query results count the pairs the exclusion hides too", async () => {
+  const api = fakeApi({
+    traffic: [pair(1), pair(2, { ContentType: "image/png" }), pair(3), pair(4, { ContentType: "image/png" })],
+    exclusion: ["image/png"],
+    queries: { early: (p) => p.ID <= idOf(2) },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.runQuery("early");
+  assert.equal(hiddenByTypeCount(get(store)), 1);
+  const asOf = get(store).results.asOf;
+  assert.ok(countCalls(api).some((req) => req.Query === "early" && req.IgnoreExclusion && req.AsOf === asOf));
 });

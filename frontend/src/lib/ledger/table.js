@@ -1,6 +1,7 @@
 // The Ledger table's columns, and how a pair's cells, badges and highlight
 // are shown. Plain functions over the store's rows, so they load under node.
 import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presentation.js";
+import { sameID } from "./pairs.js";
 
 /** Every row's height in px; the windowed list relies on it. */
 export const ROW_HEIGHT = 22;
@@ -37,7 +38,7 @@ export function sortMark(sort, column) {
  */
 export function keepRowInPlace({ anchorID, offset, rows, rowHeight }) {
   if (anchorID == null) return null;
-  const index = rows.findIndex((row) => String(row.ID) === String(anchorID));
+  const index = rows.findIndex((row) => sameID(row.ID, anchorID));
   return index < 0 ? null : index * rowHeight + offset;
 }
 

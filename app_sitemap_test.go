@@ -136,3 +136,26 @@ func TestListSitemapChildrenReportsAnInvalidQuery(t *testing.T) {
 		t.Fatalf("wanted a query error as data, got %+v, %v", result, err)
 	}
 }
+
+func TestListSitemapChildrenUsesTheExclusionTheRequestGives(t *testing.T) {
+	app := newScratchpadApp(t)
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
+	asOf := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/logo.png", statusCode: 200, contentType: "image/png"})
+	excludeContentTypes(t, app, "application/json")
+
+	// The ledger passes the exclusion it shows, which may not be stored yet.
+	all := listSitemap(t, app, SitemapChildrenRequest{Exclusion: []string{"image/png"}})
+	if got, want := formatSitemap(all.Children), "https://api.acme.test 1/0+"; got != want {
+		t.Fatalf("wanted all traffic minus the given exclusion %q, got %q", want, got)
+	}
+	matching := listSitemap(t, app, SitemapChildrenRequest{
+		Query: `host = "api.acme.test"`, AsOf: asOf.String(), Matching: true, Exclusion: []string{"image/png"},
+	})
+	if got, want := formatSitemap(matching.Children), "https://api.acme.test 1/0+"; got != want {
+		t.Fatalf("wanted matches minus the given exclusion %q, got %q", want, got)
+	}
+	none := listSitemap(t, app, SitemapChildrenRequest{Exclusion: []string{}})
+	if got, want := formatSitemap(none.Children), "https://api.acme.test 2/0+"; got != want {
+		t.Fatalf("wanted an empty exclusion to hide nothing %q, got %q", want, got)
+	}
+}

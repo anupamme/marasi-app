@@ -7,19 +7,16 @@ import {
   CountContentTypes,
   CountTraffic,
   CreateLaunchpadEntry,
-  DeleteClientSetting,
   DeleteTraffic,
-  GetClientSetting,
   GetContentTypeExclusion,
   GetDefaultContentTypeExclusion,
   GetMetadata,
   GetNote,
   GetRawDetails,
+  HasOwnContentTypeExclusion,
   LinkTraffic,
-  ListClientSettings,
   QueryTraffic,
   ResetContentTypeExclusion,
-  SetClientSetting,
   SetContentTypeExclusion,
   SetDefaultContentTypeExclusion,
   SetHighlight,
@@ -35,23 +32,15 @@ export {
   isAllSelected,
   selectionSize,
   selectionSpec,
-  clampDrawerSplit,
   countLabel,
   drawerKeybindingState,
   focusedPair,
   hiddenByTypeCount,
   indexWarning,
-  isDrawerOpen,
-  isSelected,
-  LAUNCHPADS_EACH_MAX,
   selectedPairs,
   isQueryActive,
-  markQueryError,
-  matchNoun,
   newMatchesKind,
   newMatchesLabel,
-  select,
-  shownRows,
   tableRows,
 } from "./createLedgerStore.js";
 
@@ -75,9 +64,8 @@ export const ledgerStore = createLedgerStore({
   countTraffic: (query, after, options = {}) => CountTraffic(query, after, options),
   getExclusion: () => GetContentTypeExclusion(),
   setExclusion: (types) => SetContentTypeExclusion(types),
-  // ledger.exclusion is the project's own list; without it the project
-  // follows the app default.
-  hasOwnExclusion: async () => (await GetClientSetting("ledger.exclusion")) != null,
+  // False when the project follows the app default.
+  hasOwnExclusion: () => HasOwnContentTypeExclusion(),
   resetExclusion: () => ResetContentTypeExclusion(),
   getDefaultExclusion: () => GetDefaultContentTypeExclusion(),
   setDefaultExclusion: (types) => SetDefaultContentTypeExclusion(types),
@@ -103,11 +91,6 @@ export const ledgerStore = createLedgerStore({
   createFinding: (requestIds) => findingStore.create(requestIds),
   createTestCase: (requestIds) => testCaseStore.create(requestIds),
   sendToArmory: (requestId) => armoryStore.createTemplateFromRequest(requestId),
-  // Not called by the store yet; the Ledger's client settings use them.
-  getClientSetting: (key) => GetClientSetting(key),
-  setClientSetting: (key, value) => SetClientSetting(key, value),
-  deleteClientSetting: (key) => DeleteClientSetting(key),
-  listClientSettings: (prefix) => ListClientSettings(prefix),
 });
 
 if (typeof window !== "undefined") {

@@ -120,6 +120,16 @@ func (a *App) GetContentTypeExclusion() ([]string, error) {
 	return values, nil
 }
 
+// HasOwnContentTypeExclusion reports whether the open project keeps its own
+// exclusion; false means it follows the app default.
+func (a *App) HasOwnContentTypeExclusion() (bool, error) {
+	setting, err := a.GetClientSetting(ledgerExclusionKey)
+	if err != nil {
+		return false, fmt.Errorf("reading content-type exclusion: %w", err)
+	}
+	return setting != nil, nil
+}
+
 // SetContentTypeExclusion gives the open project its own exclusion, which it
 // keeps instead of following the app default.
 func (a *App) SetContentTypeExclusion(values []string) error {

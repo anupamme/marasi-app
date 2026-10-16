@@ -37,7 +37,7 @@ export function jobLabel(name) {
 export function jobStatus(job) {
   if (job.Complete) return "Complete";
   if (!job.Total) return "Building";
-  const n = (value) => Number(value).toLocaleString("en-US");
+  const n = (value) => Number(value).toLocaleString();
   return `Building · ${n(job.Done)} of ${n(job.Total)}`;
 }
 

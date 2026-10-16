@@ -9,6 +9,8 @@
 	import { Bookmark, BookmarkPlus, Check, Eye, EyeOff, Folder, Globe, Package, Pencil, Trash2 } from "lucide-svelte";
 	import { primaryVariant } from "../launchpad/format.js";
 	import ToolbarMenu from "./ToolbarMenu.svelte";
+	import { matchCountText } from "./counts.js";
+	import { toastError } from "../toasts.js";
 	import {
 		activeSavedQuery,
 		canSaveQuery,
@@ -50,15 +52,7 @@
 		savedQueriesStore.loadCounts();
 	}
 
-	function countLabel(count) {
-		if (!count) return "…";
-		if (count.error) return "!";
-		return count.capped ? `${count.count.toLocaleString()}+` : count.count.toLocaleString();
-	}
-
-	function failed(action, error) {
-		toastStore.trigger({ message: `Failed to ${action}: ${String(error)}`, background: "variant-filled-error" });
-	}
+	const failed = (action, error) => toastError(toastStore, `Failed to ${action}`, error);
 
 	function choose(q) {
 		dispatch("apply", active?.id === q.id ? "" : q.query);
@@ -213,7 +207,7 @@
 							>
 							<span
 								class="flex-none tabular-nums opacity-60 group-hover:hidden"
-								title={count?.error ?? ""}>{countLabel(count)}</span
+								title={count?.error ?? ""}>{matchCountText(count)}</span
 							>
 							<span class="hidden flex-none items-center gap-1.5 group-hover:flex">
 								{#if q.source === "builtin"}

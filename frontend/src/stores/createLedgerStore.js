@@ -27,18 +27,27 @@ import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
 import { toggleQueryTerm } from "../lib/ledgerQueryFields.js";
 import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
+import { searchRequests } from "../lib/requestPicker.js";
+import { select } from "../lib/storeSelect.js";
+import { LAUNCHPADS_EACH_MAX, pairIDSet, sameID } from "../lib/ledger/pairs.js";
+import { formatCount, matchNoun, requestCount } from "../lib/ledger/counts.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
 
-/** The most pairs "one launchpad each" sends at a time. */
-export const LAUNCHPADS_EACH_MAX = 25;
-
 /** How long the query box waits after the last keystroke before running. */
 export const QUERY_DELAY_MS = 700;
 
-/** How long traffic must settle before new matches are counted again. */
-export const NEW_MATCHES_DELAY_MS = 1000;
+// New matches are counted on a debounce: each traffic event restarts a
+// NEW_MATCHES_DELAY_MS wait, so a burst is counted once it pauses. Under
+// steady traffic that never pauses, the count still runs once
+// NEW_MATCHES_MAX_WAIT_MS has passed since the first uncounted event.
+
+/** How long traffic must pause before new matches are counted. */
+export const NEW_MATCHES_DELAY_MS = 500;
+
+/** The longest new matches wait to be counted under steady traffic. */
+export const NEW_MATCHES_MAX_WAIT_MS = 3000;
 
 /** How often buffered request and response events reach the table. */
 export const FLUSH_INTERVAL_MS = 200;
@@ -84,6 +93,10 @@ function emptyResults() {
     // The as_of every page of these results passes; null before the first
     // page, or when the project had no pairs.
     asOf: null,
+    // The newest pair the table shows: `asOf`, or the newest live pair that
+    // joined the top of the newest-first live view since. Counts, new
+    // matches and ⌘A go by it; pages still pass `asOf`.
+    shownAsOf: null,
     // True until the first page arrives.
     loading: true,
     // True when reading a page failed; pages stop loading until a reload.
@@ -91,7 +104,7 @@ function emptyResults() {
     indexComplete: true,
     // { count, capped } once counted; null until then.
     count: null,
-    // Pairs the content-type exclusion hides, in the live view; null when
+    // Pairs the content-type exclusion hides from these results; null when
     // unknown.
     hidden: null,
     // Matches captured after `as_of` that the table doesn't show.
@@ -152,6 +165,8 @@ function initialState(runID = 0, layout = initialLayout(), sort = DEFAULT_SORT) 
     focusRow: null,
     // Content types the table hides: exact types and major/* values.
     exclusion: [],
+    // True once the project's exclusion has loaded (or failed to).
+    exclusionLoaded: false,
     // True when the project keeps its own exclusion, false when it follows
     // the app default, null until known.
     ownExclusion: null,
@@ -207,15 +222,11 @@ export function tableRows(state) {
   return tableRowsCache.rows;
 }
 
-/** The loaded rows, in display order. */
-export const shownRows = tableRows;
-
 /**
- * How many pairs the content-type exclusion hides from the live view, or
- * null when unknown or with query results.
+ * How many pairs the content-type exclusion hides from the live view or the
+ * query's results, or null when unknown.
  */
 export function hiddenByTypeCount(state) {
-  if (isQueryActive(state.query)) return null;
   return state.results.hidden;
 }
 
@@ -226,7 +237,7 @@ export function hiddenByTypeCount(state) {
 export function countLabel(state) {
   const count = state.results.count;
   if (!count) return "…";
-  const n = `${count.count.toLocaleString("en-US")}${count.capped ? "+" : ""}`;
+  const n = formatCount(count.count, count.capped);
   return isQueryActive(state.query) ? `${n} matching` : `${n} in the live view`;
 }
 
@@ -234,7 +245,7 @@ export function countLabel(state) {
 export function newMatchesLabel(state) {
   const { newCount, newCapped } = state.results;
   if (!newCount) return "";
-  const n = `${newCount.toLocaleString("en-US")}${newCapped ? "+" : ""}`;
+  const n = formatCount(newCount, newCapped);
   return newMatchesKind(state) === "top" ? `${n} new` : `${n} new ${matchNoun(newCount, newCapped)}`;
 }
 
@@ -285,9 +296,9 @@ export function selectionSize(state) {
 export function newMatchesNotSelected(state) {
   const query = state.selection.query;
   if (!query) return 0;
-  const { asOf, count, newCount } = state.results;
+  const { shownAsOf, count, newCount } = state.results;
   let shown = 0;
-  if (asOf !== query.asOf && count && query.count && !count.capped && !query.count.capped) {
+  if (shownAsOf !== query.asOf && count && query.count && !count.capped && !query.count.capped) {
     shown = Math.max(0, count.count - query.count.count);
   }
   return shown + newCount;
@@ -301,10 +312,10 @@ export function allSelectedLabel(state) {
   const query = state.selection.query;
   if (!query) return "";
   const n = query.count
-    ? `${query.count.count.toLocaleString("en-US")}${query.count.capped ? "+" : ""}`
+    ? formatCount(query.count.count, query.count.capped)
     : "…";
   const left = newMatchesNotSelected(state);
-  const note = left ? ` · ${left.toLocaleString("en-US")} new ${matchNoun(left)} not included` : "";
+  const note = left ? ` · ${formatCount(left)} new ${matchNoun(left)} not included` : "";
   return `All ${n} matching selected${note}`;
 }
 
@@ -347,21 +358,6 @@ export function clampDrawerSplit(split) {
   return Math.min(DRAWER_SPLIT.max, Math.max(DRAWER_SPLIT.min, split));
 }
 
-/** True when both are pair IDs and they name the same pair. */
-export function sameID(a, b) {
-  return a != null && b != null && String(a) === String(b);
-}
-
-/** The IDs of `items`, as strings. */
-export function pairIDSet(items) {
-  return new Set(items.map((item) => String(item.ID)));
-}
-
-/** "match" or "matches" for `count`; `more` means there could be more. */
-export function matchNoun(count, more = false) {
-  return count === 1 && !more ? "match" : "matches";
-}
-
 /** Shown while a query is active and older traffic is still being indexed. */
 export function indexWarning(state) {
   return isQueryActive(state.query) && !state.results.indexComplete
@@ -369,43 +365,12 @@ export function indexWarning(state) {
     : "";
 }
 
-/**
- * Splits an invalid query around marasi's 1-based error position, counting
- * characters rather than UTF-16 units, so the problem can be marked:
- * { before, at, after }. `at` is a space when the position is past the end.
- * Returns null when the error has no position.
- */
-export function markQueryError(error) {
-  if (!error?.position) return null;
-  const chars = Array.from(error.query);
-  const index = Math.min(Math.max(error.position - 1, 0), chars.length);
-  return {
-    before: chars.slice(0, index).join(""),
-    at: chars[index] ?? " ",
-    after: chars.slice(index + 1).join(""),
-  };
-}
-
-/**
- * A readable of `selector(state)` that notifies its subscribers only when the
- * selected value changes, so a component can follow one part of the store
- * without updating on every other change.
- */
-export function select(store, selector) {
-  return {
-    subscribe(run) {
-      let first = true;
-      let last;
-      return store.subscribe((state) => {
-        const value = selector(state);
-        if (first || value !== last) {
-          first = false;
-          last = value;
-          run(value);
-        }
-      });
-    },
-  };
+// A live event's pair as a table row: without the raw and prettified
+// bodies, which the drawer reads itself.
+function withoutBodies(pair) {
+  if (!("Raw" in pair) && !("Prettified" in pair)) return pair;
+  const { Raw, Prettified, ...row } = pair;
+  return row;
 }
 
 // Applies `fn` to every row of `chunks`; returns `chunks` itself when `fn`
@@ -556,7 +521,9 @@ export function createLedgerStore(api) {
   let responseBuffer = new Map();
 
   let delayTimer = null;
+  // The new-match count's debounce, and its max wait.
   let newMatchesTimer = null;
+  let newMatchesMaxTimer = null;
   // Identifies the newest query request, so a slower, older response can't
   // overwrite a newer one or a cleared query.
   let latestRequest = 0;
@@ -588,29 +555,28 @@ export function createLedgerStore(api) {
       hasAfter: page.NextCursor != null,
       start: cursor ? null : 0,
       asOf: page.AsOf || null,
+      shownAsOf: page.AsOf || null,
       loading: false,
       indexComplete: page.IndexComplete ?? true,
     };
   }
 
-  // Counts the results, and in the live view the pairs the exclusion hides.
-  // The count never holds up the rows.
+  // Counts the results, and the pairs among them the exclusion hides. The
+  // count never holds up the rows.
   async function loadCount(gen) {
     await exclusionLoaded;
     if (gen !== generation) return;
     const { query, results, exclusion } = current;
-    const asOf = results.asOf ?? "";
-    const live = !isQueryActive(query);
+    const asOf = results.shownAsOf ?? "";
     try {
       const [counted, all] = await Promise.all([
         api.countTraffic(query.ranQuery, "", { AsOf: asOf }),
-        live && exclusion.length
-          ? api.countTraffic("", "", { AsOf: asOf, IgnoreExclusion: true })
+        exclusion.length
+          ? api.countTraffic(query.ranQuery, "", { AsOf: asOf, IgnoreExclusion: true })
           : null,
       ]);
       if (gen !== generation || counted.QueryError) return;
-      const hidden =
-        !live ? null : !all ? 0 : all.Capped || counted.Capped ? null : all.Count - counted.Count;
+      const hidden = !all ? 0 : all.Capped || counted.Capped || all.QueryError ? null : all.Count - counted.Count;
       updateResults((r) => ({
         ...r,
         count: { count: counted.Count, capped: counted.Capped },
@@ -789,16 +755,21 @@ export function createLedgerStore(api) {
     if (r.hasBefore && viewport.first < EDGE_ROWS) track(loadBackward());
   }
 
-  /** Counts the matches captured after the results' as_of. */
-  async function countNewMatches() {
+  function cancelNewMatches() {
     clearTimeout(newMatchesTimer);
-    newMatchesTimer = null;
+    clearTimeout(newMatchesMaxTimer);
+    newMatchesTimer = newMatchesMaxTimer = null;
+  }
+
+  /** Counts the matches captured after the newest pair the table shows. */
+  async function countNewMatches() {
+    cancelNewMatches();
     const gen = generation;
     const r = current.results;
     if (r.loading || reading) return;
     let counted;
     try {
-      counted = await api.countTraffic(current.query.ranQuery, r.asOf ?? "");
+      counted = await api.countTraffic(current.query.ranQuery, r.shownAsOf ?? "");
     } catch (err) {
       console.error("Counting new matches failed:", err);
       return;
@@ -808,10 +779,16 @@ export function createLedgerStore(api) {
     loadAround();
   }
 
+  // Debounces the new-match count: see NEW_MATCHES_DELAY_MS.
   function scheduleNewMatches() {
-    if (newMatchesTimer) return;
-    newMatchesTimer = setTimeout(() => track(countNewMatches()), NEW_MATCHES_DELAY_MS);
+    const run = () => track(countNewMatches());
+    clearTimeout(newMatchesTimer);
+    newMatchesTimer = setTimeout(run, NEW_MATCHES_DELAY_MS);
     newMatchesTimer.unref?.();
+    if (!newMatchesMaxTimer) {
+      newMatchesMaxTimer = setTimeout(run, NEW_MATCHES_MAX_WAIT_MS);
+      newMatchesMaxTimer.unref?.();
+    }
   }
 
   /**
@@ -825,14 +802,14 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * Reads the rows again in place under the same as_of, as after a bulk
-   * change Marasi reports no event for: rows a change removed from the
+   * Reads the rows again in place up to the newest pair shown, as after a
+   * bulk change Marasi reports no event for: rows a change removed from the
    * results go, and the view stays where it is. Falls back to a reload.
    */
   async function refresh() {
     const r = current.results;
-    if (r.loading || r.failed || !r.asOf) return reload();
-    const ok = await track(readInPlace({ asOf: r.asOf, keepNew: true }));
+    if (r.loading || r.failed || !r.shownAsOf) return reload();
+    const ok = await track(readInPlace({ asOf: r.shownAsOf, keepNew: true }));
     if (!ok) await reload();
   }
 
@@ -903,9 +880,12 @@ export function createLedgerStore(api) {
     exclusionLoaded = api
       .getExclusion()
       .then((exclusion) => {
-        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
+        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [], exclusionLoaded: true }));
       })
-      .catch((err) => console.error("Loading the content-type exclusion failed:", err));
+      .catch((err) => {
+        console.error("Loading the content-type exclusion failed:", err);
+        if (fresh()) update((state) => ({ ...state, exclusionLoaded: true }));
+      });
     await Promise.all([
       reload(),
       exclusionLoaded,
@@ -950,16 +930,24 @@ export function createLedgerStore(api) {
    * Moves buffered requests and responses into the table. Responses fill in
    * loaded rows in place. At the top of the newest-first live view, new
    * pairs join at the top; anywhere else, new matches are counted.
+   *
+   * Live pairs joining the top leave the results' as_of alone, so the pages
+   * below still agree; they raise `shownAsOf` instead. Once they push the
+   * window past MAX_WINDOW_ROWS, the top page is read again in place under
+   * a new as_of, so the oldest rows go and load back by cursor.
    */
   function flush() {
     if (requestBuffer.length === 0 && responseBuffer.size === 0) return;
+    const live = newMatchesKind(current) === "top";
+    // A read under way replaces the rows; pairs arriving meanwhile wait
+    // for it, so the ones it leaves out still join the top.
+    if (live && reading) return;
     const requests = requestBuffer;
     const responses = responseBuffer;
     requestBuffer = [];
     responseBuffer = new Map();
 
     const r = current.results;
-    const live = newMatchesKind(current) === "top";
     const showAtTop =
       live && !r.loading && !r.hasBefore && viewport.atTop && r.newCount === 0;
     const exclusion = current.exclusion;
@@ -970,7 +958,7 @@ export function createLedgerStore(api) {
         chunks = mapChunks(chunks, (item) => {
           const res = responses.get(item.ID);
           if (!res) return item;
-          const next = { ...item, ...res };
+          const next = withoutBodies({ ...item, ...res });
           // The live view drops a pair once its response shows the
           // exclusion hides it.
           return live && hiddenBy(next.ContentType, exclusion) ? null : next;
@@ -980,7 +968,7 @@ export function createLedgerStore(api) {
       const loaded = pairIDSet(tableRows({ results: { chunks } }));
       const arrived = requests
         .filter((req) => !loaded.has(String(req.ID)))
-        .map((req) => (responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req))
+        .map((req) => withoutBodies(responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req))
         .filter((pair) => !hiddenBy(pair.ContentType, exclusion))
         .sort((a, b) => (String(a.ID) < String(b.ID) ? 1 : -1));
       if (arrived.length === 0) return { ...r, chunks };
@@ -989,11 +977,12 @@ export function createLedgerStore(api) {
       return trim({
         ...r,
         chunks: [{ ...top, items: [...arrived, ...top.items] }, ...rest],
-        asOf: r.asOf && r.asOf > newest ? r.asOf : newest,
+        shownAsOf: r.shownAsOf && r.shownAsOf > newest ? r.shownAsOf : newest,
         count: r.count && { ...r.count, count: r.count.count + (r.count.capped ? 0 : arrived.length) },
       });
     });
     if (!showAtTop) scheduleNewMatches();
+    else if (tableRows(current).length > MAX_WINDOW_ROWS) track(readInPlace({ asOf: "" }));
   }
 
   /**
@@ -1162,12 +1151,12 @@ export function createLedgerStore(api) {
 
   /**
    * ⌘A: selects the whole query, not just the loaded rows: its text, the
-   * exclusion and the results' as_of, so new matches stay out. The top row
-   * is focused. The selection's count arrives after.
+   * exclusion and the newest pair shown as its as_of, so new matches stay
+   * out. The top row is focused. The selection's count arrives after.
    */
   function selectAll() {
     const rows = tableRows(current);
-    const { asOf, count } = current.results;
+    const { shownAsOf: asOf, count } = current.results;
     if (rows.length === 0 || !asOf) return;
     const query = {
       text: current.query.ranQuery,
@@ -1324,8 +1313,7 @@ export function createLedgerStore(api) {
       reading = false;
       exclusionLoaded = Promise.resolve();
       cancelDelay();
-      clearTimeout(newMatchesTimer);
-      newMatchesTimer = null;
+      cancelNewMatches();
       latestRequest++;
       requestBuffer = [];
       responseBuffer = new Map();
@@ -1452,6 +1440,8 @@ export function createLedgerStore(api) {
     pairNumber,
     shownPairAtNumber,
 
+    /** The request pickers' options: the newest pairs matching `text`. */
+    searchRequests: (text) => searchRequests(api.queryTraffic, text),
     getDetails: (id) => api.getRawDetails(id),
     getMetadata: (id) => api.getMetadata(id),
     getNote: (id) => api.getNote(id),
@@ -1595,7 +1585,7 @@ export function createLedgerStore(api) {
       ? launchpadName(selection.ids)
       : count == null
         ? ["Matching requests", "Launchpad for the matching requests"]
-        : [`${count.toLocaleString("en-US")} requests`, `Launchpad for ${count.toLocaleString("en-US")} requests`];
+        : [requestCount(count), `Launchpad for ${requestCount(count)}`];
     const launchpadId = await api.createLaunchpad(...name);
     const linked = await link(selection, "launchpad", launchpadId);
     return { launchpadId, count: linked };

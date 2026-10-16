@@ -32,10 +32,11 @@
 		Unlink,
 		X,
 	} from "lucide-svelte";
-	import { filterMenu, isRunnable, isSwatchRow, menuFor, selectionSummary } from "./rowMenu.js";
+	import { filterMenu, isPartialSelection, isRunnable, isSwatchRow, menuFor, selectionSummary } from "./rowMenu.js";
 	import { menuDispatcher } from "../keybindings/app.js";
 	import { formatBinding } from "../keybindings/keys.js";
 	import { statusClass } from "../launchpad/format.js";
+	import { plural } from "./counts.js";
 
 	/** Whether the menu shows. The menu closes itself by setting it false. */
 	export let open = false;
@@ -246,15 +247,16 @@
 		return binding ? formatBinding(binding, keymap.platform) : "";
 	}
 
-	const plural = (n, word) => `${n.toLocaleString()} ${n === 1 ? word : word + "s"}`;
-
-	// A ⌘A selection counts every match, not just the loaded pairs.
+	// A ⌘A selection counts every match, not just the loaded pairs. While it
+	// holds pairs the table hasn't loaded, the header names only its count:
+	// the loaded pairs' hosts, methods and statuses would mislead.
+	$: partial = isPartialSelection(pairs, context);
 	$: selectionLabel = !summary
 		? ""
 		: context.all
 			? context.count == null
-				? "All matching requests"
-				: `All ${plural(context.count, "request")}`
+				? "All matching"
+				: `All ${context.count.toLocaleString()} matching`
 			: plural(summary.count, "request");
 </script>
 
@@ -285,8 +287,9 @@
 			{:else}
 				<div class="flex items-center gap-2">
 					<span class="font-semibold">{selectionLabel}</span>
-					<span class="opacity-60">· {plural(summary.hosts.length, "host")}</span>
+					{#if !partial}<span class="opacity-60">· {plural(summary.hosts.length, "host")}</span>{/if}
 				</div>
+				{#if !partial}
 				<div class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[10px]">
 					{#each summary.methods as [method, count]}
 						<span class={METHOD_CLASS[method] ?? ""}>{method} {count}</span>
@@ -298,6 +301,7 @@
 						{/each}
 					{/if}
 				</div>
+				{/if}
 			{/if}
 		</div>
 

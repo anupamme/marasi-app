@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"log"
 	"regexp"
+	"slices"
 	"strings"
 
 	"go.yaml.in/yaml/v3"
@@ -74,7 +75,7 @@ func parseHighlights(node *yaml.Node) []Highlight {
 func (a *App) GetHighlights() []Highlight {
 	a.Config.mu.Lock()
 	defer a.Config.mu.Unlock()
-	return append([]Highlight(nil), a.Config.highlights...)
+	return slices.Clone(a.Config.highlights)
 }
 
 // SaveHighlights validates and persists all 8 highlights, then makes them the
@@ -84,7 +85,7 @@ func (a *App) SaveHighlights(highlights []Highlight) ([]Highlight, error) {
 	cfg := a.Config
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
-	current := append([]Highlight(nil), cfg.highlights...)
+	current := slices.Clone(cfg.highlights)
 	if len(highlights) != highlightsCount {
 		return current, fmt.Errorf("wanted %d highlights, got %d", highlightsCount, len(highlights))
 	}
@@ -100,7 +101,7 @@ func (a *App) SaveHighlights(highlights []Highlight) ([]Highlight, error) {
 		return current, fmt.Errorf("saving highlights: %w", err)
 	}
 	cfg.highlights = next
-	return append([]Highlight(nil), next...), nil
+	return slices.Clone(next), nil
 }
 
 // ResetHighlights restores the default colours and clears the app labels.

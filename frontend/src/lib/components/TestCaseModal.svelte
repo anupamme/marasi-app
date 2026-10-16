@@ -10,7 +10,7 @@
 	} from "@skeletonlabs/skeleton";
 	import { onDestroy, onMount } from "svelte";
 	import { ProgressRadial } from "@skeletonlabs/skeleton";
-	import { GetArtifact, DownloadArtifact, QueryTraffic } from "../wailsjs/go/main/App";
+	import { GetArtifact, DownloadArtifact } from "../wailsjs/go/main/App";
 	import {
 		BookCheck,
 		Download,
@@ -21,7 +21,8 @@
 	} from "lucide-svelte";
 	import { marasiConfig } from "../../stores";
 	import RequestResponseView from "./RequestResponseView.svelte";
-	import { searchRequests } from "../requestPicker.js";
+	import { createRequestPicker } from "../requestPicker.js";
+	import { ledgerStore } from "../../stores/ledgerStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	export let parent;
 	const modalStore = getModalStore();
@@ -34,8 +35,6 @@
 	let templateSearchInput = "";
 	let showTemplateSearch = isNew;
 	let imageUrls = {};
-	let displayedRequests = [];
-	let requestSearchTimeout;
 
 	if (!testCase.Tags || testCase.Tags.length === 0) {
 		testCase.Tags = ["example_tag"];
@@ -48,20 +47,10 @@
 		[];
 	// The picker searches the project's traffic as the researcher types,
 	// newest first, rather than holding every pair.
-	let requestSearch = 0;
-	$: {
-		clearTimeout(requestSearchTimeout);
-		const text = requestInput;
-		const search = ++requestSearch;
-		requestSearchTimeout = setTimeout(async () => {
-			if (!text.trim()) {
-				displayedRequests = [];
-				return;
-			}
-			const options = await searchRequests(QueryTraffic, text);
-			if (search === requestSearch) displayedRequests = options;
-		}, 200);
-	}
+	const requestPicker = createRequestPicker(ledgerStore.searchRequests);
+	$: requestPicker.search(requestInput);
+	$: displayedRequests = $requestPicker;
+	onDestroy(requestPicker.cancel);
 	const passThroughFilter = () => displayedRequests;
 
 	$: if (

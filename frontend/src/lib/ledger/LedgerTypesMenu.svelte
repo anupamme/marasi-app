@@ -38,9 +38,12 @@
 	// many types that never appear.
 	$: hiddenWithTraffic = $typeCounts.loaded ? typeLists($typeCounts.counts, $exclusion).hidden.length : 0;
 
-	// The counts never hold up the table: they load after it, and again on
-	// each open since traffic keeps arriving.
-	onMount(() => ledgerStore.loadTypeCounts());
+	// The counts never hold up the table: they load once for the badge, and
+	// again on each open since traffic keeps arriving. Visiting the page
+	// again doesn't reread them.
+	onMount(() => {
+		if (!$typeCounts.loaded) ledgerStore.loadTypeCounts();
+	});
 
 	function setOpen(next) {
 		open = next;

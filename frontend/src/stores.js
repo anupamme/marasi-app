@@ -157,15 +157,17 @@ export async function openProject() {
   connectionStore.clear();
   armoryStore.clear();
   launchpadStore.clear();
+  // The Ledger's first page and its exclusion load in the background, and
+  // first: it is the page researchers open, and its rows don't wait on the
+  // project's extensions.
+  ledgerStore.populate();
   try {
     await LoadExtensions();
   } catch (err) {
     console.error("Failed to load project extensions:", err);
   }
 
-  // Reset items. The Ledger's first page, its exclusion and the recent
-  // traffic for extensions load in the background.
-  ledgerStore.populate();
+  // Reset items. The recent traffic for extensions loads in the background.
   recentTraffic.populate();
   // Marasi's background jobs, polled while one runs.
   jobsStore.refresh();

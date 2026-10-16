@@ -32,7 +32,7 @@
 		CompassIcon,
 		ZapIcon,
 	} from "svelte-feather-icons";
-	import { goto } from "$app/navigation";
+	import { goto, preloadCode } from "$app/navigation";
 	import "../app.css";
 	let currentTile = 0;
 	import { page } from "$app/stores";
@@ -234,6 +234,11 @@
 			}
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
 			$appState.isReady = true;
+			// The rail navigates by click, so nothing preloads the Ledger's
+			// code on hover; load it now, so the first visit renders at once.
+			preloadCode("/ledger").catch((err) =>
+				console.error("Preloading the Ledger failed:", err),
+			);
 
 			function handleNewLog(newLog) {
 				$logItems = [...$logItems, newLog];

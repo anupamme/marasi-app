@@ -1,5 +1,4 @@
 <script>
-	import { onMount } from "svelte";
 	import { activeProject } from "../../stores";
 	import { CountNotes, GetScopeRules } from "../wailsjs/go/main/App";
 	import {
@@ -39,6 +38,9 @@
 		(f) => f.Severity === "High",
 	).length;
 
+	// Refreshes on mount and on each project switch. (A second refresh in
+	// onMount doubled CountNotes, which holds up every other call to Marasi
+	// while it counts a large project.)
 	$: if ($activeProject) {
 		console.log("Active");
 		refreshDashboard();
@@ -62,10 +64,6 @@
 		});
 	}
 
-	// Initialize dashboard
-	onMount(() => {
-		refreshDashboard();
-	});
 </script>
 
 <div class="no-select p-4">

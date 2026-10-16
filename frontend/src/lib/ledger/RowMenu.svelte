@@ -72,8 +72,8 @@
 	};
 	const METHOD_CLASS = {
 		POST: "text-tertiary-500",
-		PUT: "text-warning-500",
-		PATCH: "text-warning-500",
+		PUT: "text-warning-800 dark:text-warning-500",
+		PATCH: "text-warning-800 dark:text-warning-500",
 		DELETE: "text-error-500",
 	};
 	const SEVERITY_CLASS = {

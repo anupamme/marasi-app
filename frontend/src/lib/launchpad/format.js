@@ -8,7 +8,8 @@ export const primaryVariant = (lightMode) =>
 export function statusClass(code) {
   if (!code) return "opacity-50";
   if (code < 300) return "text-success-500";
-  if (code < 400) return "text-warning-500";
+  // warning-500 is unreadable on a light surface.
+  if (code < 400) return "text-warning-800 dark:text-warning-500";
   return "text-error-500";
 }
 

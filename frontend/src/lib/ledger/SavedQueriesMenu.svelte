@@ -1,6 +1,6 @@
 <script>
-	// The Ledger toolbar's Saved queries menu: a button, badged with the
-	// active saved query's name, that opens the saved queries grouped by
+	// The Ledger toolbar's Saved queries menu: a ToolbarMenu, badged with
+	// the active saved query's name, that opens the saved queries grouped by
 	// source. Choosing a row applies its query, or clears it when it is the
 	// active one ("apply" with the new query text). Counts load after the
 	// menu opens.
@@ -8,6 +8,7 @@
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import { Bookmark, BookmarkPlus, Check, Eye, EyeOff, Globe, Package, Pencil, Trash2 } from "lucide-svelte";
 	import { primaryVariant } from "../launchpad/format.js";
+	import ToolbarMenu from "./ToolbarMenu.svelte";
 	import {
 		activeSavedQuery,
 		canSaveQuery,
@@ -26,7 +27,6 @@
 	const toastStore = getToastStore();
 	const GROUP_ICONS = { app: Globe, builtin: Package };
 
-	let root;
 	let open = false;
 	let saving = false;
 	let name = "";
@@ -43,13 +43,10 @@
 
 	onMount(() => savedQueriesStore.load());
 
-	function toggle() {
-		open = !open;
-		if (open) {
-			saving = false;
-			editing = null;
-			savedQueriesStore.loadCounts();
-		}
+	function onOpen() {
+		saving = false;
+		editing = null;
+		savedQueriesStore.loadCounts();
 	}
 
 	function countLabel(count) {
@@ -109,11 +106,6 @@
 		savedQueriesStore.setBuiltinHidden(q.id, hidden).catch((error) => failed("update the built-ins", error));
 	}
 
-	// Closes on a click outside, unless a dialog the menu opened has it.
-	function onWindowPointerDown(event) {
-		if (open && !$modalStore[0] && !root.contains(event.target)) open = false;
-	}
-
 	function onEditKeydown(event, onEnter, onEscape) {
 		event.stopPropagation();
 		if (event.key === "Enter") {
@@ -123,148 +115,134 @@
 	}
 </script>
 
-<svelte:window on:pointerdown={onWindowPointerDown} />
-
-<div class="ledger-saved-queries relative flex items-stretch border-l border-surface-300-600-token" bind:this={root}>
-	<button
-		id="ledgerSavedQueriesToggle"
-		type="button"
-		class="flex items-center gap-1.5 px-3 text-sm hover:bg-surface-200-700-token {open ? 'bg-surface-200-700-token' : ''}"
-		title={active ? `Saved query: ${active.name}` : "Saved queries"}
-		aria-expanded={open}
-		aria-controls="ledgerSavedQueries"
-		on:click={toggle}
-	>
-		<Bookmark size={15} class="opacity-70" />
-		Saved queries
-		{#if active}
-			<span class="badge {primary} max-w-[9rem] truncate px-1.5 py-0 text-[10px]">{active.name}</span>
-		{/if}
-	</button>
-	{#if open}
-		<div
-			id="ledgerSavedQueries"
-			class="card absolute right-0 top-full z-40 mt-1 flex max-h-[60vh] w-80 flex-col text-sm shadow-xl"
-			role="dialog"
-			aria-label="Saved queries"
-		>
-			<div class="border-b border-surface-500/30 p-3">
-				{#if saving}
-					<form class="space-y-1.5" on:submit|preventDefault={save}>
-						<!-- svelte-ignore a11y-autofocus -->
-						<input
-							id="ledgerSavedQueryName"
-							class="input h-8 text-xs"
-							placeholder="Name"
-							aria-label="Saved query name"
-							bind:value={name}
-							autofocus
-							on:keydown|stopPropagation={(e) => e.key === "Escape" && (saving = false)}
-						/>
-						<div class="truncate font-mono text-[10px] opacity-60" title={queryText}>{queryText.trim()}</div>
-						<div class="flex items-center justify-end gap-2 text-xs">
-							<button type="button" class="btn btn-sm variant-soft py-0.5" on:click={() => (saving = false)}
-								>Cancel</button
-							>
-							<button type="submit" class="btn btn-sm {primary} py-0.5">Save</button>
-						</div>
-					</form>
-				{:else}
-					<button
-						id="ledgerSaveQuery"
-						type="button"
-						class="btn btn-sm variant-soft w-full justify-start gap-2 text-xs"
-						disabled={!canSave}
-						title={canSave ? "Save the query in the box" : "Run a new, valid query first"}
-						on:click={startSaving}
-					>
-						<BookmarkPlus size={14} /> Save current query
-					</button>
-				{/if}
-			</div>
-			<div class="min-h-0 flex-1 overflow-y-auto pb-2 text-xs">
-				{#each groups as group (group.key)}
-					<div
-						class="sticky top-0 z-10 flex items-center gap-1.5 bg-surface-100-800-token px-3 pb-1 pt-2 text-[10px] uppercase tracking-wide opacity-70"
-					>
-						<svelte:component this={GROUP_ICONS[group.key]} size={11} />{group.label}
-					</div>
-					{#each group.items as q (q.id)}
-						{@const isActive = active?.id === q.id}
-						<div
-							class="ledger-saved-query group flex items-center gap-2 border-l-4 py-[3px] pl-2 pr-3 {isActive
-								? 'border-primary-500 bg-primary-500/20'
-								: 'border-transparent hover:bg-surface-200-700-token'} {q.hidden ? 'opacity-50' : ''}"
+<ToolbarMenu
+	id="ledgerSavedQueries"
+	label="Saved queries"
+	icon={Bookmark}
+	title={active ? `Saved query: ${active.name}` : "Saved queries"}
+	badge={active?.name ?? ""}
+	panelClass="w-80"
+	stayOpen={Boolean($modalStore[0])}
+	bind:open
+	on:open={onOpen}
+>
+	<div class="ledger-saved-queries text-sm">
+		<div class="border-b border-surface-500/30 p-3">
+			{#if saving}
+				<form class="space-y-1.5" on:submit|preventDefault={save}>
+					<!-- svelte-ignore a11y-autofocus -->
+					<input
+						id="ledgerSavedQueryName"
+						class="input h-8 text-xs"
+						placeholder="Name"
+						aria-label="Saved query name"
+						bind:value={name}
+						autofocus
+						on:keydown|stopPropagation={(e) => e.key === "Escape" && (saving = false)}
+					/>
+					<div class="truncate font-mono text-[10px] opacity-60" title={queryText}>{queryText.trim()}</div>
+					<div class="flex items-center justify-end gap-2 text-xs">
+						<button type="button" class="btn btn-sm variant-soft py-0.5" on:click={() => (saving = false)}
+							>Cancel</button
 						>
-							<Bookmark size={12} class="flex-none {isActive ? 'text-primary-500' : 'opacity-50'}" />
-							{#if editing === q.id}
-								<!-- svelte-ignore a11y-autofocus -->
-								<input
-									class="input h-6 min-w-0 flex-1 px-1 text-xs"
-									aria-label="New name"
-									bind:value={editName}
-									autofocus
-									on:keydown={(e) => onEditKeydown(e, () => rename(q), () => (editing = null))}
-								/>
-								<button type="button" class="opacity-70 hover:opacity-100" title="Rename" on:click={() => rename(q)}
-									><Check size={12} /></button
-								>
-							{:else}
-								{@const count = $savedQueriesStore.counts[q.query]}
-								<button
-									type="button"
-									class="min-w-0 flex-1 truncate text-left"
-									title={isActive ? `${q.query}\n(choose again to clear)` : q.query}
-									on:click={() => choose(q)}>{q.name}</button
-								>
-								<span
-									class="flex-none tabular-nums opacity-60 group-hover:hidden"
-									title={count?.error ?? ""}>{countLabel(count)}</span
-								>
-								<span class="hidden flex-none items-center gap-1.5 group-hover:flex">
-									{#if q.source === "builtin"}
-										<button
-											type="button"
-											class="opacity-60 hover:opacity-100"
-											title={q.hidden ? "Show this built-in" : "Hide this built-in"}
-											aria-label={q.hidden ? `Show ${q.name}` : `Hide ${q.name}`}
-											on:click={() => setHidden(q, !q.hidden)}
-										>
-											{#if q.hidden}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
-										</button>
-									{:else}
-										<button
-											type="button"
-											class="opacity-60 hover:opacity-100"
-											title="Rename"
-											aria-label={`Rename ${q.name}`}
-											on:click={() => startRename(q)}><Pencil size={12} /></button
-										>
-										<button
-											type="button"
-											class="opacity-60 hover:text-error-500 hover:opacity-100"
-											title="Delete"
-											aria-label={`Delete ${q.name}`}
-											on:click={() => remove(q)}><Trash2 size={12} /></button
-										>
-									{/if}
-								</span>
-							{/if}
-						</div>
-					{/each}
-				{/each}
-				{#if hiddenCount}
-					<button
-						id="ledgerShowHiddenBuiltins"
-						type="button"
-						class="px-3 pt-2 text-[11px] text-primary-500 hover:underline"
-						on:click={() => (showHidden = !showHidden)}
-					>
-						{showHidden ? "Hide" : "Show"}
-						{hiddenCount} hidden built-in{hiddenCount === 1 ? "" : "s"}
-					</button>
-				{/if}
-			</div>
+						<button type="submit" class="btn btn-sm {primary} py-0.5">Save</button>
+					</div>
+				</form>
+			{:else}
+				<button
+					id="ledgerSaveQuery"
+					type="button"
+					class="btn btn-sm variant-soft w-full justify-start gap-2 text-xs"
+					disabled={!canSave}
+					title={canSave ? "Save the query in the box" : "Run a new, valid query first"}
+					on:click={startSaving}
+				>
+					<BookmarkPlus size={14} /> Save current query
+				</button>
+			{/if}
 		</div>
-	{/if}
-</div>
+		<div class="pb-2 text-xs">
+			{#each groups as group (group.key)}
+				<div
+					class="sticky top-0 z-10 flex items-center gap-1.5 bg-surface-100-800-token px-3 pb-1 pt-2 text-[10px] uppercase tracking-wide opacity-70"
+				>
+					<svelte:component this={GROUP_ICONS[group.key]} size={11} />{group.label}
+				</div>
+				{#each group.items as q (q.id)}
+					{@const isActive = active?.id === q.id}
+					<div
+						class="ledger-saved-query group flex items-center gap-2 border-l-4 py-[3px] pl-2 pr-3 {isActive
+							? 'border-primary-500 bg-primary-500/20'
+							: 'border-transparent hover:bg-surface-200-700-token'} {q.hidden ? 'opacity-50' : ''}"
+					>
+						<Bookmark size={12} class="flex-none {isActive ? 'text-primary-500' : 'opacity-50'}" />
+						{#if editing === q.id}
+							<!-- svelte-ignore a11y-autofocus -->
+							<input
+								class="input h-6 min-w-0 flex-1 px-1 text-xs"
+								aria-label="New name"
+								bind:value={editName}
+								autofocus
+								on:keydown={(e) => onEditKeydown(e, () => rename(q), () => (editing = null))}
+							/>
+							<button type="button" class="opacity-70 hover:opacity-100" title="Rename" on:click={() => rename(q)}
+								><Check size={12} /></button
+							>
+						{:else}
+							{@const count = $savedQueriesStore.counts[q.query]}
+							<button
+								type="button"
+								class="min-w-0 flex-1 truncate text-left"
+								title={isActive ? `${q.query}\n(choose again to clear)` : q.query}
+								on:click={() => choose(q)}>{q.name}</button
+							>
+							<span
+								class="flex-none tabular-nums opacity-60 group-hover:hidden"
+								title={count?.error ?? ""}>{countLabel(count)}</span
+							>
+							<span class="hidden flex-none items-center gap-1.5 group-hover:flex">
+								{#if q.source === "builtin"}
+									<button
+										type="button"
+										class="opacity-60 hover:opacity-100"
+										title={q.hidden ? "Show this built-in" : "Hide this built-in"}
+										aria-label={q.hidden ? `Show ${q.name}` : `Hide ${q.name}`}
+										on:click={() => setHidden(q, !q.hidden)}
+									>
+										{#if q.hidden}<Eye size={12} />{:else}<EyeOff size={12} />{/if}
+									</button>
+								{:else}
+									<button
+										type="button"
+										class="opacity-60 hover:opacity-100"
+										title="Rename"
+										aria-label={`Rename ${q.name}`}
+										on:click={() => startRename(q)}><Pencil size={12} /></button
+									>
+									<button
+										type="button"
+										class="opacity-60 hover:text-error-500 hover:opacity-100"
+										title="Delete"
+										aria-label={`Delete ${q.name}`}
+										on:click={() => remove(q)}><Trash2 size={12} /></button
+									>
+								{/if}
+							</span>
+						{/if}
+					</div>
+				{/each}
+			{/each}
+			{#if hiddenCount}
+				<button
+					id="ledgerShowHiddenBuiltins"
+					type="button"
+					class="px-3 pt-2 text-[11px] text-primary-500 hover:underline"
+					on:click={() => (showHidden = !showHidden)}
+				>
+					{showHidden ? "Hide" : "Show"}
+					{hiddenCount} hidden built-in{hiddenCount === 1 ? "" : "s"}
+				</button>
+			{/if}
+		</div>
+	</div>
+</ToolbarMenu>

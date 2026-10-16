@@ -5,7 +5,7 @@
 //   getAppSavedQueries()        -> { queries: [{ id, name, query, order }], hidden_builtins: [id] }
 //   saveAppSavedQueries(list)   -> the saved list, in order
 //   setHiddenBuiltins(ids)      -> the saved ids
-//   countMatches(query)         -> { Count, Capped, QueryError }
+//   countMatches(query)         -> { Count, Capped, QueryError } (CountTraffic)
 //
 // Each writable source is an adapter in `sources` with add, update and
 // remove; its entries live in state.queries[source]. A project source

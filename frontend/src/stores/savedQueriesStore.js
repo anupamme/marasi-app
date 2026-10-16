@@ -2,7 +2,7 @@
 // createSavedQueriesStore.js, which tests load with a fake API.
 import { derived } from "svelte/store";
 import {
-  CountQueryMatches,
+  CountTraffic,
   GetAppSavedQueries,
   SaveAppSavedQueries,
   SetHiddenBuiltinQueries,
@@ -21,7 +21,7 @@ export const savedQueriesStore = createSavedQueriesStore({
   getAppSavedQueries: () => GetAppSavedQueries(),
   saveAppSavedQueries: (list) => SaveAppSavedQueries(list),
   setHiddenBuiltins: (ids) => SetHiddenBuiltinQueries(ids),
-  countMatches: (query) => CountQueryMatches(query),
+  countMatches: (query) => CountTraffic(query, ""),
 });
 
 /** The visible saved queries as the query box's ready-made suggestions ({ label, query }). */

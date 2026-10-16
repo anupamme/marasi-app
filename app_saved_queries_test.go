@@ -139,32 +139,3 @@ func TestAppSavedQueries(t *testing.T) {
 		}
 	})
 }
-
-func TestCountQueryMatchesCountsUnderTheExclusion(t *testing.T) {
-	app := newScratchpadApp(t)
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 500, contentType: "application/json"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "application/json"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/c", statusCode: 502, contentType: "text/html"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/d", statusCode: 503, contentType: "application/json"})
-	excludeContentTypes(t, app, "text/html")
-
-	got, err := app.CountQueryMatches("status_code >= 500")
-	if err != nil {
-		t.Fatalf("counting: %v", err)
-	}
-	if got.Count != 2 || got.Capped || got.QueryError != nil {
-		t.Fatalf("wanted: 2, not capped, no error\ngot: %+v", got)
-	}
-}
-
-func TestCountQueryMatchesReportsAnInvalidQuery(t *testing.T) {
-	app := newScratchpadApp(t)
-
-	got, err := app.CountQueryMatches("status_code >=")
-	if err != nil {
-		t.Fatalf("counting: %v", err)
-	}
-	if got.QueryError == nil || got.QueryError.Message == "" {
-		t.Fatalf("wanted: a query error\ngot: %+v", got)
-	}
-}

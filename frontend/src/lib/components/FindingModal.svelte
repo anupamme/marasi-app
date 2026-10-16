@@ -19,9 +19,10 @@
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
 	import RequestResponseView from "./RequestResponseView.svelte";
-	import { searchRequests } from "../requestPicker.js";
+	import { createRequestPicker } from "../requestPicker.js";
+	import { ledgerStore } from "../../stores/ledgerStore";
 	import CVSSCalculator from "./CVSSCalculator.svelte";
-	import { GetArtifact, DownloadArtifact, QueryTraffic } from "../wailsjs/go/main/App";
+	import { GetArtifact, DownloadArtifact } from "../wailsjs/go/main/App";
 	import { onDestroy } from "svelte";
 	import ProgressRadial from "../extensions/components/ProgressRadial.svelte";
 	export let parent;
@@ -35,8 +36,6 @@
 	let requestInput = "";
 	let imageUrls = {};
 	let showTestCaseSearch = false;
-	let displayedRequests = [];
-	let requestSearchTimeout;
 	// Seeded with the saved score so opening a finding keeps a manually set severity.
 	let lastSeenScore = finding.CVSSScore;
 
@@ -56,20 +55,10 @@
 		[];
 	// The picker searches the project's traffic as the researcher types,
 	// newest first, rather than holding every pair.
-	let requestSearch = 0;
-	$: {
-		clearTimeout(requestSearchTimeout);
-		const text = requestInput;
-		const search = ++requestSearch;
-		requestSearchTimeout = setTimeout(async () => {
-			if (!text.trim()) {
-				displayedRequests = [];
-				return;
-			}
-			const options = await searchRequests(QueryTraffic, text);
-			if (search === requestSearch) displayedRequests = options;
-		}, 200);
-	}
+	const requestPicker = createRequestPicker(ledgerStore.searchRequests);
+	$: requestPicker.search(requestInput);
+	$: displayedRequests = $requestPicker;
+	onDestroy(requestPicker.cancel);
 	const passThroughFilter = () => displayedRequests;
 
 	$: {

@@ -27,6 +27,7 @@ import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
 import { toggleQueryTerm } from "../lib/ledgerQueryFields.js";
 import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
+import { searchRequests } from "../lib/requestPicker.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
@@ -1496,6 +1497,8 @@ export function createLedgerStore(api) {
     pairNumber,
     shownPairAtNumber,
 
+    /** The request pickers' options: the newest pairs matching `text`. */
+    searchRequests: (text) => searchRequests(api.queryTraffic, text),
     getDetails: (id) => api.getRawDetails(id),
     getMetadata: (id) => api.getMetadata(id),
     getNote: (id) => api.getNote(id),

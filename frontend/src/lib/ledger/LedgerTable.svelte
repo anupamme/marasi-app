@@ -37,7 +37,6 @@
 	/** The highlight palette (stores/highlightsStore.js). */
 	export let palette = [];
 	/** The first row's number for the # column, or null when unknown. */
-	export let firstNumber = null;
 	/** The sort: { field, desc }. */
 	export let sort = null;
 	/**
@@ -276,7 +275,7 @@
 					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
 				>
 					<span class="text-right tabular-nums opacity-60"
-						>{firstNumber == null ? "" : firstNumber + range.start + i}</span
+						>{row.Number || ""}</span
 					>
 					<span class="flex items-center !overflow-visible !pl-1"><RowBadges {row} /></span>
 					<span class="opacity-60">{shortTime(row.RequestedAt)}</span>

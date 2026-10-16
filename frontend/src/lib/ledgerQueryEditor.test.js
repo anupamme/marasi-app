@@ -84,6 +84,12 @@ test("the nightly's fields are suggested by prefix", () => {
   assert.deepEqual(labels(querySuggestions("le", 2)), ["length"]);
 });
 
+test("number is the pair number, compared as a whole number", () => {
+  assert.deepEqual(labels(querySuggestions("nu", 2)), ["number"]);
+  assert.deepEqual(labels(querySuggestions("number ", 7)), ["=", "!=", "<", "<=", ">", ">="]);
+  assert.deepEqual(labels(querySuggestions("number = ", 9)), ["10"]);
+});
+
 test("length compares as a whole number", () => {
   assert.deepEqual(labels(querySuggestions("length ", 7)), ["=", "!=", "<", "<=", ">", ">="]);
   assert.deepEqual(labels(querySuggestions("length > ", 9)), ["100000"]);

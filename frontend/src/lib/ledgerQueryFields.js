@@ -17,6 +17,7 @@ export const QUERY_PREAMBLE =
  * it, the example's value is suggested after the example's operator.
  */
 export const QUERY_FIELDS = [
+  { name: "number", ops: ["=", "!=", "<", "<=", ">", ">="], example: "number = 10", help: "The pair number, a whole number. It follows capture order and never changes." },
   { name: "host", ops: ["=", "!="], example: 'host = "*.acme.test"', help: "Exact case. * at the start or end is a wildcard." },
   { name: "method", ops: ["=", "!="], example: 'method = "POST"', help: "Exact case. * at the start or end is a wildcard." },
   { name: "scheme", ops: ["=", "!="], example: 'scheme = "https"', help: "Exact case. * at the start or end is a wildcard." },

@@ -27,11 +27,11 @@ test("the table's columns are # · badges · Time · Method · Host · Path · S
   );
 });
 
-test("every column but the badges sorts by a Marasi field; # and Time are one order", () => {
+test("every column but the badges sorts by a Marasi field; # by the pair number", () => {
   assert.deepEqual(
     Object.fromEntries(LEDGER_COLUMNS.map((column) => [column.label, column.sort ?? null])),
     {
-      "#": "requested_at",
+      "#": "number",
       "": null,
       Time: "requested_at",
       Method: "method",

@@ -148,7 +148,6 @@
 	// error for text since edited is stale.
 	$: queryBoxError = $query.error?.query === $queryText ? $query.error : null;
 	// Rows are numbered by their position in the results.
-	$: firstNumber = $results.start == null ? null : $results.start + 1;
 
 	// The toast style the Ledger's handoffs use.
 	$: handoffBackground = $modeCurrent
@@ -746,8 +745,10 @@
 					});
 				}).then((requestIndex) => {
 					if (!requestIndex) return;
-					const pair = ledgerStore.shownPairAtNumber(parseInt(requestIndex));
-					if (pair) selectAndReveal(pair.ID);
+					ledgerStore.openNumber(parseInt(requestIndex)).then((pair) => {
+						if (pair) selectAndReveal(pair.ID);
+						else toastStore.trigger({ message: `No request ${requestIndex}`, background: "variant-filled-warning", timeout: 2000 });
+					});
 				});
 			},
 		},
@@ -1184,7 +1185,6 @@
 						focusId={focusID}
 						selectedIds={$selection.ids}
 						palette={$highlightPalette}
-						{firstNumber}
 						sort={$sort}
 						pinTop={$newKind === "top" && !$results.hasBefore}
 						resetKey={$results.reset}

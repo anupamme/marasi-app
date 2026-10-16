@@ -15,7 +15,7 @@ import {
 
 // Pair IDs sort by capture time, as Marasi's UUIDv7 ids do.
 const idOf = (n) => `p${String(n).padStart(4, "0")}`;
-const pair = (n, extra = {}) => ({ ID: idOf(n), Method: "GET", Host: "api.acme.test", Path: `/${n}`, ...extra });
+const pair = (n, extra = {}) => ({ ID: idOf(n), Number: n, Method: "GET", Host: "api.acme.test", Path: `/${n}`, ...extra });
 
 // An in-memory Marasi: one page newest first under as_of, queries as
 // predicates by text, CountTraffic, and the bulk operations, which record
@@ -246,7 +246,7 @@ test("a new launchpad for listed pairs is named after their request numbers", as
   store.clickRow(idOf(3));
   await store.sendToNewLaunchpad(selectionSpec(get(store)));
   assert.deepEqual(api.calls.filter(([name]) => name === "createLaunchpad"), [
-    ["createLaunchpad", "Request 2", "Launchpad for Request 2"],
+    ["createLaunchpad", "Request 3", "Launchpad for Request 3"],
   ]);
 });
 

@@ -65,7 +65,11 @@ const MAX_PAGE_ROWS = 1000;
 export const EDGE_ROWS = 60;
 
 /** The default sort: newest first. */
-export const DEFAULT_SORT = Object.freeze({ field: "requested_at", desc: true });
+// Newest first by Marasi's pair number (ADR-0042 in Marasi): unlike
+// requested_at, it reads strictly in order under concurrent capture.
+export const DEFAULT_SORT = Object.freeze({ field: "number", desc: true });
+// Fields a header click sorts newest first rather than ascending.
+const NEWEST_FIRST_FIELDS = new Set(["number", "requested_at"]);
 
 // Past this many buffered events, they reach the table at once.
 const MAX_BUFFERED = 500;
@@ -1074,7 +1078,8 @@ export function createLedgerStore(api) {
 
   /**
    * Sorts by a Marasi order_by field. The same field again reverses it;
-   * another starts newest first for requested_at and ascending otherwise.
+   * another starts newest first for number and requested_at, and ascending
+   * otherwise.
    * A cursor only works with its sort, so the rows load from the top.
    */
   function sortBy(field) {
@@ -1082,7 +1087,7 @@ export function createLedgerStore(api) {
       const sort =
         state.sort.field === field
           ? { field, desc: !state.sort.desc }
-          : { field, desc: field === DEFAULT_SORT.field };
+          : { field, desc: NEWEST_FIRST_FIELDS.has(field) };
       return { ...state, sort };
     });
     return reload();
@@ -1269,20 +1274,32 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * The pair's number ("Request N"): its position in the current results,
-   * or "?" when it isn't loaded or the window's position is unknown.
+   * The pair's number ("Request N"): Marasi's pair number, which follows
+   * capture order and never changes, or "?" when the pair isn't loaded.
    */
   function pairNumber(id) {
-    const start = current.results.start;
-    const index = tableRows(current).findIndex((item) => sameID(item.ID, id));
-    return index < 0 || start == null ? "?" : start + index + 1;
+    return findShownPair(id)?.Number || "?";
   }
 
-  /** The loaded pair whose number is `number`, or undefined. */
+  /** The loaded pair whose pair number is `number`, or undefined. */
   function shownPairAtNumber(number) {
-    const start = current.results.start;
-    if (start == null) return undefined;
-    return tableRows(current)[number - 1 - start];
+    return tableRows(current).find((item) => item.Number === number);
+  }
+
+  /**
+   * The pair numbered `number`: the loaded one, else the result of running
+   * `number = N` as the query. undefined, with the query and the table left
+   * as they were, when no shown pair has that number.
+   */
+  async function openNumber(number) {
+    const shown = shownPairAtNumber(number);
+    if (shown) return shown;
+    const text = `number = ${number}`;
+    const counted = await api.countTraffic(text, "", {});
+    if (counted.QueryError || !counted.Count) return undefined;
+    update((state) => ({ ...state, queryText: text }));
+    await runQuery(text);
+    return shownPairAtNumber(number);
   }
 
   function updateLayout(fn) {
@@ -1460,6 +1477,7 @@ export function createLedgerStore(api) {
 
     findShownPair,
     pairNumber,
+    openNumber,
     shownPairAtNumber,
 
     /** The request pickers' options: the newest pairs matching `text`. */

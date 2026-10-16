@@ -14,7 +14,7 @@ export const HEADER_HEIGHT = 24;
  * is the Marasi order_by field a click on the header sorts by.
  */
 export const LEDGER_COLUMNS = Object.freeze([
-  { key: "number", label: "#", width: "52px", align: "right", sort: "requested_at" },
+  { key: "number", label: "#", width: "52px", align: "right", sort: "number" },
   { key: "badges", label: "", width: "46px" },
   { key: "time", label: "Time", width: "70px", sort: "requested_at" },
   { key: "method", label: "Method", width: "80px", sort: "method" },

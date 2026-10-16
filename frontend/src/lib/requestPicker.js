@@ -40,18 +40,22 @@ export function createRequestPicker(searchText) {
 
 /**
  * The traffic query for the picker's text: the text anywhere in the host or
- * the path. Quotes and backslashes are dropped so the text stays one value.
- * "" lists every pair.
+ * the path, and a whole number also the pair with that pair number ("#10"
+ * only that pair). Quotes and backslashes are dropped so the text stays one
+ * value. "" lists every pair.
  */
 export function requestPickerQuery(text) {
   const value = (text ?? "").trim().replace(/["\\]/g, "");
   if (!value) return "";
-  return `host = "*${value}*" OR path = "*${value}*"`;
+  const numbered = /^#\d+$/.test(value);
+  if (numbered) return `number = ${Number(value.slice(1))}`;
+  const anywhere = `host = "*${value}*" OR path = "*${value}*"`;
+  return /^\d+$/.test(value) ? `number = ${Number(value)} OR ${anywhere}` : anywhere;
 }
 
 /** A pair as a picker option: { label, value, ...pair }. */
 export function requestOption(pair) {
-  const label = `${pair.Method} ${pair.Scheme}://${pair.Host}${pair.Path}`;
+  const label = `${pair.Number ? `#${pair.Number} ` : ""}${pair.Method} ${pair.Scheme}://${pair.Host}${pair.Path}`;
   return { label, value: pair.ID, ...pair };
 }
 
@@ -63,7 +67,7 @@ export async function searchRequests(queryTraffic, text) {
   try {
     const page = await queryTraffic({
       Query: requestPickerQuery(text),
-      OrderBy: "requested_at desc",
+      OrderBy: "number desc",
       Limit: PICKER_LIMIT,
       IgnoreExclusion: true,
     });

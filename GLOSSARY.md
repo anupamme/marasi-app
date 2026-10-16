@@ -14,6 +14,10 @@ _Avoid_: history, HTTP history, proxy items
 The ledger with no query: every request/response pair, with new traffic appearing at the top as it is captured. Sorted any other way than newest first, new traffic waits as new matches instead, so rows never move under the researcher.
 _Avoid_: unfiltered view, all items
 
+**Pair number**:
+A pair's number in its project, shown as `#` and in "Request N". Marasi assigns it at capture, in capture order, from 1. It never changes and is never reused, so deleted pairs leave gaps, and a pair keeps it under any query, sort or content-type exclusion. The live view lists pairs by pair number, newest first.
+_Avoid_: index, row number, position
+
 **Query**:
 A text expression that narrows the ledger to the request/response pairs that match it, as Marasi defines it. The ledger's current query is not stored; a researcher keeps one by making it a saved query.
 _Avoid_: search, search string, filter, FTS

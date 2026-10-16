@@ -21,6 +21,7 @@ import {
 const idOf = (n) => `p${String(n).padStart(6, "0")}`;
 const pair = (n, extra = {}) => ({
   ID: idOf(n),
+  Number: n,
   Method: "GET",
   Host: "api.acme.test",
   Path: `/${n}`,
@@ -33,6 +34,7 @@ const pairs = (count, extra = () => ({})) =>
   Array.from({ length: count }, (_, i) => pair(i + 1, extra(i + 1)));
 
 const SORT_KEYS = {
+  number: (p) => p.Number,
   requested_at: (p) => p.ID,
   method: (p) => p.Method,
   host: (p) => p.Host,
@@ -70,7 +72,7 @@ function fakeApi({
   const predicate = (text) => (text === "" ? () => true : queries[text]);
 
   function listed(req) {
-    const [field, dir] = (req.OrderBy || "requested_at desc").split(" ");
+    const [field, dir] = (req.OrderBy || "number desc").split(" ");
     const sign = dir === "desc" ? -1 : 1;
     const key = SORT_KEYS[field];
     const asOf = req.AsOf || newest();
@@ -188,13 +190,13 @@ test("the live view loads its first page newest first, then the count", async ()
   assert.equal(state.results.asOf, idOf(3));
   assert.deepEqual(pageCalls(api)[0], {
     Query: "",
-    OrderBy: "requested_at desc",
+    OrderBy: "number desc",
     Cursor: "",
     Direction: "forward",
     AsOf: "",
     Limit: PAGE_SIZE,
   });
-  assert.equal(store.pairNumber(idOf(3)), 1, "a pair's number is its position");
+  assert.equal(store.pairNumber(idOf(3)), 3, "a pair's number is Marasi's pair number");
   assert.equal(store.pairNumber("missing"), "?");
 });
 
@@ -234,7 +236,7 @@ test("far pages are dropped while scrolling, and load again backward on the way 
   assert.ok(tableRows(state).length <= MAX_WINDOW_ROWS);
   const top = tableRows(state)[0].ID;
   const topNumber = store.pairNumber(top);
-  assert.equal(topNumber, total - Number(top.slice(1)) + 1, "numbers stay positions in the results");
+  assert.equal(topNumber, Number(top.slice(1)), "numbers are the pairs' own, wherever the window is");
 
   // Back up: the dropped pages come back, backward, without duplicates.
   const asOf = state.results.asOf;
@@ -457,6 +459,44 @@ test("clearing the query returns to the live view from the top", async () => {
   assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
 });
 
+test("a pair keeps its number under any query or sort, gaps included", async () => {
+  const traffic = [pair(1), pair(2), pair(4), pair(7)];
+  const api = fakeApi({ traffic, queries: { even: (p) => p.Number % 2 === 0 } });
+  const store = createLedgerStore(api);
+  await store.runQuery("even");
+  await store.sortBy("host");
+  assert.deepEqual(tableRows(get(store)).map((row) => row.Number).sort(), [2, 4]);
+  assert.equal(store.pairNumber(idOf(4)), 4);
+  assert.equal(store.shownPairAtNumber(4)?.ID, idOf(4));
+  assert.equal(store.shownPairAtNumber(3), undefined, "a deleted number finds nothing");
+});
+
+test("opening a number that isn't loaded runs number = N", async () => {
+  const api = fakeApi({ traffic: pairs(5), queries: { "number = 2": (p) => p.Number === 2, one: (p) => p.Number === 5 } });
+  const store = createLedgerStore(api);
+  await store.runQuery("one");
+  const found = await store.openNumber(2);
+  assert.equal(found?.ID, idOf(2));
+  assert.equal(get(store).queryText, "number = 2");
+  assert.deepEqual(ids(get(store)), [idOf(2)]);
+
+  const before = pageCalls(api).length;
+  assert.equal((await store.openNumber(2))?.ID, idOf(2), "a loaded number opens without a read");
+  assert.equal(pageCalls(api).length, before);
+});
+
+test("opening a number no pair has leaves the query and the table as they were", async () => {
+  const api = fakeApi({ traffic: pairs(3), queries: { "number = 9": () => false, one: (p) => p.Number === 1 } });
+  const store = createLedgerStore(api);
+  store.setQueryText("one");
+  await store.runQuery();
+  const before = pageCalls(api).length;
+  assert.equal(await store.openNumber(9), undefined);
+  assert.equal(get(store).queryText, "one");
+  assert.deepEqual(ids(get(store)), [idOf(1)]);
+  assert.equal(pageCalls(api).length, before, "nothing was read again");
+});
+
 test("back to the live view clears the query and the sort and reads newest first from the top", async () => {
   const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID !== idOf(2) } });
   const store = createLedgerStore(api);
@@ -469,7 +509,7 @@ test("back to the live view clears the query and the sort and reads newest first
   const state = get(store);
   assert.equal(state.queryText, "");
   assert.equal(isQueryActive(state.query), false);
-  assert.deepEqual(state.sort, { field: "requested_at", desc: true });
+  assert.deepEqual(state.sort, { field: "number", desc: true });
   assert.equal(isLiveNewestFirst(state), true);
   assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
 });

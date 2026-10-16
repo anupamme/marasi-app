@@ -13,6 +13,7 @@
 		Check,
 		ChevronRight,
 		Copy,
+		Eraser,
 		EyeOff,
 		Filter,
 		Highlighter,
@@ -27,6 +28,7 @@
 		Send,
 		ShieldAlert,
 		Swords,
+		Trash2,
 		Unlink,
 		X,
 	} from "lucide-svelte";
@@ -64,6 +66,8 @@
 		unlink: Unlink,
 		"eye-off": EyeOff,
 		highlighter: Highlighter,
+		trash: Trash2,
+		eraser: Eraser,
 	};
 	const METHOD_CLASS = {
 		POST: "text-tertiary-500",
@@ -243,6 +247,15 @@
 	}
 
 	const plural = (n, word) => `${n.toLocaleString()} ${n === 1 ? word : word + "s"}`;
+
+	// A ⌘A selection counts every match, not just the loaded pairs.
+	$: selectionLabel = !summary
+		? ""
+		: context.all
+			? context.count == null
+				? "All matching requests"
+				: `All ${plural(context.count, "request")}`
+			: plural(summary.count, "request");
 </script>
 
 <svelte:window on:keydown|capture={onKeydown} on:pointerdown|capture={onPointerDown} on:blur={() => open && close(false)} />
@@ -254,12 +267,12 @@
 		class="ledger-row-menu fixed z-50 w-72 border border-surface-300-600-token bg-surface-100-800-token text-xs shadow-2xl"
 		style="left: {position.left}px; top: {position.top}px"
 		role="menu"
-		aria-label="Actions for {plural(summary.count, 'request')}"
+		aria-label="Actions for {selectionLabel}"
 		on:contextmenu|preventDefault
 	>
 		<!-- What the menu acts on. -->
 		<div class="border-b border-primary-500 px-3 py-2">
-			{#if pairs.length === 1}
+			{#if pairs.length === 1 && !context.all}
 				{@const pair = pairs[0]}
 				<div class="flex items-center gap-2 font-mono">
 					<span class="opacity-60">#{context.numberOf?.(pair) ?? ""}</span>
@@ -271,7 +284,7 @@
 				</div>
 			{:else}
 				<div class="flex items-center gap-2">
-					<span class="font-semibold">{plural(summary.count, "request")}</span>
+					<span class="font-semibold">{selectionLabel}</span>
 					<span class="opacity-60">· {plural(summary.hosts.length, "host")}</span>
 				</div>
 				<div class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[10px]">
@@ -368,6 +381,7 @@
 						aria-expanded={Array.isArray(item.sub) ? sub === i : undefined}
 						class="flex w-full items-center gap-2 px-3 py-[5px] text-left
 							{item.disabled ? 'cursor-not-allowed opacity-40' : ''}
+							{item.danger ? 'text-error-600 dark:text-error-400' : ''}
 							{(active === i || sub === i) && !item.disabled ? 'bg-primary-500/20' : ''}"
 						title={item.disabled ? item.hint : ""}
 						on:mouseenter={() => {
@@ -422,6 +436,7 @@
 								aria-disabled={item.disabled ? "true" : undefined}
 								class="flex w-full items-center gap-2 px-3 py-[5px] text-left
 									{item.disabled ? 'cursor-not-allowed opacity-40' : ''}
+									{item.danger ? 'text-error-600 dark:text-error-400' : ''}
 									{subActive === j && !item.disabled ? 'bg-primary-500/20' : ''}"
 								title={item.disabled ? item.hint : item.label}
 								on:mouseenter={() => (subActive = j)}

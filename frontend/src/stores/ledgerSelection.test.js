@@ -18,6 +18,10 @@ function fakeApi({ liveView = [], exclusion = [], results = {}, fail = new Set()
     calls,
     getLiveView: async () => liveView.map((pair) => ({ ...pair })),
     getExclusion: async () => [...exclusion],
+    hasOwnExclusion: async () => true,
+    getDefaultExclusion: async () => [],
+    countContentTypes: async () => ({}),
+    countTraffic: async () => ({ Count: 0, Capped: false, IndexComplete: true }),
     setExclusion: async (types) => {
       calls.push(["setExclusion", types]);
       exclusion = [...types];

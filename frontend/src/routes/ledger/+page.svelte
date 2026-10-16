@@ -4,9 +4,8 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
-	import { get } from "svelte/store";
-	import { contentTypeFilterInput, lineWrap } from "../../stores";
-	import { getModalStore, getToastStore, InputChip, modeCurrent } from "@skeletonlabs/skeleton";
+	import { lineWrap } from "../../stores";
+	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import {
 		Search,
 		ToggleLeftIcon,
@@ -33,10 +32,11 @@
 		CircleAlert,
 		TriangleAlert,
 		PanelLeftIcon,
-		FileType,
 		MenuIcon,
+		Tags,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
+	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
 	import { appendToQuery } from "../../lib/ledgerQueryFields";
 	import MarasiKeys from "../../lib/components/MarasiMenu/MarasiKeys.svelte";
 	import { useMenuActions } from "../../lib/keybindings/app.js";
@@ -54,6 +54,10 @@
 		requestCount,
 		similarIDs,
 	} from "../../lib/ledger/rowMenu.js";
+	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
+	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
+	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
+	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { rowHighlight } from "../../lib/ledger/table.js";
 	import { launchpadStore } from "../../stores/launchpadStore";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
@@ -70,7 +74,6 @@
 		isQueryActive,
 		canLoadOlder,
 		matchNoun,
-		markQueryError,
 		matchCountLabel,
 		indexWarning,
 		selectedPairs,
@@ -85,6 +88,7 @@
 	const queryText = select(ledgerStore, (state) => state.queryText);
 	const queryPending = select(ledgerStore, (state) => state.queryPending);
 	const queryActive = select(ledgerStore, (state) => isQueryActive(state.query));
+	// The row menu's Hide type adds to it.
 	const exclusion = select(ledgerStore, (state) => state.exclusion);
 	const selection = select(ledgerStore, (state) => state.selection);
 	const focused = select(ledgerStore, focusedPair);
@@ -101,7 +105,7 @@
 	// The row menu: whether it shows, where, and the pairs it acts on, taken
 	// from the selection when it opens.
 	let rowMenu = { open: false, x: 0, y: 0, pairs: [] };
-	let typesOpen = false;
+	let typesMenu;
 
 	$: primary = primaryVariant($modeCurrent);
 	$: drawerOpen = Boolean($focused);
@@ -109,7 +113,9 @@
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
 	$: selectedCount = $selection.ids.size;
 	$: allSelected = selectedCount > 1 && selectedCount === $rows.length;
-	$: queryErrorMark = markQueryError($query.error);
+	// Marasi's error for the text in the query box, underlined there; an
+	// error for text since edited is stale.
+	$: queryBoxError = $query.error?.query === $queryText ? $query.error : null;
 	$: liveCount = $rows.length;
 
 	const numberOf = (row) => ledgerStore.pairNumber(row.ID);
@@ -513,24 +519,6 @@
 		else element.focus();
 	}
 
-	function exclusionInput() {
-		return document.querySelector('input[placeholder="Filter by Content Type"]');
-	}
-
-	async function toggleExclusionFocus() {
-		if (!typesOpen) {
-			typesOpen = true;
-			await Promise.resolve();
-			setTimeout(() => exclusionInput()?.focus(), 0);
-			return;
-		}
-		const input = exclusionInput();
-		if (document.activeElement === input) {
-			input.blur();
-			typesOpen = false;
-		} else input?.focus();
-	}
-
 	const toggleSidebar = {
 		icon: PanelLeftIcon,
 		handler: () => dock?.toggle(),
@@ -550,7 +538,7 @@
 		{
 			actionId: "ledger.drawer-closed.focus-exclusion",
 			icon: FilterIcon,
-			handler: toggleExclusionFocus,
+			handler: () => typesMenu?.focusFind(),
 		},
 		{
 			actionId: "ledger.drawer-closed.next-page",
@@ -791,35 +779,19 @@
 		document.getElementById("searchBox")?.focus();
 	}
 
-	function onQueryKeydown(e) {
-		if (e.key === "Enter") {
-			e.preventDefault();
-			ledgerStore.runQuery($queryText);
-		} else if (e.key === "Escape") {
-			e.preventDefault();
-			e.stopPropagation();
-			ledgerStore.clearQuery();
-		}
+	// The Marks menu's counts, read each time it opens.
+	let markCounts = {};
+	let markCountsRead = 0;
+	async function loadMarkCounts() {
+		const read = ++markCountsRead;
+		markCounts = {};
+		const counts = await ledgerStore.countQueries(MARKS.map((mark) => mark.term));
+		if (read === markCountsRead) markCounts = counts;
 	}
-
-	// The content-type chips edit a copy of the exclusion, refreshed whenever
-	// the store's exclusion changes.
-	let exclusionDraft = [];
-	let draftedExclusion;
-	$: if ($exclusion !== draftedExclusion) {
-		draftedExclusion = $exclusion;
-		exclusionDraft = [...$exclusion];
-	}
-
-	// Stores the content-type exclusion, then runs the active query again so
-	// its results reflect it. The query reads the stored exclusion itself.
-	function saveContentTypeExclusion() {
-		return ledgerStore.saveExclusion(exclusionDraft);
-	}
+	$: activeMarks = activeMarkCount($queryText);
 
 	// Closes the toolbar's panels on a click outside them.
 	function onWindowPointerDown(event) {
-		if (typesOpen && !event.target.closest?.(".ledger-types")) typesOpen = false;
 		if (queryFieldsOpen && !event.target.closest?.(".ledger-query-fields, #ledgerQueryFieldsToggle")) {
 			queryFieldsOpen = false;
 		}
@@ -849,8 +821,8 @@
 	</Dock>
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		<!-- Toolbar: the query box, then the menus. Saved queries, Highlights
-		     and Marks join it before Types. -->
+		<!-- Toolbar: the query box, then the menus. Saved queries and
+		     Highlights join it before Marks. -->
 		<div
 			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-100-800-token"
 		>
@@ -860,28 +832,29 @@
 				{:else}
 					<Search size={15} class="shrink-0 opacity-70" />
 				{/if}
-				<input
-					id="searchBox"
-					class="h-full min-w-0 flex-1 border-0 bg-transparent p-0 font-mono text-sm focus:outline-none focus:ring-0"
-					type="text"
-					autocomplete="off"
-					spellcheck="false"
-					placeholder="Search traffic…"
+				<LedgerQueryBox
 					value={$queryText}
-					on:input={(e) => {
-						ledgerStore.setQueryText(e.currentTarget.value);
-						ledgerStore.scheduleQuery(e.currentTarget.value);
+					error={queryBoxError}
+					on:change={(e) => {
+						ledgerStore.setQueryText(e.detail);
+						ledgerStore.scheduleQuery(e.detail);
 					}}
-					on:keydown={onQueryKeydown}
+					on:run={() => ledgerStore.runQuery($queryText)}
+					on:clear={() => ledgerStore.clearQuery()}
 				/>
-				{#if $query.error?.query === $queryText}
+				{#if queryBoxError}
 					<span
-						id="ledgerQueryErrorMarker"
-						class="text-error-500"
-						title="Invalid query: {$query.error.message}"><CircleAlert size={14} /></span
+						id="ledgerQueryError"
+						class="flex max-w-[24rem] items-center gap-1 text-xs text-error-500"
+						role="alert"
+						title={queryBoxError.position
+							? `Position ${queryBoxError.position}: ${queryBoxError.message}`
+							: queryBoxError.message}
+						><CircleAlert size={14} class="shrink-0" /><span class="truncate"
+							>{queryBoxError.message}</span
+						></span
 					>
-				{/if}
-				{#if $queryActive}
+				{:else if $queryActive}
 					<span id="ledgerQueryMatchCount" class="whitespace-nowrap text-xs opacity-70"
 						>{matchCountLabel($query)}</span
 					>
@@ -914,39 +887,22 @@
 					<CircleHelp size={15} />
 				</button>
 			</div>
-			<div class="ledger-types relative flex items-stretch border-l border-surface-300-600-token">
-				<button
-					type="button"
-					class="flex items-center gap-1.5 px-3 text-sm hover:bg-surface-200-700-token"
-					title="Content types the Ledger hides"
-					aria-expanded={typesOpen}
-					on:click={() => (typesOpen = !typesOpen)}
-				>
-					<FileType size={15} class="opacity-70" />
-					Types
-					{#if $exclusion.length}
-						<span class="badge {primary} px-1.5 py-0 text-[10px]">{$exclusion.length}</span>
-					{/if}
-				</button>
-				{#if typesOpen}
-					<div
-						class="card absolute right-0 top-full z-40 mt-1 max-h-[60vh] w-96 space-y-2 overflow-auto p-3 shadow-xl"
-						role="dialog"
-						aria-label="Hidden content types"
-					>
-						<div class="text-xs opacity-70">Hidden content types</div>
-						<InputChip
-							bind:input={$contentTypeFilterInput}
-							bind:value={exclusionDraft}
-							name="chips"
-							placeholder="Filter by Content Type"
-							rounded="none"
-							on:add={saveContentTypeExclusion}
-							on:remove={saveContentTypeExclusion}
-						/>
-					</div>
-				{/if}
-			</div>
+			<ToolbarMenu
+				id="ledgerMarks"
+				label="Marks"
+				icon={Tags}
+				title="Pairs with a note or a link"
+				badge={activeMarks ? String(activeMarks) : ""}
+				panelClass="w-64"
+				on:open={loadMarkCounts}
+			>
+				<MarksMenu
+					queryText={$queryText}
+					counts={markCounts}
+					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
+				/>
+			</ToolbarMenu>
+			<LedgerTypesMenu bind:this={typesMenu} />
 			{#if queryFieldsOpen}
 				<div
 					id="ledgerQueryFields"
@@ -956,21 +912,6 @@
 				</div>
 			{/if}
 		</div>
-		{#if $query.error}
-			<div
-				class="flex-none border-b border-surface-300-600-token px-3 py-1 text-xs text-error-500"
-				role="alert"
-			>
-				{#if queryErrorMark}
-					<pre class="whitespace-pre-wrap break-all font-mono">{queryErrorMark.before}<mark
-							class="bg-error-500 text-white">{queryErrorMark.at}</mark
-						>{queryErrorMark.after}</pre>
-					<span>Position {$query.error.position}: {$query.error.message}</span>
-				{:else}
-					<span>{$query.error.message}</span>
-				{/if}
-			</div>
-		{/if}
 
 		<!-- The table, and the drawer below it while a pair is selected. -->
 		<div class="relative flex min-h-0 flex-1 flex-col" bind:this={tableArea}>

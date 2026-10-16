@@ -85,6 +85,7 @@
 		focusedPair,
 		drawerKeybindingState,
 		isQueryActive,
+		isLiveNewestFirst,
 		indexWarning,
 		selectedPairs,
 		countLabel,
@@ -115,6 +116,8 @@
 	const statusCount = select(ledgerStore, countLabel);
 	const indexNote = select(ledgerStore, indexWarning);
 	const newKind = select(ledgerStore, newMatchesKind);
+	// The live view: no query typed or running, newest first.
+	const inLiveView = select(ledgerStore, (state) => isLiveNewestFirst(state) && !state.queryText);
 	const newLabel = select(ledgerStore, newMatchesLabel);
 
 	const modalStore = getModalStore();
@@ -1103,6 +1106,23 @@
 					<CircleHelp size={15} />
 				</button>
 			</div>
+			{#if $inLiveView}
+				<span
+					id="ledgerLive"
+					class="flex items-center gap-1.5 px-3 text-sm"
+					title="The live view: every pair, newest first"
+					><span class="h-2 w-2 rounded-full bg-success-500"></span>Live</span
+				>
+			{:else}
+				<button
+					id="ledgerLive"
+					type="button"
+					class="flex items-center gap-1.5 px-3 text-sm hover:bg-surface-200-700-token"
+					title="Back to the live view: clears the query and the sort"
+					on:click={() => ledgerStore.backToLive()}
+					><span class="h-2 w-2 rounded-full bg-surface-400"></span>Live</button
+				>
+			{/if}
 			<SavedQueriesMenu
 				queryText={$queryText}
 				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}

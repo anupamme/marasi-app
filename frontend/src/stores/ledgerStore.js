@@ -38,6 +38,7 @@ export {
   hiddenByTypeCount,
   indexWarning,
   selectedPairs,
+  isLiveNewestFirst,
   isQueryActive,
   newMatchesKind,
   newMatchesLabel,

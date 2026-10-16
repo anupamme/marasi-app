@@ -7,6 +7,7 @@ import {
   focusedPair,
   hiddenByTypeCount,
   indexWarning,
+  isLiveNewestFirst,
   isQueryActive,
   newMatchesKind,
   NEW_MATCHES_DELAY_MS,
@@ -454,6 +455,32 @@ test("clearing the query returns to the live view from the top", async () => {
   assert.equal(state.queryText, "");
   assert.equal(isQueryActive(state.query), false);
   assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
+});
+
+test("back to the live view clears the query and the sort and reads newest first from the top", async () => {
+  const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID !== idOf(2) } });
+  const store = createLedgerStore(api);
+  store.setQueryText("one");
+  await store.runQuery();
+  await store.sortBy("host");
+  assert.equal(isLiveNewestFirst(get(store)), false);
+
+  await store.backToLive();
+  const state = get(store);
+  assert.equal(state.queryText, "");
+  assert.equal(isQueryActive(state.query), false);
+  assert.deepEqual(state.sort, { field: "requested_at", desc: true });
+  assert.equal(isLiveNewestFirst(state), true);
+  assert.deepEqual(ids(state), [idOf(3), idOf(2), idOf(1)]);
+});
+
+test("back to the live view from the live view itself reads nothing", async () => {
+  const api = fakeApi({ traffic: pairs(2) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  const before = pageCalls(api).length;
+  await store.backToLive();
+  assert.equal(pageCalls(api).length, before);
 });
 
 test("the count shows 100,000+ when Marasi caps it, and the exclusion's hidden pairs", async () => {

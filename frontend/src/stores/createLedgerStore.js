@@ -1052,6 +1052,27 @@ export function createLedgerStore(api) {
   }
 
   /**
+   * Back to the newest-first live view: empties the query (and with it any
+   * mark, highlight, sitemap or saved-query term), restores the default sort
+   * and reads from the top. Nothing is read when the table already shows it.
+   */
+  function backToLive() {
+    if (isLiveNewestFirst(current) && !current.queryText && !current.results.loading) {
+      return Promise.resolve();
+    }
+    cancelDelay();
+    latestRequest++;
+    viewport = { first: 0, last: 0, atTop: true };
+    update((state) => ({
+      ...state,
+      queryText: "",
+      query: { ...emptyQueryState(state.query.runID) },
+      sort: DEFAULT_SORT,
+    }));
+    return reload();
+  }
+
+  /**
    * Sorts by a Marasi order_by field. The same field again reverses it;
    * another starts newest first for requested_at and ascending otherwise.
    * A cursor only works with its sort, so the rows load from the top.
@@ -1339,6 +1360,7 @@ export function createLedgerStore(api) {
       loadAround();
     },
     sortBy,
+    backToLive,
     countNewMatches,
     showNewMatches,
     goToTop,

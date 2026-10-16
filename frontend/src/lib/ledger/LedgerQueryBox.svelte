@@ -237,7 +237,6 @@
 		font-size: 0.75rem;
 		max-height: 18rem;
 		min-width: 22rem;
-		scrollbar-width: thin;
 	}
 	.ledger-query :global(.cm-tooltip.cm-tooltip-autocomplete > ul > li) {
 		padding: 4px 10px;

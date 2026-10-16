@@ -411,22 +411,3 @@
 		{/if}
 	</div>
 </div>
-
-<style>
-	/* Thin, theme-coloured scrollbars for the tree. */
-	:global(.lp-scroll) {
-		scrollbar-width: thin;
-		scrollbar-color: rgb(var(--color-surface-500) / 0.35) transparent;
-	}
-	:global(.lp-scroll::-webkit-scrollbar) {
-		width: 8px;
-		height: 8px;
-	}
-	:global(.lp-scroll::-webkit-scrollbar-thumb) {
-		background: rgb(var(--color-surface-500) / 0.35);
-		border-radius: 4px;
-	}
-	:global(.lp-scroll::-webkit-scrollbar-track) {
-		background: transparent;
-	}
-</style>

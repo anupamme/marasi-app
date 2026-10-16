@@ -309,10 +309,6 @@
 {/if}
 
 <style>
-	.ledger-table {
-		scrollbar-width: thin;
-		scrollbar-color: rgb(var(--color-surface-500) / 0.35) transparent;
-	}
 	.lg-row {
 		display: grid;
 		align-items: center;

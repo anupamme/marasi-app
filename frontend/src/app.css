@@ -10,6 +10,27 @@ body {
   --ctx-menu-padding: 0.375rem 0.5rem;
 }
 
+/* Thin, theme-coloured scrollbars everywhere. The standard properties
+   cover Chrome; the ::-webkit-scrollbar rules cover the desktop app's
+   WebKit when it shows scrollbars all the time. A component can still
+   hide its scrollbar (the nav rail does). */
+* {
+  scrollbar-width: thin;
+  scrollbar-color: rgb(var(--color-surface-500) / 0.35) transparent;
+}
+::-webkit-scrollbar {
+  width: 8px;
+  height: 8px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgb(var(--color-surface-500) / 0.35);
+  border-radius: 4px;
+}
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
 html.dark body {
   --ctx-menu-background: #2f343c;
   --ctx-menu-hover-bg: #cf595b;

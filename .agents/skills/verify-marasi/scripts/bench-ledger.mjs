@@ -8,6 +8,10 @@
 //   firstVisit            Toolbar paint on the first visit after a fresh
 //                         launch (bench-ledger.sh restarts the instance),
 //                         when nothing has loaded the Ledger's code yet.
+//   startupRows           First row on a Ledger click made the moment Home
+//                         shows after an app reload, while the project is
+//                         still opening (median of 3): what a researcher
+//                         who opens the Ledger straight away waits.
 //   longestTask           The longest main-thread task during a warm visit.
 //   sortRows              A sort header click until the table shows the
 //                         newly sorted first row (a full first-page read).
@@ -27,6 +31,7 @@ const BUDGET = {
 	warmShell: 100,
 	warmRows: 100,
 	firstVisit: 150,
+	startupRows: 500,
 	longestTask: 100,
 	sortRows: 300,
 	firstPage: 50,
@@ -51,15 +56,20 @@ const send = (method, params = {}) =>
 		pending.set(id, resolve);
 		socket.send(JSON.stringify({ id, method, params }));
 	});
-async function evaluate(expression) {
-	const message = await send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true });
+// A call made while the page reloads can go unanswered; it fails after
+// `timeoutMs` so `until` asks again.
+async function evaluate(expression, timeoutMs = 30000) {
+	const message = await Promise.race([
+		send("Runtime.evaluate", { expression, returnByValue: true, awaitPromise: true }),
+		new Promise((_, reject) => setTimeout(() => reject(new Error("no answer from the page")), timeoutMs)),
+	]);
 	if (message.result?.exceptionDetails) throw new Error(JSON.stringify(message.result.exceptionDetails).slice(0, 400));
 	return message.result?.result?.value;
 }
 const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 async function until(expression, timeoutMs = 60000) {
 	const deadline = Date.now() + timeoutMs;
-	while (!(await evaluate(expression).catch(() => false))) {
+	while (!(await evaluate(expression, 2000).catch(() => false))) {
 		if (Date.now() > deadline) throw new Error(`timed out waiting for ${expression}`);
 		await sleep(50);
 	}
@@ -97,12 +107,25 @@ const visit = `new Promise(async (resolve) => {
 	resolve({ shell: shell - start, rows: rows - start, longestTask: longest });
 })`;
 
-const results = { first: null, warm: [], sort: [], firstPage: [], count: [] };
+const results = { first: null, startup: [], warm: [], sort: [], firstPage: [], count: [] };
 
 // The first visit since launch, once Home has been idle for a moment.
 await until(`Boolean(window.go?.main?.App && document.body?.innerText.includes("Project Dashboard"))`, 120000);
 await sleep(4000);
 results.first = await evaluate(visit);
+
+// Startup visits: reload on Home and click Ledger as soon as Home shows.
+for (let i = 0; i < 3; i++) {
+	await toHome();
+	await send("Page.reload", {});
+	await until(`Boolean(window.go?.main?.App && document.body?.innerText.includes("Project Dashboard") && document.querySelector('[title="Ledger"]'))`, 120000);
+	// Timed from here by polling: the page is still settling, and one long
+	// call into it can go unanswered.
+	const start = Date.now();
+	await evaluate(`document.querySelector('[title="Ledger"]').click()`, 2000).catch(() => {});
+	await until(`Boolean(document.querySelector(".ledger-row"))`, 60000);
+	results.startup.push({ rows: Date.now() - start });
+}
 
 // Warm visits.
 await evaluate(`${helpers} __bench.go("Ledger")`);
@@ -151,6 +174,7 @@ const summary = {
 	warmShell: median(results.warm.map((r) => r.shell)),
 	warmRows: median(results.warm.map((r) => r.rows)),
 	firstVisit: Math.round(results.first.shell),
+	startupRows: median(results.startup.map((r) => r.rows)),
 	longestTask: median(results.warm.map((r) => r.longestTask)),
 	sortRows: median(results.sort),
 	firstPage: median(results.firstPage),

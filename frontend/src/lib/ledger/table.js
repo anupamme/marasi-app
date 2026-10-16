@@ -8,18 +8,38 @@ export const ROW_HEIGHT = 22;
 /** The header row's height in px. */
 export const HEADER_HEIGHT = 24;
 
-/** The table's columns, left to right. `width` is a CSS grid track. */
+/**
+ * The table's columns, left to right. `width` is a CSS grid track; `sort`
+ * is the Marasi order_by field a click on the header sorts by.
+ */
 export const LEDGER_COLUMNS = Object.freeze([
-  { key: "number", label: "#", width: "52px", align: "right" },
+  { key: "number", label: "#", width: "52px", align: "right", sort: "requested_at" },
   { key: "badges", label: "", width: "46px" },
-  { key: "time", label: "Time", width: "70px" },
-  { key: "method", label: "Method", width: "56px" },
-  { key: "host", label: "Host", width: "170px" },
-  { key: "path", label: "Path", width: "minmax(180px,1fr)" },
-  { key: "status", label: "Status", width: "50px", align: "right" },
-  { key: "type", label: "Type", width: "48px" },
-  { key: "size", label: "Size", width: "62px", align: "right" },
+  { key: "time", label: "Time", width: "70px", sort: "requested_at" },
+  { key: "method", label: "Method", width: "56px", sort: "method" },
+  { key: "host", label: "Host", width: "170px", sort: "host" },
+  { key: "path", label: "Path", width: "minmax(180px,1fr)", sort: "path" },
+  { key: "status", label: "Status", width: "50px", align: "right", sort: "status_code" },
+  { key: "type", label: "Type", width: "48px", sort: "content_type" },
+  { key: "size", label: "Size", width: "62px", align: "right", sort: "length" },
 ]);
+
+/** "↑" or "↓" when the table is sorted by the column's field, else "". */
+export function sortMark(sort, column) {
+  if (!column.sort || sort?.field !== column.sort) return "";
+  return sort.desc ? "↓" : "↑";
+}
+
+/**
+ * The scroll position, measured from the first row, that keeps the row
+ * `anchorID` where it was (`offset` px scrolled into it) after the rows
+ * changed around it, or null when it is gone.
+ */
+export function keepRowInPlace({ anchorID, offset, rows, rowHeight }) {
+  if (anchorID == null) return null;
+  const index = rows.findIndex((row) => String(row.ID) === String(anchorID));
+  return index < 0 ? null : index * rowHeight + offset;
+}
 
 /**
  * The rows a windowed list renders: those in view and `overscan` more on

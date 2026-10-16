@@ -60,7 +60,7 @@ func itemIDs(items []*domain.RequestResponseSummary) []uuid.UUID {
 
 func queryTraffic(t *testing.T, app *App, query string, cursor string) TrafficQueryResult {
 	t.Helper()
-	result, err := app.QueryTraffic(query, cursor)
+	result, err := app.QueryTraffic(TrafficPageRequest{Query: query, Cursor: cursor})
 	if err != nil {
 		t.Fatalf("querying %q: %v", query, err)
 	}
@@ -238,7 +238,7 @@ func TestQueryTrafficReportsIncompleteIndex(t *testing.T) {
 func TestQueryTrafficReturnsGoErrorWithoutAProject(t *testing.T) {
 	app := newProjectApp(t)
 
-	_, err := app.QueryTraffic(`host = "api.acme.test"`, "")
+	_, err := app.QueryTraffic(TrafficPageRequest{Query: `host = "api.acme.test"`})
 
 	if err == nil {
 		t.Fatalf("wanted an error when no project is open")
@@ -247,7 +247,7 @@ func TestQueryTrafficReturnsGoErrorWithoutAProject(t *testing.T) {
 
 func queryTrafficError(t *testing.T, app *App, query string) TrafficQueryError {
 	t.Helper()
-	result, err := app.QueryTraffic(query, "")
+	result, err := app.QueryTraffic(TrafficPageRequest{Query: query})
 	if err != nil {
 		t.Fatalf("querying %q: wanted a query error, got Go error %v", query, err)
 	}
@@ -299,7 +299,7 @@ func TestQueryTrafficReturnsGoErrorWhenTheDatabaseFails(t *testing.T) {
 	app, database := newTrafficApp(t)
 	database.Close()
 
-	result, err := app.QueryTraffic(`host = "api.acme.test"`, "")
+	result, err := app.QueryTraffic(TrafficPageRequest{Query: `host = "api.acme.test"`})
 
 	if err == nil {
 		t.Fatalf("wanted a Go error from a closed database, got %+v", result)

@@ -4,11 +4,13 @@ import {
   LEDGER_COLUMNS,
   badgeSlots,
   formatSize,
+  keepRowInPlace,
   rowBadges,
   rowHighlight,
   rowTemplate,
   scrollToReveal,
   shortType,
+  sortMark,
   visibleRange,
 } from "./table.js";
 import { effectivePalette } from "./highlights.js";
@@ -22,6 +24,40 @@ test("the table's columns are # · badges · Time · Method · Host · Path · S
     LEDGER_COLUMNS.filter((column) => column.align === "right").map((column) => column.label),
     ["#", "Status", "Size"],
   );
+});
+
+test("every column but the badges sorts by a Marasi field; # and Time are one order", () => {
+  assert.deepEqual(
+    Object.fromEntries(LEDGER_COLUMNS.map((column) => [column.label, column.sort ?? null])),
+    {
+      "#": "requested_at",
+      "": null,
+      Time: "requested_at",
+      Method: "method",
+      Host: "host",
+      Path: "path",
+      Status: "status_code",
+      Type: "content_type",
+      Size: "length",
+    },
+  );
+});
+
+test("a sorted column's header shows its direction", () => {
+  const host = LEDGER_COLUMNS.find((column) => column.label === "Host");
+  const time = LEDGER_COLUMNS.find((column) => column.label === "Time");
+  assert.equal(sortMark({ field: "host", desc: false }, host), "↑");
+  assert.equal(sortMark({ field: "host", desc: true }, host), "↓");
+  assert.equal(sortMark({ field: "host", desc: true }, time), "");
+});
+
+test("when rows change around it, the top row in view keeps its place", () => {
+  const rows = (...ids) => ids.map((ID) => ({ ID }));
+  // Two pages were prepended above row c, which sat at the top, 5px in.
+  assert.equal(keepRowInPlace({ anchorID: "c", offset: 5, rows: rows("x", "y", "a", "b", "c"), rowHeight: 22 }), 4 * 22 + 5);
+  // A row that's gone leaves the scroll where it was.
+  assert.equal(keepRowInPlace({ anchorID: "z", offset: 5, rows: rows("a"), rowHeight: 22 }), null);
+  assert.equal(keepRowInPlace({ anchorID: null, offset: 0, rows: rows("a"), rowHeight: 22 }), null);
 });
 
 test("every row lays its cells out on the same grid; the path takes the spare width", () => {

@@ -21,7 +21,7 @@ export const savedQueriesStore = createSavedQueriesStore({
   getAppSavedQueries: () => GetAppSavedQueries(),
   saveAppSavedQueries: (list) => SaveAppSavedQueries(list),
   setHiddenBuiltins: (ids) => SetHiddenBuiltinQueries(ids),
-  countMatches: (query) => CountTraffic(query, ""),
+  countMatches: (query) => CountTraffic(query, "", {}),
 });
 
 /** The visible saved queries as the query box's ready-made suggestions ({ label, query }). */

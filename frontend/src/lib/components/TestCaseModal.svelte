@@ -10,7 +10,7 @@
 	} from "@skeletonlabs/skeleton";
 	import { onDestroy, onMount } from "svelte";
 	import { ProgressRadial } from "@skeletonlabs/skeleton";
-	import { GetArtifact, DownloadArtifact } from "../wailsjs/go/main/App";
+	import { GetArtifact, DownloadArtifact, QueryTraffic } from "../wailsjs/go/main/App";
 	import {
 		BookCheck,
 		Download,
@@ -19,8 +19,9 @@
 		Video,
 		X,
 	} from "lucide-svelte";
-	import { marasiConfig, proxyItems } from "../../stores";
+	import { marasiConfig } from "../../stores";
 	import RequestResponseView from "./RequestResponseView.svelte";
+	import { searchRequests } from "../requestPicker.js";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	export let parent;
 	const modalStore = getModalStore();
@@ -45,41 +46,20 @@
 	$: requests =
 		$testCaseStore.find((tc) => tc.ID === testCase.ID)?.Requests ||
 		[];
-	$: allRequests = $proxyItems.map((item, i) => {
-		const label = `${i + 1} - ${item.Scheme}://${item.Host}${item.Path}`;
-		return {
-			label,
-			searchLabel: label.toLowerCase(),
-			value: item.ID,
-			...item,
-		};
-	});
+	// The picker searches the project's traffic as the researcher types,
+	// newest first, rather than holding every pair.
+	let requestSearch = 0;
 	$: {
 		clearTimeout(requestSearchTimeout);
-
-		requestSearchTimeout = setTimeout(() => {
-			const inputFormatted = requestInput
-				.toLowerCase()
-				.trim();
-
-			if (!inputFormatted) {
-				displayedRequests = allRequests.slice(0, 100);
-			} else {
-				const matches = [];
-				for (let i = 0; i < allRequests.length; i++) {
-					if (
-						allRequests[
-							i
-						].searchLabel.includes(
-							inputFormatted,
-						)
-					) {
-						matches.push(allRequests[i]);
-					}
-					if (matches.length === 100) break;
-				}
-				displayedRequests = matches;
+		const text = requestInput;
+		const search = ++requestSearch;
+		requestSearchTimeout = setTimeout(async () => {
+			if (!text.trim()) {
+				displayedRequests = [];
+				return;
 			}
+			const options = await searchRequests(QueryTraffic, text);
+			if (search === requestSearch) displayedRequests = options;
 		}, 200);
 	}
 	const passThroughFilter = () => displayedRequests;

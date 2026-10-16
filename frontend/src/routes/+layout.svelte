@@ -51,6 +51,7 @@
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
+	import { recentTraffic } from "../stores/recentTrafficStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -238,6 +239,7 @@
 			}
 			EventsOn("request", (newRequest) => {
 				ledgerStore.onRequest(newRequest);
+				recentTraffic.onRequest(newRequest);
 				launchpadStore.onRequest(newRequest);
 			});
 			EventsOn("launch-started", (launch) =>
@@ -248,6 +250,7 @@
 			);
 			EventsOn("response", (newResponse) => {
 				ledgerStore.onResponse(newResponse);
+				recentTraffic.onResponse(newResponse);
 				launchpadStore.onResponse(newResponse);
 				if (
 					$drawerStore.id ===

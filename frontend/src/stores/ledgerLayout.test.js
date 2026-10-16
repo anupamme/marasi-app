@@ -12,16 +12,25 @@ import {
   tableRows,
 } from "./createLedgerStore.js";
 
+// One page of the live view (oldest first in `liveView`, listed newest
+// first without the excluded types), or of a query's `results`.
 function fakeApi({ liveView = [], exclusion = [], results = {} } = {}) {
+  const listed = () =>
+    [...liveView].reverse().filter((pair) => !exclusion.includes(pair.ContentType));
   return {
-    getLiveView: async () => liveView.map((pair) => ({ ...pair })),
     getExclusion: async () => [...exclusion],
     hasOwnExclusion: async () => true,
     setExclusion: async (types) => {
       exclusion = [...types];
     },
-    queryTraffic: async (query) =>
-      results[query] ?? { Items: [], NextCursor: null, IndexComplete: true },
+    queryTraffic: async ({ Query }) =>
+      Query === ""
+        ? { Items: listed().map((pair) => ({ ...pair })), NextCursor: null, AsOf: "z" }
+        : results[Query] ?? { Items: [], NextCursor: null, IndexComplete: true },
+    countTraffic: async (query, after, { IgnoreExclusion } = {}) => ({
+      Count: query === "" ? (IgnoreExclusion ? liveView.length : listed().length) : 0,
+      Capped: false,
+    }),
   };
 }
 
@@ -96,7 +105,7 @@ test("the drawer closes when its pair leaves the table, and stays while it remai
   await store.runQuery("a");
   assert.equal(get(store).selection.focus, "a", "the query still lists it");
 
-  store.clearQuery();
+  await store.clearQuery();
   store.selectPair("b");
   await store.saveExclusion(["text/css"]);
   assert.equal(isDrawerOpen(get(store)), false, "the exclusion hides it");

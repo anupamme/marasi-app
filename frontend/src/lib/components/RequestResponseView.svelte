@@ -62,8 +62,11 @@
 	let responseBody = "";
 	let selectedRow;
 	let loading = true;
+	// The request and response editors. Heights are matched only between
+	// these two, never other editors on the page (the Ledger's query box).
+	let editorsRoot;
 	function adjustHeights() {
-		const editors = document.querySelectorAll(".cm-editor");
+		const editors = editorsRoot?.querySelectorAll(".cm-editor") ?? [];
 
 		editors.forEach((editor) => {
 			editor.style.height = "auto";
@@ -517,7 +520,7 @@
 	{/if}
 
 	{#if requestBody || responseBody}
-		<div class="flex flex-col sm:flex-row w-full">
+		<div bind:this={editorsRoot} class="flex flex-col sm:flex-row w-full">
 			<div class="flex-1 p-1 overflow-auto">
 				<CodeMirror
 					on:change={(event) => {

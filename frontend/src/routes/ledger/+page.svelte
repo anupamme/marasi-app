@@ -4,6 +4,7 @@
 	// status bar. Its state lives in the Ledger store, so the layout and the
 	// selection survive page visits.
 	import { goto } from "$app/navigation";
+	import { get } from "svelte/store";
 	import { lineWrap } from "../../stores";
 	import { getModalStore, getToastStore, modeCurrent } from "@skeletonlabs/skeleton";
 	import {
@@ -86,6 +87,10 @@
 		countLabel,
 		newMatchesKind,
 		newMatchesLabel,
+		allSelectedLabel,
+		isAllSelected,
+		selectionSize,
+		selectionSpec,
 	} from "../../stores/ledgerStore";
 
 	// The parts of the Ledger store the page follows. Each notifies only when
@@ -119,7 +124,8 @@
 	let queryFieldsOpen = false;
 	// The row menu: whether it shows, where, and the pairs it acts on, taken
 	// from the selection when it opens.
-	let rowMenu = { open: false, x: 0, y: 0, pairs: [] };
+	// `target` is what the menu's actions run on (see selectionTarget).
+	let rowMenu = { open: false, x: 0, y: 0, pairs: [], target: null };
 	let typesMenu;
 
 	$: primary = primaryVariant($modeCurrent);
@@ -128,7 +134,10 @@
 	$: focusID = $selection.focus;
 	$: focusNumber = $focused ? ledgerStore.pairNumber($focused.ID) : "";
 	$: selectedCount = $selection.ids.size;
-	$: allSelected = selectedCount > 1 && selectedCount === $rows.length;
+	// "All N matching selected" after ⌘A, else "".
+	const allLabel = select(ledgerStore, allSelectedLabel);
+	// How many pairs are selected; a ⌘A selection's count arrives after.
+	const liveSize = select(ledgerStore, selectionSize);
 	// Marasi's error for the text in the query box, underlined there; an
 	// error for text since edited is stale.
 	$: queryBoxError = $query.error?.query === $queryText ? $query.error : null;
@@ -224,6 +233,37 @@
 	const selectionPairs = () => selectedPairs(get(ledgerStore));
 	const idsOf = (pairs) => pairs.map((pair) => pair.ID);
 
+	// What an action runs on: the loaded selected pairs, the selection in
+	// Marasi's shape (listed ids, or after ⌘A the query, exclusion and
+	// as_of), whether it is ⌘A, and how many pairs it holds (null while a ⌘A
+	// selection is counted).
+	function selectionTarget() {
+		const state = get(ledgerStore);
+		return {
+			pairs: selectedPairs(state),
+			selection: selectionSpec(state),
+			all: isAllSelected(state),
+			count: selectionSize(state),
+		};
+	}
+
+	// "Request 4", "3 requests", or after ⌘A "all 1,200 matching requests".
+	function describeTarget(target) {
+		if (!target.all) return describe(target.pairs);
+		return target.count == null ? "all matching requests" : `all ${requestCount(target.count)}`;
+	}
+
+	// The row menu's confirmation modal; `onConfirm` runs only once confirmed.
+	function confirm(title, body, buttonTextConfirm, onConfirm) {
+		modalStore.trigger({
+			type: "confirm",
+			title,
+			body,
+			buttonTextConfirm,
+			response: (ok) => ok && onConfirm(),
+		});
+	}
+
 	// The focused pair's full request and response.
 	function focusedDetails() {
 		return $focused ? ledgerStore.getDetails($focused.ID) : Promise.reject(new Error("no pair"));
@@ -261,12 +301,12 @@
 	const refreshLaunchpads = () =>
 		launchpadStore.populate().catch((err) => console.error("Refreshing launchpads failed:", err));
 
-	async function sendToNewLaunchpad(pairs) {
+	async function sendToNewLaunchpad(target) {
 		try {
-			const result = await ledgerStore.sendToNewLaunchpad(idsOf(pairs));
+			const result = await ledgerStore.sendToNewLaunchpad(target.selection, target.count);
 			refreshLaunchpads();
 			toastJump(
-				`${describe(pairs)} sent to a new launchpad${failures(result)}`,
+				`Sent ${requestCount(result.count)} to a new launchpad`,
 				"Jump to Launchpad",
 				"/launchpad?id=" + result.launchpadId,
 			);
@@ -290,33 +330,116 @@
 		}
 	}
 
-	async function addToLaunchpad(pairs, launchpadId, name) {
-		const result = await ledgerStore.addToLaunchpad(idsOf(pairs), launchpadId);
+	async function addToLaunchpad(target, launchpadId, name) {
+		let count;
+		try {
+			count = await ledgerStore.addToLaunchpad(target.selection, launchpadId);
+		} catch (error) {
+			return toastError(`Failed to add ${describeTarget(target)} to "${name}"`, error);
+		}
 		refreshLaunchpads();
-		toastJump(
-			`Added ${describe(pairs)} to "${name}"${failures(result)}`,
-			"Jump to Launchpad",
-			"/launchpad?id=" + launchpadId,
-		);
+		toastJump(`Added ${requestCount(count)} to "${name}"`, "Jump to Launchpad", "/launchpad?id=" + launchpadId);
 	}
 
-	// Links or unlinks the pairs and a finding or test case.
-	async function changeLinks(pairs, run, verb, noun, title) {
-		const result = await run(idsOf(pairs));
-		if (result.done === 0) return toastError(`Failed to ${verb.toLowerCase()} ${describe(pairs)}`);
+	async function removeFromLaunchpad(target, launchpadId, name) {
+		try {
+			const count = await ledgerStore.removeFromLaunchpad(target.selection, launchpadId);
+			refreshLaunchpads();
+			toastStore.trigger({
+				message: `Removed ${requestCount(count)} from "${name || "Untitled launchpad"}"`,
+				background: handoffBackground,
+			});
+		} catch (error) {
+			toastError(`Failed to remove ${describeTarget(target)} from "${name}"`, error);
+		}
+	}
+
+	// Links or unlinks the selection and a finding or test case, and says how
+	// many pairs Marasi changed.
+	async function changeLinks(target, run, verb, noun, title) {
+		let count;
+		try {
+			count = await run(target.selection);
+		} catch (error) {
+			return toastError(`Failed to ${verb.toLowerCase()} ${describeTarget(target)}`, error);
+		}
 		const preposition = verb === "Linked" ? "to" : "from";
 		toastStore.trigger({
-			message: `${verb} ${describe(pairs)} ${preposition} ${noun} "${title}"${failures(result)}`,
+			message: `${verb} ${requestCount(count)} ${preposition} ${noun} "${title}"`,
 			background: handoffBackground,
 		});
 	}
 
+	// Appends a note to every selected pair's note, after a blank line where
+	// one exists.
+	function appendNote(target) {
+		modalStore.trigger({
+			type: "prompt",
+			title: "Append a note",
+			body: `Adds a paragraph to the notes of ${describeTarget(target)}.`,
+			value: "",
+			valueAttr: { type: "text", required: true },
+			buttonTextSubmit: "Append",
+			response: async (text) => {
+				if (typeof text !== "string" || !text.trim()) return;
+				try {
+					const count = await ledgerStore.appendNote(target.selection, text);
+					toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
+				} catch (error) {
+					toastError("Failed to append the note", error);
+				}
+			},
+		});
+	}
+
+	function clearNotes(target) {
+		const what = describeTarget(target);
+		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", async () => {
+			try {
+				const count = await ledgerStore.clearNotes(target.selection);
+				toastStore.trigger({ message: `Cleared ${count.toLocaleString()} ${count === 1 ? "note" : "notes"}`, background: handoffBackground });
+			} catch (error) {
+				toastError("Failed to clear the notes", error);
+			}
+		});
+	}
+
+	// Deletes the selection from the project once confirmed, warning when any
+	// of it is evidence in a finding.
+	async function deleteFromProject(target) {
+		const what = describeTarget(target);
+		let evidence = 0;
+		try {
+			evidence = await ledgerStore.findingEvidence(target.selection, $findingStore);
+		} catch (error) {
+			console.error("Checking for finding evidence failed:", error);
+		}
+		const warning = evidence
+			? ` ${evidence === 1 ? "1 of them is" : `${evidence.toLocaleString()} of them are`} evidence in a finding.`
+			: "";
+		confirm(
+			"Delete from project?",
+			`Delete ${what} from the project? Their notes, links, WebSocket messages and logs go too. This can't be undone.${warning}`,
+			"Delete",
+			async () => {
+				try {
+					const count = await ledgerStore.deleteFromProject(target.selection);
+					refreshLaunchpads();
+					sitemapStore.reload();
+					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
+				} catch (error) {
+					toastError(`Failed to delete ${what}`, error);
+				}
+			},
+		);
+	}
+
 	// Gives the pairs highlight `number`, or clears it when null, and says
 	// how many pairs Marasi changed.
-	async function highlightPairs(pairs, number) {
+	async function highlightPairs(target, number) {
 		const name = number == null ? null : $highlightPalette[number - 1]?.label;
 		try {
-			const changed = await ledgerStore.setHighlight(idsOf(pairs), number);
+			const changed = await ledgerStore.setHighlight(target.selection, number);
 			toastStore.trigger({
 				message:
 					number == null
@@ -325,7 +448,7 @@
 				background: handoffBackground,
 			});
 		} catch (error) {
-			toastError(`Failed to highlight ${describe(pairs)}`, error);
+			toastError(`Failed to highlight ${describeTarget(target)}`, error);
 		}
 	}
 
@@ -416,9 +539,12 @@
 		);
 	}
 
-	/** Runs a row menu action (rowMenu.js) on `pairs`. */
-	function runMenuAction(action, pairs) {
+	/** Runs a row menu action (rowMenu.js) on `target` (selectionTarget). */
+	function runMenuAction(action, target) {
+		const pairs = target?.pairs ?? [];
 		if (!action || pairs.length === 0) return;
+		// A ⌘A selection may have been counted since the menu opened.
+		if (target.all && target.count == null) target = { ...target, count: $liveSize };
 		const ids = idsOf(pairs);
 		switch (action.type) {
 			case "open":
@@ -428,11 +554,13 @@
 				ledgerStore.focusPair(action.id);
 				return openWebSocketStream();
 			case "new-launchpad":
-				return sendToNewLaunchpad(pairs);
+				return sendToNewLaunchpad(target);
 			case "launchpad-each":
 				return sendToLaunchpadsEach(pairs);
 			case "add-to-launchpad":
-				return addToLaunchpad(pairs, action.id, action.name);
+				return addToLaunchpad(target, action.id, action.name);
+			case "remove-from-launchpad":
+				return removeFromLaunchpad(target, action.id, action.name);
 			case "armory":
 				return sendToArmory(pairs);
 			case "new-finding":
@@ -440,13 +568,13 @@
 			case "new-test-case":
 				return createTestCase(ids);
 			case "link-finding":
-				return changeLinks(pairs, (ids) => ledgerStore.linkToFinding(ids, action.id), "Linked", "finding", action.title);
+				return changeLinks(target, (sel) => ledgerStore.linkToFinding(sel, action.id), "Linked", "finding", action.title);
 			case "unlink-finding":
-				return changeLinks(pairs, (ids) => ledgerStore.unlinkFromFinding(ids, action.id), "Unlinked", "finding", action.title);
+				return changeLinks(target, (sel) => ledgerStore.unlinkFromFinding(sel, action.id), "Unlinked", "finding", action.title);
 			case "link-test-case":
-				return changeLinks(pairs, (ids) => ledgerStore.linkToTestCase(ids, action.id), "Linked", "test case", action.title);
+				return changeLinks(target, (sel) => ledgerStore.linkToTestCase(sel, action.id), "Linked", "test case", action.title);
 			case "unlink-test-case":
-				return changeLinks(pairs, (ids) => ledgerStore.unlinkFromTestCase(ids, action.id), "Unlinked", "test case", action.title);
+				return changeLinks(target, (sel) => ledgerStore.unlinkFromTestCase(sel, action.id), "Unlinked", "test case", action.title);
 			case "note":
 				return openNote(action.id);
 			case "copy":
@@ -456,19 +584,25 @@
 			case "hide-type":
 				return hideType(action.contentType);
 			case "highlight":
-				return highlightPairs(pairs, action.number);
+				return highlightPairs(target, action.number);
 			case "select":
 				return selectSimilar(pairs, action.kind);
 			case "metadata":
 				return openMetadata(action.id);
+			case "append-note":
+				return appendNote(target);
+			case "clear-notes":
+				return clearNotes(target);
+			case "delete":
+				return deleteFromProject(target);
 		}
 	}
 
 	// Opens the row menu at a point, on the selection.
 	function openRowMenu(x, y) {
-		const pairs = selectionPairs();
-		if (pairs.length === 0) return;
-		rowMenu = { open: true, x, y, pairs };
+		const target = selectionTarget();
+		if (target.pairs.length === 0) return;
+		rowMenu = { open: true, x, y, pairs: target.pairs, target };
 	}
 
 	// Opens the row menu under the focused row, as ⌘. and the menu key do.
@@ -490,6 +624,8 @@
 		findings: $findingStore,
 		testCases: $testCaseStore,
 		palette: $highlightPalette,
+		all: Boolean(rowMenu.target?.all),
+		count: rowMenu.target?.all ? $liveSize : null,
 	};
 
 	// A shortcut acts on the selection, as the row menu does.
@@ -638,7 +774,7 @@
 		{
 			actionId: "ledger.drawer-open.send-to-launchpad",
 			icon: SendIcon,
-			handler: onSelection(sendToNewLaunchpad),
+			handler: onSelection((pairs) => sendToNewLaunchpad(selectionTarget())),
 		},
 		{
 			actionId: "ledger.drawer-open.create-test-case",
@@ -1104,10 +1240,10 @@
 			{/if}
 			{#if drawerOpen}
 				<span id="ledgerSelectionCount" class="text-primary-500">
-					{#if selectedCount === 1}
+					{#if $allLabel}
+						{$allLabel}
+					{:else if selectedCount === 1}
 						Request {focusNumber} selected
-					{:else if allSelected}
-						All {selectedCount.toLocaleString()} selected
 					{:else}
 						{selectedCount.toLocaleString()} selected
 					{/if}
@@ -1127,7 +1263,7 @@
 	y={rowMenu.y}
 	pairs={rowMenu.pairs}
 	context={rowMenuContext}
-	on:action={(e) => runMenuAction(e.detail, rowMenu.pairs)}
+	on:action={(e) => runMenuAction(e.detail, rowMenu.target)}
 	on:close={(e) => e.detail.refocus && table?.focus()}
 />
 

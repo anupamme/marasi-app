@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { get } from "svelte/store";
 import {
   createLedgerStore,
+  hiddenByTypeCount,
   indexWarning,
   isQueryActive,
   ledgerPagination,
@@ -10,19 +11,44 @@ import {
   matchCountLabel,
   needsOlderPage,
   shownRows,
+  tableRows,
 } from "./createLedgerStore.js";
 
 // An in-memory backend: the live view, the stored content-type exclusion and
 // query results by query text. Writes are recorded in `api.calls`.
-function fakeApi({ liveView = [], exclusion = [], results = {}, counts = {} } = {}) {
+// The project keeps its own exclusion once `ownExclusion` is set; until then
+// it follows `defaultExclusion`. `counts` holds CountTraffic results by query.
+function fakeApi({
+  liveView = [],
+  exclusion = undefined,
+  defaultExclusion = [],
+  results = {},
+  typeCounts = { Counts: [], Complete: { sitemap: true } },
+  counts = {},
+} = {}) {
   const calls = [];
+  let ownExclusion = exclusion;
   const api = {
     calls,
     getLiveView: async () => liveView.map((pair) => ({ ...pair })),
-    getExclusion: async () => [...exclusion],
+    getExclusion: async () => [...(ownExclusion ?? defaultExclusion)],
+    hasOwnExclusion: async () => ownExclusion !== undefined,
     setExclusion: async (types) => {
       calls.push(["setExclusion", types]);
-      exclusion = [...types];
+      ownExclusion = [...types];
+    },
+    resetExclusion: async () => {
+      calls.push(["resetExclusion"]);
+      ownExclusion = undefined;
+    },
+    getDefaultExclusion: async () => [...defaultExclusion],
+    setDefaultExclusion: async (types) => {
+      calls.push(["setDefaultExclusion", types]);
+      defaultExclusion = [...types];
+    },
+    countContentTypes: async () => {
+      calls.push(["countContentTypes"]);
+      return typeof typeCounts === "function" ? typeCounts() : typeCounts;
     },
     queryTraffic: async (query, cursor) => {
       calls.push(["queryTraffic", query, cursor]);
@@ -294,6 +320,144 @@ test("saving the exclusion stores it and runs the active query again", async () 
     ["setExclusion", ["image/png"]],
     ["queryTraffic", "host = x", ""],
   ]);
+});
+
+test("populate tells whether the project keeps its own exclusion", async () => {
+  const following = createLedgerStore(fakeApi({ defaultExclusion: ["image/*"] }));
+  await following.populate();
+  assert.deepEqual(get(following).exclusion, ["image/*"]);
+  assert.equal(get(following).ownExclusion, false);
+
+  const own = createLedgerStore(fakeApi({ exclusion: [], defaultExclusion: ["image/*"] }));
+  await own.populate();
+  assert.deepEqual(get(own).exclusion, []);
+  assert.equal(get(own).ownExclusion, true);
+});
+
+test("saving the exclusion normalises it and gives the project its own list", async () => {
+  const api = fakeApi({ defaultExclusion: ["image/*"] });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.saveExclusion(["image/*", "Text/CSS; charset=utf-8"]);
+  assert.deepEqual(get(store).exclusion, ["image/*", "text/css"]);
+  assert.equal(get(store).ownExclusion, true);
+  assert.deepEqual(api.calls.at(-1), ["setExclusion", ["image/*", "text/css"]]);
+});
+
+test("resetting the exclusion follows the app default again and reruns the query", async () => {
+  const api = fakeApi({
+    exclusion: ["text/css"],
+    defaultExclusion: ["image/*"],
+    results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.runQuery("host = x");
+  api.calls.length = 0;
+
+  await store.resetExclusion();
+
+  assert.deepEqual(get(store).exclusion, ["image/*"]);
+  assert.equal(get(store).ownExclusion, false);
+  assert.deepEqual(api.calls, [["resetExclusion"], ["queryTraffic", "host = x", ""]]);
+});
+
+test("the live view hides a type through its major/* and keeps pairs with no response", async () => {
+  const store = createLedgerStore(
+    fakeApi({
+      liveView: [
+        pair("a", { ContentType: "image/png" }),
+        pair("b", { ContentType: "text/html" }),
+        pair("c", { ContentType: "" }),
+        pair("d", { ContentType: "Image/GIF" }),
+      ],
+      exclusion: ["image/*"],
+    }),
+  );
+  await store.populate();
+  const state = get(store);
+  assert.deepEqual(tableRows(state).map((row) => row.ID), ["c", "b"]);
+  assert.equal(hiddenByTypeCount(state), 2);
+});
+
+test("hiding a type updates the table and the hidden count at once", async () => {
+  const store = createLedgerStore(
+    fakeApi({
+      liveView: [pair("a", { ContentType: "text/css" }), pair("b", { ContentType: "text/html" })],
+      exclusion: [],
+    }),
+  );
+  await store.populate();
+  const saving = store.saveExclusion(["text/css"]);
+  assert.deepEqual(tableRows(get(store)).map((row) => row.ID), ["b"]);
+  assert.equal(hiddenByTypeCount(get(store)), 1);
+  await saving;
+});
+
+test("the Types menu's counts load on request", async () => {
+  const counts = { Counts: [{ ContentType: "text/html", Count: 3 }], Complete: { sitemap: false } };
+  const api = fakeApi({ typeCounts: counts });
+  const store = createLedgerStore(api);
+  assert.deepEqual(get(store).typeCounts, { counts: [], complete: true, loaded: false });
+
+  await store.loadTypeCounts();
+
+  assert.deepEqual(get(store).typeCounts, {
+    counts: [{ ContentType: "text/html", Count: 3 }],
+    complete: false,
+    loaded: true,
+  });
+});
+
+test("counts that arrive after a project switch are dropped", async () => {
+  let resolve;
+  const api = fakeApi({ typeCounts: () => new Promise((r) => (resolve = r)) });
+  const store = createLedgerStore(api);
+  const loading = store.loadTypeCounts();
+  store.clear();
+  resolve({ Counts: [{ ContentType: "text/html", Count: 3 }], Complete: {} });
+  await loading;
+  assert.equal(get(store).typeCounts.loaded, false);
+});
+
+test("editing the app default updates a project that follows it", async () => {
+  const api = fakeApi({
+    defaultExclusion: ["image/*"],
+    results: { "host = x": { Items: [pair("a")], NextCursor: null, IndexComplete: true } },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.runQuery("host = x");
+  api.calls.length = 0;
+
+  await store.saveDefaultExclusion(["image/*", "Font/*"]);
+
+  assert.deepEqual(get(store).defaultExclusion, ["image/*", "font/*"]);
+  assert.deepEqual(get(store).exclusion, ["image/*", "font/*"]);
+  assert.deepEqual(api.calls, [
+    ["setDefaultExclusion", ["image/*", "font/*"]],
+    ["queryTraffic", "host = x", ""],
+  ]);
+});
+
+test("editing the app default leaves a project's own list alone", async () => {
+  const api = fakeApi({ exclusion: ["text/css"], defaultExclusion: ["image/*"] });
+  const store = createLedgerStore(api);
+  await store.populate();
+  api.calls.length = 0;
+
+  await store.saveDefaultExclusion(["font/*"]);
+
+  assert.deepEqual(get(store).exclusion, ["text/css"]);
+  assert.deepEqual(api.calls, [["setDefaultExclusion", ["font/*"]]]);
+});
+
+test("loadDefaultExclusion reads the app default", async () => {
+  const store = createLedgerStore(fakeApi({ defaultExclusion: ["image/*"] }));
+  assert.deepEqual(await store.loadDefaultExclusion(), ["image/*"]);
+  assert.deepEqual(get(store).defaultExclusion, ["image/*"]);
+  store.clear();
+  assert.deepEqual(get(store).defaultExclusion, ["image/*"], "a project switch keeps the app default");
 });
 
 test("a metadata patch reaches the live view and the query results", async () => {

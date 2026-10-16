@@ -1,18 +1,21 @@
 // The app's Ledger store, bound to the Wails backend. The logic lives in
 // createLedgerStore.js, which tests load with a fake API.
 import {
+  AppendNote,
   ClearHighlight,
+  ClearNotes,
   CountContentTypes,
   CountTraffic,
   CreateLaunchpadEntry,
   DeleteClientSetting,
+  DeleteTraffic,
   GetClientSetting,
   GetContentTypeExclusion,
   GetDefaultContentTypeExclusion,
   GetMetadata,
   GetNote,
   GetRawDetails,
-  LinkRequestToLaunchpad,
+  LinkTraffic,
   ListClientSettings,
   QueryTraffic,
   ResetContentTypeExclusion,
@@ -20,6 +23,7 @@ import {
   SetContentTypeExclusion,
   SetDefaultContentTypeExclusion,
   SetHighlight,
+  UnlinkTraffic,
 } from "../lib/wailsjs/go/main/App";
 import { armoryStore } from "./armoryStore";
 import { findingStore } from "./findingStore";
@@ -27,6 +31,10 @@ import { testCaseStore } from "./testCaseStore";
 import { createLedgerStore, FLUSH_INTERVAL_MS } from "./createLedgerStore.js";
 
 export {
+  allSelectedLabel,
+  isAllSelected,
+  selectionSize,
+  selectionSpec,
   clampDrawerSplit,
   countLabel,
   drawerKeybindingState,
@@ -47,6 +55,17 @@ export {
   tableRows,
 } from "./createLedgerStore.js";
 
+// Waits for a bulk call, then rereads the finding or test case lists whose
+// links it changed ("all" for both).
+async function relinked(call, kind) {
+  const count = await call;
+  const stores = { finding: [findingStore], test_case: [testCaseStore], all: [findingStore, testCaseStore] };
+  for (const store of stores[kind] ?? []) {
+    store.populate().catch((err) => console.error("Rereading links failed:", err));
+  }
+  return count;
+}
+
 export const ledgerStore = createLedgerStore({
   // A page of the live view or of a query's results:
   // { Query, OrderBy, Cursor, Direction, AsOf, Limit }.
@@ -66,20 +85,21 @@ export const ledgerStore = createLedgerStore({
   getRawDetails: (id) => GetRawDetails(id),
   getMetadata: (id) => GetMetadata(id),
   getNote: (id) => GetNote(id),
-  // selection is { ids }; each resolves to how many pairs changed.
+  // A selection is Marasi's: { ids }, or { query, exclusion, as_of } after
+  // ⌘A. Each bulk call resolves to how many pairs changed.
   setHighlight: (selection, highlight) => SetHighlight(selection, highlight),
   clearHighlight: (selection) => ClearHighlight(selection),
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
-  linkToLaunchpad: (requestId, launchpadId) =>
-    LinkRequestToLaunchpad(requestId, launchpadId),
+  // target: { Kind: "launchpad" | "finding" | "test_case", ID }. The
+  // finding and test case lists reread their links afterwards.
+  linkTraffic: (selection, target) => relinked(LinkTraffic(selection, target), target.Kind),
+  unlinkTraffic: (selection, target) => relinked(UnlinkTraffic(selection, target), target.Kind),
+  appendNote: (selection, text) => AppendNote(selection, text),
+  clearNotes: (selection) => ClearNotes(selection),
+  // Deleting drops the pairs' links too.
+  deleteTraffic: (selection) => relinked(DeleteTraffic(selection), "all"),
   // Findings, test cases and Armory templates go through their stores, so
   // the lists they hold stay current.
-  linkToFinding: (requestId, findingId) => findingStore.linkRequest(findingId, requestId),
-  unlinkFromFinding: (requestId, findingId) =>
-    findingStore.unlinkRequest(findingId, requestId),
-  linkToTestCase: (requestId, testCaseId) => testCaseStore.linkRequest(testCaseId, requestId),
-  unlinkFromTestCase: (requestId, testCaseId) =>
-    testCaseStore.unlinkRequest(testCaseId, requestId),
   createFinding: (requestIds) => findingStore.create(requestIds),
   createTestCase: (requestIds) => testCaseStore.create(requestIds),
   sendToArmory: (requestId) => armoryStore.createTemplateFromRequest(requestId),

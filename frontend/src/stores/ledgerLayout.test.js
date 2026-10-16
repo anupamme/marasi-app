@@ -19,6 +19,7 @@ function fakeApi({ liveView = [], exclusion = [], results = {} } = {}) {
     [...liveView].reverse().filter((pair) => !exclusion.includes(pair.ContentType));
   return {
     getExclusion: async () => [...exclusion],
+    hasOwnExclusion: async () => true,
     setExclusion: async (types) => {
       exclusion = [...types];
     },
@@ -26,8 +27,8 @@ function fakeApi({ liveView = [], exclusion = [], results = {} } = {}) {
       Query === ""
         ? { Items: listed().map((pair) => ({ ...pair })), NextCursor: null, AsOf: "z" }
         : results[Query] ?? { Items: [], NextCursor: null, IndexComplete: true },
-    countTraffic: async ({ Query, IgnoreExclusion }) => ({
-      Count: Query === "" ? (IgnoreExclusion ? liveView.length : listed().length) : 0,
+    countTraffic: async (query, after, { IgnoreExclusion } = {}) => ({
+      Count: query === "" ? (IgnoreExclusion ? liveView.length : listed().length) : 0,
       Capped: false,
     }),
   };

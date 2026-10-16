@@ -112,63 +112,6 @@ func (a *App) QueryTraffic(req TrafficPageRequest) (TrafficQueryResult, error) {
 	return result, nil
 }
 
-// TrafficCountRequest asks how many pairs match a query.
-type TrafficCountRequest struct {
-	Query string
-	// AsOf counts only the pairs up to a page's AsOf; "" counts them all.
-	AsOf string
-	// After counts only the pairs captured after a page's AsOf, its new
-	// matches; "" counts them all.
-	After string
-	// IgnoreExclusion counts the pairs the content-type exclusion hides too.
-	IgnoreExclusion bool
-}
-
-// TrafficCountResult is how many pairs match, up to Marasi's cap.
-type TrafficCountResult struct {
-	Count         int
-	Capped        bool // more than Count matched
-	IndexComplete bool
-	QueryError    *TrafficQueryError // nil when the query is valid
-}
-
-// CountTraffic counts the project's pairs that match the researcher's query,
-// minus the project's content-type exclusion unless req ignores it.
-func (a *App) CountTraffic(req TrafficCountRequest) (TrafficCountResult, error) {
-	traffic, err := a.Proxy.GetTrafficRepo()
-	if err != nil {
-		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
-	}
-	var exclusion []string
-	if !req.IgnoreExclusion {
-		exclusion, err = a.GetContentTypeExclusion()
-		if err != nil {
-			return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
-		}
-	}
-	asOf, err := parseOptionalPairID("as_of", req.AsOf)
-	if err != nil {
-		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
-	}
-	after, err := parseOptionalPairID("after", req.After)
-	if err != nil {
-		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
-	}
-	count, err := traffic.CountTraffic(domain.TrafficCountQuery{
-		Text:      req.Query,
-		Exclusion: exclusion,
-		AsOf:      asOf,
-		After:     after,
-	})
-	if queryErr, ok := asQueryError(err); ok {
-		return TrafficCountResult{QueryError: queryErr}, nil
-	}
-	if err != nil {
-		return TrafficCountResult{}, fmt.Errorf("counting traffic: %w", err)
-	}
-	return TrafficCountResult{Count: count.Count, Capped: count.Capped, IndexComplete: searchIndexComplete(count.Complete)}, nil
-}
-
 // ListArmoryRunTraffic lists every pair an Armory run sent, oldest first,
 // whatever their content type.
 func (a *App) ListArmoryRunTraffic(runID string) ([]*domain.RequestResponseSummary, error) {

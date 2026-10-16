@@ -49,8 +49,20 @@ function hides(exclusion, type) {
 // An in-memory Marasi: ListTraffic's sort, opaque cursors bound to their
 // sort, as_of snapshots and both directions, and CountTraffic. Queries are
 // predicates by query text; "bad" is invalid. Calls are recorded.
-function fakeApi({ traffic = [], exclusion = [], queries = {} } = {}) {
+// The project keeps its own exclusion once `exclusion` is set; until then it
+// follows `defaultExclusion`. `counts` holds canned CountTraffic results by
+// query, or an Error to throw.
+function fakeApi({
+  traffic = [],
+  exclusion = undefined,
+  defaultExclusion = [],
+  queries = {},
+  typeCounts = { Counts: [], Complete: { sitemap: true } },
+  counts = {},
+} = {}) {
   const calls = [];
+  let ownExclusion = exclusion;
+  const excluded = () => ownExclusion ?? defaultExclusion;
   const db = traffic.map((p) => ({ ...p }));
   const newest = () => db.reduce((max, p) => (p.ID > max ? p.ID : max), "");
   const predicate = (text) => (text === "" ? () => true : queries[text]);
@@ -61,7 +73,7 @@ function fakeApi({ traffic = [], exclusion = [], queries = {} } = {}) {
     const key = SORT_KEYS[field];
     const asOf = req.AsOf || newest();
     const match = predicate(req.Query);
-    const rows = db.filter((p) => p.ID <= asOf && match(p) && !hides(exclusion, p.ContentType));
+    const rows = db.filter((p) => p.ID <= asOf && match(p) && !hides(excluded(), p.ContentType));
     const cmp = (a, b) => (a < b ? -1 : a > b ? 1 : 0);
     const valued = rows.filter((p) => key(p) !== undefined);
     const unvalued = rows.filter((p) => key(p) === undefined);
@@ -76,10 +88,24 @@ function fakeApi({ traffic = [], exclusion = [], queries = {} } = {}) {
     capture(p) {
       db.push({ ...p });
     },
-    getExclusion: async () => [...exclusion],
+    getExclusion: async () => [...excluded()],
+    hasOwnExclusion: async () => ownExclusion !== undefined,
     setExclusion: async (types) => {
       calls.push(["setExclusion", types]);
-      exclusion = [...types];
+      ownExclusion = [...types];
+    },
+    resetExclusion: async () => {
+      calls.push(["resetExclusion"]);
+      ownExclusion = undefined;
+    },
+    getDefaultExclusion: async () => [...defaultExclusion],
+    setDefaultExclusion: async (types) => {
+      calls.push(["setDefaultExclusion", types]);
+      defaultExclusion = [...types];
+    },
+    countContentTypes: async () => {
+      calls.push(["countContentTypes"]);
+      return typeof typeCounts === "function" ? typeCounts() : typeCounts;
     },
     queryTraffic: async (req) => {
       calls.push(["queryTraffic", { ...req }]);
@@ -115,14 +141,18 @@ function fakeApi({ traffic = [], exclusion = [], queries = {} } = {}) {
         IndexComplete: true,
       };
     },
-    countTraffic: async (req) => {
-      calls.push(["countTraffic", { ...req }]);
+    countTraffic: async (query, after, options = {}) => {
+      const req = { Query: query, After: after, ...options };
+      calls.push(["countTraffic", req]);
+      const canned = counts[query];
+      if (canned instanceof Error) throw canned;
+      if (canned) return canned;
       if (req.Query === "bad") return { QueryError: { Message: "expected a value", Position: 3 } };
       const match = predicate(req.Query);
       const count = db.filter(
         (p) =>
           match(p) &&
-          (req.IgnoreExclusion || !hides(exclusion, p.ContentType)) &&
+          (req.IgnoreExclusion || !hides(excluded(), p.ContentType)) &&
           (!req.AsOf || p.ID <= req.AsOf) &&
           (!req.After || p.ID > req.After),
       ).length;
@@ -432,8 +462,8 @@ test("the count shows 100,000+ when Marasi caps it, and the exclusion's hidden p
     traffic: [pair(1), pair(2, { ContentType: "image/png" }), pair(3)],
     exclusion: ["image/png"],
   });
-  api.countTraffic = async (req) =>
-    req.IgnoreExclusion ? { Count: 3, Capped: false } : { Count: 2, Capped: false };
+  api.countTraffic = async (query, after, options = {}) =>
+    options.IgnoreExclusion ? { Count: 3, Capped: false } : { Count: 2, Capped: false };
   const store = createLedgerStore(api);
   await store.populate();
   assert.equal(hiddenByTypeCount(get(store)), 1);
@@ -451,6 +481,161 @@ test("saving the exclusion stores it and reloads the rows", async () => {
   await store.saveExclusion(["image/png"]);
   assert.deepEqual(get(store).exclusion, ["image/png"]);
   assert.deepEqual(ids(get(store)), [idOf(1)]);
+});
+
+test("populate tells whether the project keeps its own exclusion", async () => {
+  const following = createLedgerStore(fakeApi({ defaultExclusion: ["image/*"] }));
+  await following.populate();
+  assert.deepEqual(get(following).exclusion, ["image/*"]);
+  assert.equal(get(following).ownExclusion, false);
+
+  const own = createLedgerStore(fakeApi({ exclusion: [], defaultExclusion: ["image/*"] }));
+  await own.populate();
+  assert.deepEqual(get(own).exclusion, []);
+  assert.equal(get(own).ownExclusion, true);
+});
+
+test("saving the exclusion normalises it and gives the project its own list", async () => {
+  const api = fakeApi({ defaultExclusion: ["image/*"] });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.saveExclusion(["image/*", "Text/CSS; charset=utf-8"]);
+  assert.deepEqual(get(store).exclusion, ["image/*", "text/css"]);
+  assert.equal(get(store).ownExclusion, true);
+  assert.deepEqual(api.calls.find((c) => c[0] === "setExclusion"), ["setExclusion", ["image/*", "text/css"]]);
+});
+
+test("resetting the exclusion follows the app default again and reruns the query", async () => {
+  const api = fakeApi({
+    traffic: [pair(1), pair(2, { ContentType: "image/png" }), pair(3, { ContentType: "text/css" })],
+    exclusion: ["text/css"],
+    defaultExclusion: ["image/*"],
+    queries: { "host = x": () => true },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.runQuery("host = x");
+  api.calls.length = 0;
+
+  await store.resetExclusion();
+
+  assert.deepEqual(get(store).exclusion, ["image/*"]);
+  assert.equal(get(store).ownExclusion, false);
+  assert.deepEqual(api.calls[0], ["resetExclusion"]);
+  assert.equal(pageCalls(api).at(-1).Query, "host = x");
+  assert.deepEqual(ids(get(store)), [idOf(3), idOf(1)]);
+});
+
+test("the live view hides a type through its major/* and keeps pairs with no response", async () => {
+  const store = createLedgerStore(
+    fakeApi({
+      traffic: [
+        pair(1, { ContentType: "image/png" }),
+        pair(2, { ContentType: "text/html" }),
+        pair(3, { ContentType: "" }),
+        pair(4, { ContentType: "Image/GIF" }),
+      ],
+      exclusion: ["image/*"],
+    }),
+  );
+  await store.populate();
+  await store.settled();
+  const state = get(store);
+  assert.deepEqual(ids(state), [idOf(3), idOf(2)]);
+  assert.equal(hiddenByTypeCount(state), 2);
+});
+
+test("a new pair whose response arrives under a hidden major type leaves the live view", async () => {
+  const store = createLedgerStore(fakeApi({ traffic: [pair(1)], exclusion: ["image/*"] }));
+  await store.populate();
+  await store.settled();
+  store.onRequest(pair(2, { StatusCode: 0, ContentType: "", Length: "" }));
+  store.flush();
+  assert.deepEqual(ids(get(store)), [idOf(2), idOf(1)]);
+  store.onResponse({ ID: idOf(2), StatusCode: 200, ContentType: "Image/PNG; q=1", Length: "5" });
+  store.flush();
+  assert.deepEqual(ids(get(store)), [idOf(1)]);
+});
+
+test("hiding a type updates the table and the hidden count", async () => {
+  const store = createLedgerStore(
+    fakeApi({
+      traffic: [pair(1, { ContentType: "text/css" }), pair(2, { ContentType: "text/html" })],
+      exclusion: [],
+    }),
+  );
+  await store.populate();
+  await store.saveExclusion(["text/css"]);
+  await store.settled();
+  assert.deepEqual(ids(get(store)), [idOf(2)]);
+  assert.equal(hiddenByTypeCount(get(store)), 1);
+});
+
+test("the Types menu's counts load on request", async () => {
+  const counts = { Counts: [{ ContentType: "text/html", Count: 3 }], Complete: { sitemap: false } };
+  const api = fakeApi({ typeCounts: counts });
+  const store = createLedgerStore(api);
+  assert.deepEqual(get(store).typeCounts, { counts: [], complete: true, loaded: false });
+
+  await store.loadTypeCounts();
+
+  assert.deepEqual(get(store).typeCounts, {
+    counts: [{ ContentType: "text/html", Count: 3 }],
+    complete: false,
+    loaded: true,
+  });
+});
+
+test("counts that arrive after a project switch are dropped", async () => {
+  let resolve;
+  const api = fakeApi({ typeCounts: () => new Promise((r) => (resolve = r)) });
+  const store = createLedgerStore(api);
+  const loading = store.loadTypeCounts();
+  store.clear();
+  resolve({ Counts: [{ ContentType: "text/html", Count: 3 }], Complete: {} });
+  await loading;
+  assert.equal(get(store).typeCounts.loaded, false);
+});
+
+test("editing the app default updates a project that follows it", async () => {
+  const api = fakeApi({
+    traffic: [pair(1), pair(2, { ContentType: "font/woff2" })],
+    defaultExclusion: ["image/*"],
+    queries: { "host = x": () => true },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.runQuery("host = x");
+  assert.deepEqual(ids(get(store)), [idOf(2), idOf(1)]);
+  api.calls.length = 0;
+
+  await store.saveDefaultExclusion(["image/*", "Font/*"]);
+
+  assert.deepEqual(get(store).defaultExclusion, ["image/*", "font/*"]);
+  assert.deepEqual(get(store).exclusion, ["image/*", "font/*"]);
+  assert.deepEqual(api.calls[0], ["setDefaultExclusion", ["image/*", "font/*"]]);
+  assert.equal(pageCalls(api).at(-1).Query, "host = x");
+  assert.deepEqual(ids(get(store)), [idOf(1)]);
+});
+
+test("editing the app default leaves a project's own list alone", async () => {
+  const api = fakeApi({ exclusion: ["text/css"], defaultExclusion: ["image/*"] });
+  const store = createLedgerStore(api);
+  await store.populate();
+  api.calls.length = 0;
+
+  await store.saveDefaultExclusion(["font/*"]);
+
+  assert.deepEqual(get(store).exclusion, ["text/css"]);
+  assert.deepEqual(api.calls, [["setDefaultExclusion", ["font/*"]]]);
+});
+
+test("loadDefaultExclusion reads the app default", async () => {
+  const store = createLedgerStore(fakeApi({ defaultExclusion: ["image/*"] }));
+  assert.deepEqual(await store.loadDefaultExclusion(), ["image/*"]);
+  assert.deepEqual(get(store).defaultExclusion, ["image/*"]);
+  store.clear();
+  assert.deepEqual(get(store).defaultExclusion, ["image/*"], "a project switch keeps the app default");
 });
 
 test("the focused pair stays in the drawer when its page is dropped", async () => {
@@ -493,4 +678,48 @@ test("clearing for another project drops a page still loading", async () => {
   release({ Items: [pair(1)], NextCursor: null, PrevCursor: null, AsOf: idOf(1), IndexComplete: true });
   await loading;
   assert.deepEqual(ids(get(store)), []);
+});
+
+test("toggling a query term adds it to the query box and runs the query", async () => {
+  const api = fakeApi({
+    traffic: pairs(2),
+    queries: { "host = x note:*": (p) => p.ID === idOf(1) },
+  });
+  const store = createLedgerStore(api);
+  store.setQueryText("host = x");
+  await store.toggleQueryTerm("note:*");
+  const state = get(store);
+  assert.equal(state.queryText, "host = x note:*");
+  assert.equal(state.query.ranQuery, "host = x note:*");
+  assert.deepEqual(ids(state), [idOf(1)]);
+});
+
+test("toggling the query's only term off returns to the live view", async () => {
+  const store = createLedgerStore(fakeApi({ traffic: pairs(2), queries: { "finding:*": () => false } }));
+  await store.populate();
+  await store.toggleQueryTerm("finding:*");
+  await store.toggleQueryTerm("finding:*");
+  const state = get(store);
+  assert.equal(state.queryText, "");
+  assert.ok(!isQueryActive(state.query));
+});
+
+test("counting queries reads each count, capped, and marks a failed one null", async () => {
+  const api = fakeApi({
+    counts: {
+      "note:*": { Count: 3, Capped: false, IndexComplete: true },
+      "finding:*": { Count: 100000, Capped: true, IndexComplete: true },
+      "test_case:*": { Count: 0, Capped: false, IndexComplete: true, QueryError: { Message: "bad", Position: 1 } },
+      "launchpad:*": new Error("no project"),
+    },
+  });
+  const store = createLedgerStore(api);
+  const counts = await store.countQueries(["note:*", "finding:*", "test_case:*", "launchpad:*"]);
+  assert.deepEqual(counts, {
+    "note:*": { count: 3, capped: false },
+    "finding:*": { count: 100000, capped: true },
+    "test_case:*": null,
+    "launchpad:*": null,
+  });
+  assert.ok(countCalls(api).some((req) => req.Query === "note:*" && req.After === ""));
 });

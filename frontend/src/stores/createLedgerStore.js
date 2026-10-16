@@ -25,6 +25,8 @@
 import { writable } from "svelte/store";
 import { webSocketMetadataPatch } from "../lib/websocket/metadataPatch.js";
 import { LEDGER_DOCK } from "../lib/dock/dock.js";
+import { toggleQueryTerm } from "../lib/ledgerQueryFields.js";
+import { hiddenBy, normalizeContentType } from "../lib/ledger/contentTypes.js";
 
 /** The drawer's share of the table area's height: default and limits. */
 export const DRAWER_SPLIT = { default: 0.42, min: 0.15, max: 0.85 };
@@ -135,8 +137,16 @@ function initialState(runID = 0, layout = initialLayout(), sort = DEFAULT_SORT) 
     selection: emptySelection(),
     // The focused pair's row, kept while its page is out of the window.
     focusRow: null,
-    // Content types the table hides.
+    // Content types the table hides: exact types and major/* values.
     exclusion: [],
+    // True when the project keeps its own exclusion, false when it follows
+    // the app default, null until known.
+    ownExclusion: null,
+    // The app default exclusion, once loaded for Settings.
+    defaultExclusion: null,
+    // The Types menu's pair counts per content type (CountContentTypes'
+    // Counts), loaded when the menu opens. `complete` is the sitemap job's.
+    typeCounts: { counts: [], complete: true, loaded: false },
     // The table's sort; it outlasts a project switch.
     sort,
     // The text in the query box.
@@ -270,19 +280,6 @@ export function indexWarning(state) {
   return isQueryActive(state.query) && !state.results.indexComplete
     ? "Indexing older traffic — text matches may be incomplete"
     : "";
-}
-
-/**
- * True when the content-type exclusion hides `contentType`: an exact type,
- * or a whole major type ("image/*"). A pair with no content type, such as
- * one still in flight, is never hidden.
- */
-export function excludesType(exclusion, contentType) {
-  const type = (contentType ?? "").split(";")[0].trim().toLowerCase();
-  if (!type) return false;
-  return (exclusion ?? []).some(
-    (value) => value === type || (value.endsWith("/*") && type.startsWith(value.slice(0, -1))),
-  );
 }
 
 /**
@@ -462,9 +459,9 @@ export function createLedgerStore(api) {
     const live = !isQueryActive(query);
     try {
       const [counted, all] = await Promise.all([
-        api.countTraffic({ Query: query.ranQuery, AsOf: asOf }),
+        api.countTraffic(query.ranQuery, "", { AsOf: asOf }),
         live && exclusion.length
-          ? api.countTraffic({ Query: "", AsOf: asOf, IgnoreExclusion: true })
+          ? api.countTraffic("", "", { AsOf: asOf, IgnoreExclusion: true })
           : null,
       ]);
       if (gen !== generation || counted.QueryError) return;
@@ -657,7 +654,7 @@ export function createLedgerStore(api) {
     if (r.loading || reading) return;
     let counted;
     try {
-      counted = await api.countTraffic({ Query: current.query.ranQuery, After: r.asOf ?? "" });
+      counted = await api.countTraffic(current.query.ranQuery, r.asOf ?? "");
     } catch (err) {
       console.error("Counting new matches failed:", err);
       return;
@@ -733,15 +730,52 @@ export function createLedgerStore(api) {
   // on its own; a failure leaves the other in place.
   async function populate() {
     const version = projectVersion;
+    const fresh = () => version === projectVersion;
     exclusionLoaded = api
       .getExclusion()
       .then((exclusion) => {
-        if (version === projectVersion) {
-          update((state) => ({ ...state, exclusion: exclusion ?? [] }));
-        }
+        if (fresh()) update((state) => ({ ...state, exclusion: exclusion ?? [] }));
       })
       .catch((err) => console.error("Loading the content-type exclusion failed:", err));
-    await Promise.all([reload(), exclusionLoaded]);
+    await Promise.all([
+      reload(),
+      exclusionLoaded,
+      api
+        .hasOwnExclusion()
+        .then((own) => {
+          if (fresh()) update((state) => ({ ...state, ownExclusion: own }));
+        })
+        .catch((err) => console.error("Reading whether the project has its own exclusion failed:", err)),
+    ]);
+  }
+
+  // Stores a new exclusion. The drawer closes when it hides the focused
+  // pair; the caller reads the results again so they reflect it.
+  function applyExclusion(exclusion, ownExclusion) {
+    update((state) => ({ ...state, exclusion, ownExclusion }));
+    if (hiddenBy(focusedPair(current)?.ContentType, exclusion)) clearSelection();
+  }
+
+  /**
+   * Loads the Types menu's pair counts. Counts for a project that has
+   * since closed are dropped; a failure keeps the last counts.
+   */
+  async function loadTypeCounts() {
+    const version = projectVersion;
+    try {
+      const result = await api.countContentTypes();
+      if (version !== projectVersion) return;
+      update((state) => ({
+        ...state,
+        typeCounts: {
+          counts: result?.Counts ?? [],
+          complete: result?.Complete?.sitemap ?? true,
+          loaded: true,
+        },
+      }));
+    } catch (err) {
+      console.error("Counting content types failed:", err);
+    }
   }
 
   /**
@@ -771,7 +805,7 @@ export function createLedgerStore(api) {
           const next = { ...item, ...res };
           // The live view drops a pair once its response shows the
           // exclusion hides it.
-          return live && excludesType(exclusion, next.ContentType) ? null : next;
+          return live && hiddenBy(next.ContentType, exclusion) ? null : next;
         });
       }
       if (!showAtTop || requests.length === 0) return { ...r, chunks };
@@ -779,7 +813,7 @@ export function createLedgerStore(api) {
       const arrived = requests
         .filter((req) => !loaded.has(String(req.ID)))
         .map((req) => (responses.has(req.ID) ? { ...req, ...responses.get(req.ID) } : req))
-        .filter((pair) => !excludesType(exclusion, pair.ContentType))
+        .filter((pair) => !hiddenBy(pair.ContentType, exclusion))
         .sort((a, b) => (String(a.ID) < String(b.ID) ? 1 : -1));
       if (arrived.length === 0) return { ...r, chunks };
       const [top, ...rest] = chunks.length ? chunks : [{ items: [], first: null, last: null }];
@@ -985,7 +1019,11 @@ export function createLedgerStore(api) {
       responseBuffer = new Map();
       loadingForward = loadingBackward = false;
       viewport = { first: 0, last: 0, atTop: true };
-      set(initialState(current.query.runID, current.layout, current.sort));
+      // The app default exclusion isn't the project's, so it stays.
+      set({
+        ...initialState(current.query.runID, current.layout, current.sort),
+        defaultExclusion: current.defaultExclusion,
+      });
     },
     populate,
     reload,
@@ -1034,13 +1072,67 @@ export function createLedgerStore(api) {
     rerunQuery,
     clearQuery,
 
-    // Stores the content-type exclusion, then reads the results again so
-    // they reflect it. The drawer closes when the exclusion hides its pair.
+    /**
+     * Adds `term` to the query box, or removes it when the query has it as a
+     * condition of its own, and runs the result at once (a menu's choice).
+     */
+    toggleQueryTerm: (term) => {
+      const text = toggleQueryTerm(current.queryText, term);
+      update((state) => ({ ...state, queryText: text }));
+      return runQuery(text);
+    },
+
+    /**
+     * Counts the pairs each query matches, minus the content-type exclusion:
+     * { [query]: { count, capped } }, or null for a query that failed. Counts
+     * stop at marasi's cap, 100,000; `capped` means more matched.
+     */
+    countQueries: async (queries) => {
+      const counts = await Promise.all(
+        queries.map(async (query) => {
+          try {
+            const result = await api.countTraffic(query, "");
+            return result.QueryError ? null : { count: result.Count, capped: result.Capped };
+          } catch (err) {
+            console.error(`Counting matches for ${query} failed:`, err);
+            return null;
+          }
+        }),
+      );
+      return Object.fromEntries(queries.map((query, i) => [query, counts[i]]));
+    },
+
+    // Gives the project its own content-type exclusion, normalised as Marasi
+    // does, then reads the results again from the top so they reflect it.
+    // The drawer closes when the exclusion hides its pair.
     saveExclusion: async (types) => {
-      update((state) => ({ ...state, exclusion: [...types] }));
-      if (excludesType(types, focusedPair(current)?.ContentType)) clearSelection();
-      await api.setExclusion(types);
-      await reload();
+      const exclusion = [...new Set(types.map(normalizeContentType))];
+      applyExclusion(exclusion, true);
+      await api.setExclusion(exclusion);
+      await rerunQuery();
+    },
+    // Drops the project's own exclusion so it follows the app default again.
+    resetExclusion: async () => {
+      await api.resetExclusion();
+      applyExclusion(await api.getExclusion(), false);
+      await rerunQuery();
+    },
+    loadTypeCounts,
+    // Reads the app default exclusion into `defaultExclusion` and returns it.
+    loadDefaultExclusion: async () => {
+      const defaultExclusion = await api.getDefaultExclusion();
+      update((state) => ({ ...state, defaultExclusion }));
+      return defaultExclusion;
+    },
+    // Replaces the app default exclusion. A project that follows it hides
+    // the new list at once.
+    saveDefaultExclusion: async (types) => {
+      const defaultExclusion = [...new Set(types.map(normalizeContentType))];
+      update((state) => ({ ...state, defaultExclusion }));
+      const follows = current.ownExclusion === false;
+      if (follows) applyExclusion(defaultExclusion, false);
+      await api.setDefaultExclusion(defaultExclusion);
+      if (follows) await rerunQuery();
     },
 
     findShownPair,

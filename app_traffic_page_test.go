@@ -139,65 +139,6 @@ func TestQueryTrafficRejectsAMalformedAsOf(t *testing.T) {
 	}
 }
 
-func countTraffic(t *testing.T, app *App, req TrafficCountRequest) TrafficCountResult {
-	t.Helper()
-	result, err := app.CountTraffic(req)
-	if err != nil {
-		t.Fatalf("counting %+v: %v", req, err)
-	}
-	if result.QueryError != nil {
-		t.Fatalf("counting %+v: unexpected query error %+v", req, *result.QueryError)
-	}
-	return result
-}
-
-func TestCountTrafficCountsMatchesUnderTheExclusion(t *testing.T) {
-	app := newScratchpadApp(t)
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "image/png"})
-	capturePair(t, app, capturedPair{host: "www.acme.test", path: "/c", statusCode: 200, contentType: "application/json"})
-	excludeContentTypes(t, app, "image/png")
-
-	matching := countTraffic(t, app, TrafficCountRequest{Query: `host = "api.acme.test"`})
-	all := countTraffic(t, app, TrafficCountRequest{})
-	unexcluded := countTraffic(t, app, TrafficCountRequest{IgnoreExclusion: true})
-
-	if matching.Count != 1 || all.Count != 2 || unexcluded.Count != 3 {
-		t.Fatalf("wanted 1 matching, 2 in the live view and 3 in all, got %d, %d and %d", matching.Count, all.Count, unexcluded.Count)
-	}
-	if matching.Capped || !matching.IndexComplete {
-		t.Fatalf("wanted an exact count over a complete index, got %+v", matching)
-	}
-}
-
-func TestCountTrafficCountsNewMatchesAfterAsOf(t *testing.T) {
-	app := newScratchpadApp(t)
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 500, contentType: "text/html"})
-	page := pageTraffic(t, app, TrafficPageRequest{Query: "status_code >= 500"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 502, contentType: "text/html"})
-	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/c", statusCode: 200, contentType: "text/html"})
-
-	fresh := countTraffic(t, app, TrafficCountRequest{Query: "status_code >= 500", After: page.AsOf})
-	snapshot := countTraffic(t, app, TrafficCountRequest{Query: "status_code >= 500", AsOf: page.AsOf})
-
-	if fresh.Count != 1 || snapshot.Count != 1 {
-		t.Fatalf("wanted 1 new match and 1 in the snapshot, got %d and %d", fresh.Count, snapshot.Count)
-	}
-}
-
-func TestCountTrafficReportsAnInvalidQuery(t *testing.T) {
-	app := newScratchpadApp(t)
-
-	result, err := app.CountTraffic(TrafficCountRequest{Query: "status_code >> 5"})
-
-	if err != nil {
-		t.Fatalf("wanted a query error, got Go error %v", err)
-	}
-	if result.QueryError == nil {
-		t.Fatalf("wanted a query error")
-	}
-}
-
 func TestCountNotesCountsEveryRequest(t *testing.T) {
 	app := newScratchpadApp(t)
 	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "image/png"})

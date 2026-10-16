@@ -31,7 +31,6 @@ export const extensions = writable([]);
 export const extensions_ui = writable({});
 
 // Ledger Stores. The rest of the Ledger's state is in ledgerStore.
-export const contentTypeFilterInput = writable("");
 
 // Logbook Stores
 export const logbookSearchInput = writable("");
@@ -138,7 +137,6 @@ export async function openProject() {
     truncate_length: 0,
     custom_properties: {},
   });
-  contentTypeFilterInput.set("");
   compassCode.set("");
   testerInput.set("");
   checkpointCode.set("");

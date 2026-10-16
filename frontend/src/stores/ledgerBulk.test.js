@@ -188,7 +188,7 @@ test("focusing a pair or right-clicking keeps a ⌘A selection", async () => {
   store.focusPair(idOf(2));
   store.contextRow(idOf(3));
   assert.equal(isAllSelected(get(store)), true);
-  assert.equal(get(store).selection.focus, idOf(2));
+  assert.equal(get(store).selection.focus, idOf(3), "the right-clicked row takes the focus");
 });
 
 test("running another query ends a ⌘A selection", async () => {

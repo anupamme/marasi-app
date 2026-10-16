@@ -545,9 +545,6 @@
 		if (target.all && target.count == null) target = { ...target, count: $liveSize };
 		const ids = idsOf(pairs);
 		switch (action.type) {
-			case "open":
-				ledgerStore.focusPair(action.id);
-				return;
 			case "websocket":
 				ledgerStore.focusPair(action.id);
 				return openWebSocketStream();

@@ -49,10 +49,9 @@ const item = (items, id) => {
 };
 const ids = (items) => items.filter((it) => it?.id).map((it) => it.id);
 
-test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata, Delete", () => {
+test("one pair: Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata, Delete", () => {
   const menu = menuFor([pair("a")], context());
   assert.deepEqual(ids(menu), [
-    "open",
     "launchpad",
     "armory",
     "finding",
@@ -65,7 +64,7 @@ test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Co
     "metadata",
     "delete",
   ]);
-  assert.equal(item(menu, "open").label, "Open in drawer");
+  assert.equal(item(menu, "open"), undefined, "a right-click already opens the row in the drawer");
   assert.equal(item(menu, "note").label, "Add note…");
   assert.equal(item(menu, "metadata").disabled, false);
   assert.equal(item(menu, "lp-each"), undefined, "one each needs several pairs");
@@ -73,13 +72,13 @@ test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Co
 
 test("a WebSocket upgrade row offers its stream", () => {
   const ws = pair("a", { StatusCode: 101, Metadata: { protocol: "websocket" } });
-  assert.deepEqual(ids(menuFor([ws], context())).slice(0, 2), ["open", "websocket"]);
+  assert.deepEqual(ids(menuFor([ws], context())).slice(0, 2), ["websocket", "launchpad"]);
   assert.equal(item(menuFor([ws, pair("b")], context()), "websocket"), undefined);
 });
 
 test("several pairs: counts in the labels, bulk notes, metadata disabled", () => {
   const menu = menuFor([pair("a"), pair("b")], context());
-  assert.equal(item(menu, "open").label, "Open request 1 in drawer");
+  assert.equal(item(menu, "open"), undefined);
   assert.equal(item(menu, "lp-new").label, "New launchpad with 2 entries");
   assert.equal(item(menu, "lp-each").label, "2 launchpads, one each");
   assert.equal(item(menu, "armory").label, "Send 2 to Armory");
@@ -100,19 +99,36 @@ test("findings show checked when every pair is linked, mixed when some are, and 
   assert.equal(item(menu, "f-F2").checked, "mixed");
   assert.equal(item(menu, "f-F3").checked, false);
   assert.deepEqual(item(menu, "f-F1").action, { type: "link-finding", id: "F1", title: "IDOR" });
-  assert.deepEqual(
-    ids(item(menu, "finding").sub).filter((id) => id.startsWith("fu-")),
-    ["fu-F1", "fu-F2"],
-  );
+  assert.deepEqual(ids(item(menu, "f-unlink").sub), ["fu-F1", "fu-F2"]);
   assert.equal(item(menu, "finding").badge, 2);
   assert.equal(item(menu, "testcase").badge, null);
 });
 
-test("with no launchpads, findings or test cases, the submenus say so", () => {
+test("Launchpad, Finding and Test case put new, add and remove in their own submenus", () => {
+  const one = menuFor([pair("a")], context());
+  assert.deepEqual(ids(item(one, "launchpad").sub), ["lp-new", "lp-add", "lp-remove"]);
+  assert.deepEqual(ids(item(one, "lp-add").sub), ["lp-L1"]);
+  assert.deepEqual(ids(item(one, "lp-remove").sub), ["lpu-L1"]);
+  assert.equal(item(one, "lp-add").label, "Add to launchpad");
+  assert.equal(item(one, "lp-remove").label, "Remove from launchpad");
+  const two = menuFor([pair("a"), pair("b")], context());
+  assert.deepEqual(ids(item(two, "launchpad").sub), ["lp-new", "lp-each", "lp-add", "lp-remove"]);
+  assert.deepEqual(ids(item(two, "finding").sub), ["f-new", "f-link", "f-unlink"]);
+  assert.equal(item(two, "f-link").label, "Link to finding");
+  assert.equal(item(two, "f-unlink").label, "Unlink from finding");
+  assert.deepEqual(ids(item(two, "testcase").sub), ["t-new", "t-link"], "nothing linked, nothing to unlink");
+  for (const sub of [item(one, "launchpad").sub, item(two, "finding").sub]) {
+    assert.ok(!sub.some((it) => it?.heading), "no headings: each group is a submenu");
+  }
+});
+
+test("with no launchpads, findings or test cases, their add submenus are disabled and say so", () => {
   const menu = menuFor([pair("a")], context({ launchpads: [], findings: [], testCases: [] }));
-  assert.equal(item(menu, "lp-none").disabled, true);
-  assert.equal(item(menu, "f-none").disabled, true);
-  assert.equal(item(menu, "t-none").disabled, true);
+  assert.equal(item(menu, "lp-add").disabled, true);
+  assert.equal(item(menu, "lp-add").hint, "No launchpads yet");
+  assert.equal(item(menu, "lp-remove"), undefined);
+  assert.equal(item(menu, "f-link").hint, "No findings yet");
+  assert.equal(item(menu, "t-link").hint, "No test cases yet");
 });
 
 test("copying raw responses is disabled until a pair has one", () => {
@@ -131,9 +147,10 @@ test("narrowing offers the host, other hosts, the path's folder, the status and 
       { type: "narrow", term: 'host != "api.acme.test"' },
       { type: "narrow", term: 'path = "/v1/users/*"' },
       { type: "narrow", term: "status_code = 200" },
-      { type: "hide-type", contentType: "application/json" },
     ],
   );
+  assert.deepEqual(ids(item(menu, "narrow").sub).at(-1), "q-hide", "hiding a type is its own submenu");
+  assert.deepEqual(item(menu, "x-application/json").action, { type: "hide-type", contentType: "application/json" });
   const two = menuFor([pair("a"), pair("b", { Host: "cdn.acme.test", StatusCode: 404 })], context());
   assert.deepEqual(item(two, "q-host").action, {
     type: "narrow",
@@ -166,9 +183,10 @@ test("type-to-filter searches every action, submenus included, and shows where e
   const found = filterMenu(menuFor([pair("a")], context()), "curl");
   assert.deepEqual(
     found.map((it) => [it.trail, it.label]),
-    [[["Copy"], "As cURL"]],
+    [[["Copy"], "As a cURL command"]],
   );
-  assert.ok(filterMenu(menuFor([pair("a")], context()), "idor").some((it) => it.id === "f-F1"));
+  const idor = filterMenu(menuFor([pair("a")], context()), "idor").find((it) => it.id === "f-F1");
+  assert.deepEqual(idor.trail, ["Finding", "Link to finding"], "a nested action shows its whole path");
   assert.ok(filterMenu(menuFor([pair("a")], context()), "launchpad").length >= 2);
 });
 
@@ -271,12 +289,23 @@ test("Note: one pair adds or edits it; several append a note or clear them", () 
 
 test("Remove from launchpad lists the launchpads", () => {
   const menu = menuFor([pair("a")], context({ launchpads: [{ ID: "L1", Name: "Login" }, { ID: "L2", Name: "" }] }));
-  const sub = item(menu, "launchpad").sub;
-  assert.ok(sub.some((it) => it.heading === "Remove from launchpad"));
+  assert.deepEqual(ids(item(menu, "lp-remove").sub), ["lpu-L1", "lpu-L2"]);
   assert.deepEqual(item(menu, "lpu-L1").action, { type: "remove-from-launchpad", id: "L1", name: "Login" });
   assert.equal(item(menu, "lpu-L2").label, "Untitled launchpad");
-  const none = menuFor([pair("a")], context({ launchpads: [] }));
-  assert.equal(item(none, "launchpad").sub.some((it) => it.heading === "Remove from launchpad"), false);
+});
+
+test("labels say whether they act on one request or the whole selection", () => {
+  const one = menuFor([pair("a")], context());
+  assert.equal(item(one, "c-url").label, "URL");
+  assert.equal(item(one, "c-curl").label, "As a cURL command");
+  assert.equal(item(one, "c-md").label, "As a Markdown table");
+  assert.equal(item(one, "c-numbers").label, "Request number");
+  const three = menuFor([pair("a"), pair("b"), pair("c")], context());
+  assert.equal(item(three, "c-url").label, "3 URLs");
+  assert.equal(item(three, "c-curl").label, "3 requests as cURL commands");
+  assert.equal(item(three, "c-md").label, "3 requests as a Markdown table");
+  assert.equal(item(three, "c-numbers").label, "3 request numbers");
+  assert.equal(item(three, "f-new").label, "New finding with 3 requests");
 });
 
 test("Delete from project comes last and names the count", () => {
@@ -299,11 +328,7 @@ test("a ⌘A selection names its count, and actions that need each pair wait for
   assert.equal(item(menu, "t-new").disabled, true);
   assert.equal(item(menu, "lp-L1").disabled, undefined, "bulk links still run");
   assert.equal(item(menu, "f-F3").checked, undefined, "link states are unknown");
-  assert.deepEqual(
-    ids(item(menu, "finding").sub).filter((id) => id.startsWith("fu-")),
-    ["fu-F1", "fu-F2", "fu-F3"],
-    "any finding can be unlinked",
-  );
+  assert.deepEqual(ids(item(menu, "f-unlink").sub), ["fu-F1", "fu-F2", "fu-F3"], "any finding can be unlinked");
   assert.ok(item(menu, "highlight").swatches.every((swatch) => swatch.checked === undefined));
 
   const counting = menuFor([pair("a"), pair("b")], context({ all: true, count: null }));

@@ -1242,10 +1242,11 @@ export function createLedgerStore(api) {
 
   /**
    * Right-click on a row: a selected row keeps the selection, so the menu
-   * acts on all of it; any other row is selected alone.
+   * acts on all of it, and takes the focus, so the drawer shows it; any
+   * other row is selected alone.
    */
   function contextRow(id) {
-    if (!isSelected(current, id)) selectPair(id);
+    focusPair(id);
   }
 
   // A drag across rows: the row it started on, or null when none is under way.

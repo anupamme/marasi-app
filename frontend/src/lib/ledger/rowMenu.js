@@ -181,26 +181,32 @@ function linkMenu({ key, noun, pairs, one, n, partial, targets, newActionId, new
         hint: NOT_FOR_ALL,
         action: { type: newType },
       },
-      { heading: `Link to ${noun}` },
-      ...(targets.length
-        ? states.map(([target, checked]) => ({
-            id: `${key}-${target.ID}`,
-            label: title(target),
-            icon: "link",
-            severity: target.Severity,
-            checked,
-            action: { type: linkType, id: target.ID, title: title(target) },
-          }))
-        : [{ id: `${key}-none`, label: `No ${noun}s yet`, disabled: true }]),
+      {
+        id: `${key}-link`,
+        label: `Link to ${noun}`,
+        icon: "link",
+        disabled: !targets.length,
+        hint: `No ${noun}s yet`,
+        sub: states.map(([target, checked]) => ({
+          id: `${key}-${target.ID}`,
+          label: title(target),
+          severity: target.Severity,
+          checked,
+          action: { type: linkType, id: target.ID, title: title(target) },
+        })),
+      },
       ...(linked.length
         ? [
-            { heading: "Unlink" },
-            ...linked.map(([target]) => ({
-              id: `${key}u-${target.ID}`,
-              label: title(target),
+            {
+              id: `${key}-unlink`,
+              label: `Unlink from ${noun}`,
               icon: "unlink",
-              action: { type: unlinkType, id: target.ID, title: title(target) },
-            })),
+              sub: linked.map(([target]) => ({
+                id: `${key}u-${target.ID}`,
+                label: title(target),
+                action: { type: unlinkType, id: target.ID, title: title(target) },
+              })),
+            },
           ]
         : []),
     ],
@@ -221,8 +227,8 @@ export function isPartialSelection(pairs, { all = false, count = null } = {}) {
 
 /**
  * The menu for `pairs`, the selected pairs the table has loaded, in table
- * order. `context` holds what the app already knows: { numberOf(pair),
- * launchpads, findings, testCases, palette (the effective highlight
+ * order. `context` holds what the app already knows: { launchpads,
+ * findings, testCases, palette (the effective highlight
  * palette), all, count }. `all` marks a ⌘A selection, whose `count` pairs
  * (null until counted) can be more than the loaded ones; actions that need
  * each pair are disabled then.
@@ -230,7 +236,6 @@ export function isPartialSelection(pairs, { all = false, count = null } = {}) {
 export function menuFor(
   pairs,
   {
-    numberOf = () => "",
     launchpads = [],
     findings = [],
     testCases = [],
@@ -277,14 +282,9 @@ export function menuFor(
     unlinkType: "unlink-test-case",
   });
 
+  // No "Open in drawer": a right-click focuses its row, so the drawer
+  // already shows it.
   return [
-    {
-      id: "open",
-      label: one ? "Open in drawer" : `Open request ${numberOf(pairs[0])} in drawer`,
-      icon: "open",
-      kbd: "↵",
-      action: { type: "open", id: pairs[0].ID },
-    },
     ...(websocket
       ? [
           {
@@ -296,7 +296,7 @@ export function menuFor(
           },
         ]
       : []),
-    "sep",
+    ...(websocket ? ["sep"] : []),
     {
       id: "launchpad",
       label: "Send to Launchpad",
@@ -320,25 +320,32 @@ export function menuFor(
               },
             ]
           : []),
-        { heading: "Add to launchpad" },
-        ...(launchpads.length
-          ? launchpads.map((launchpad) => ({
-              id: `lp-${launchpad.ID}`,
-              label: launchpad.Name || "Untitled launchpad",
-              action: { type: "add-to-launchpad", id: launchpad.ID, name: launchpad.Name },
-            }))
-          : [{ id: "lp-none", label: "No launchpads yet", disabled: true }]),
+        {
+          id: "lp-add",
+          label: "Add to launchpad",
+          icon: "link",
+          disabled: !launchpads.length,
+          hint: "No launchpads yet",
+          sub: launchpads.map((launchpad) => ({
+            id: `lp-${launchpad.ID}`,
+            label: launchpad.Name || "Untitled launchpad",
+            action: { type: "add-to-launchpad", id: launchpad.ID, name: launchpad.Name },
+          })),
+        },
         // The pairs' launchpads aren't loaded with them, so every launchpad
         // is offered; Marasi reports how many were in it.
         ...(launchpads.length
           ? [
-              { heading: "Remove from launchpad" },
-              ...launchpads.map((launchpad) => ({
-                id: `lpu-${launchpad.ID}`,
-                label: launchpad.Name || "Untitled launchpad",
+              {
+                id: "lp-remove",
+                label: "Remove from launchpad",
                 icon: "unlink",
-                action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
-              })),
+                sub: launchpads.map((launchpad) => ({
+                  id: `lpu-${launchpad.ID}`,
+                  label: launchpad.Name || "Untitled launchpad",
+                  action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
+                })),
+              },
             ]
           : []),
       ],
@@ -411,7 +418,11 @@ export function menuFor(
           actionId: "ledger.drawer-open.copy-url",
           action: { type: "copy", what: "urls" },
         },
-        { id: "c-curl", label: "As cURL", action: { type: "copy", what: "curl" } },
+        {
+          id: "c-curl",
+          label: one ? "As a cURL command" : `${many} requests as cURL commands`,
+          action: { type: "copy", what: "curl" },
+        },
         {
           id: "c-req",
           label: one ? "Raw request" : `${many} raw requests`,
@@ -426,8 +437,16 @@ export function menuFor(
           hint: "No response yet",
           action: { type: "copy", what: "responses" },
         },
-        { id: "c-md", label: "As Markdown table", action: { type: "copy", what: "markdown" } },
-        { id: "c-numbers", label: "Request numbers", action: { type: "copy", what: "numbers" } },
+        {
+          id: "c-md",
+          label: one ? "As a Markdown table" : `${many} requests as a Markdown table`,
+          action: { type: "copy", what: "markdown" },
+        },
+        {
+          id: "c-numbers",
+          label: one ? "Request number" : `${many} request numbers`,
+          action: { type: "copy", what: "numbers" },
+        },
       ],
     },
     {
@@ -435,7 +454,6 @@ export function menuFor(
       label: "Narrow query",
       icon: "filter",
       sub: [
-        { heading: "Query" },
         {
           id: "q-host",
           label: hosts.length === 1 ? `host = ${hosts[0]}` : `Only these ${hosts.length} hosts`,
@@ -470,13 +488,20 @@ export function menuFor(
               },
             ]
           : []),
-        ...(types.length ? [{ heading: "Types" }] : []),
-        ...types.slice(0, 3).map((type) => ({
-          id: `x-${type}`,
-          label: `Hide ${shortType(type)} (${type})`,
-          icon: "eye-off",
-          action: { type: "hide-type", contentType: type },
-        })),
+        ...(types.length
+          ? [
+              {
+                id: "q-hide",
+                label: "Hide type",
+                icon: "eye-off",
+                sub: types.slice(0, 3).map((type) => ({
+                  id: `x-${type}`,
+                  label: `${shortType(type)} (${type})`,
+                  action: { type: "hide-type", contentType: type },
+                })),
+              },
+            ]
+          : []),
       ],
     },
     {

@@ -172,12 +172,13 @@ test("⌘A shows every row the table lists as selected", async () => {
   assert.equal(get(store).selection.focus, "c", "the focus is the top row");
 });
 
-test("right-clicking a selected row keeps the selection; another row replaces it", async () => {
+test("right-clicking a selected row keeps the selection and focuses it; another row replaces it", async () => {
   const { store } = await storeWith();
   store.clickRow("a", plain);
   store.clickRow("c", range);
   store.contextRow("b");
   assert.deepEqual(selected(store), ["a", "b", "c"]);
+  assert.equal(focusedPair(get(store))?.ID, "b", "the drawer shows the row right-clicked");
   store.contextRow("e");
   assert.deepEqual(selected(store), ["e"]);
 });

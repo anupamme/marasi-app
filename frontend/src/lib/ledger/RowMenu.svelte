@@ -20,7 +20,6 @@
 		Link,
 		ListChecks,
 		Minus,
-		PanelBottomOpen,
 		Pen,
 		Plus,
 		Radio,
@@ -32,6 +31,7 @@
 		Unlink,
 		X,
 	} from "lucide-svelte";
+	import { placeMenu, placeSubmenu } from "./menuPlacement.js";
 	import { filterMenu, isPartialSelection, isRunnable, isSwatchRow, menuFor, selectionSummary } from "./rowMenu.js";
 	import { menuDispatcher } from "../keybindings/app.js";
 	import { formatBinding } from "../keybindings/keys.js";
@@ -52,7 +52,6 @@
 	const dispatch = createEventDispatcher();
 
 	const ICONS = {
-		open: PanelBottomOpen,
 		radio: Radio,
 		send: Send,
 		plus: Plus,
@@ -86,24 +85,40 @@
 	};
 
 	let root;
-	let subMenu;
 	let filterBox;
 	let filter = "";
-	// The highlighted item in the list, the item whose submenu is open, and
-	// the highlighted item in that submenu; -1 or null for none.
+	// The highlighted item in the main list; -1 for none.
 	let active = -1;
-	let sub = null;
-	let subActive = -1;
+	// The open submenus, outermost first: subs[k] is level k + 1, opened from
+	// item `index` of the level above (the main list for k = 0), with its
+	// highlighted item `active` and its place on screen.
+	let subs = [];
+	// The level the keys act on: 0 for the main list, k for subs[k - 1].
+	let keyLevel = 0;
 	// The swatch picked out on the highlight row, by keys or the pointer.
 	let swatchActive = 0;
 	let position = { left: 0, top: 0 };
-	let subPosition = { left: 0, top: 0 };
+	const subPanels = [];
 
 	$: items = open ? menuFor(pairs, context) : [];
 	$: list = filterMenu(items, filter);
 	$: filtered = filter.trim() !== "";
 	$: summary = open ? selectionSummary(pairs) : null;
-	$: subItems = sub != null && Array.isArray(list[sub]?.sub) ? list[sub].sub : [];
+	$: levelItems = subItemsOf(list, subs);
+
+	// The items of every open submenu, level by level.
+	function subItemsOf(list, subs) {
+		const out = [];
+		let parent = list;
+		for (const sub of subs) {
+			const children = Array.isArray(parent[sub.index]?.sub) ? parent[sub.index].sub : [];
+			out.push(children);
+			parent = children;
+		}
+		return out;
+	}
+	// The items of level `level`: the main list, or a submenu.
+	const itemsAt = (level) => (level === 0 ? list : levelItems[level - 1] ?? []);
 
 	$: if (open) place();
 	$: if (!open) reset();
@@ -111,14 +126,14 @@
 	$: onFilter(filter, list);
 	function onFilter() {
 		active = filtered ? step(list, -1, 1) : -1;
-		sub = null;
+		closeFrom(0);
 	}
 
 	function reset() {
 		filter = "";
 		active = -1;
-		sub = null;
-		subActive = -1;
+		subs = [];
+		keyLevel = 0;
 		swatchActive = 0;
 	}
 
@@ -128,48 +143,64 @@
 		dispatch("close", { refocus });
 	}
 
-	// Keeps the menu on screen, flipping left of the pointer when it would
-	// run off the right edge.
+	// Opens at the pointer: see placeMenu.
 	async function place() {
 		position = { left: x, top: y };
 		await tick();
 		if (!root) return;
 		const rect = root.getBoundingClientRect();
-		position = {
-			left: Math.max(4, x + rect.width > innerWidth - 4 ? x - rect.width : x),
-			top: Math.max(4, Math.min(y, innerHeight - rect.height - 4)),
-		};
+		position = placeMenu({ x, y, width: rect.width, height: rect.height, viewport: viewportSize() });
 		filterBox?.focus({ preventScroll: true });
 	}
 
-	async function openSub(index) {
-		if (sub === index) return;
-		sub = index;
-		subActive = -1;
+	const viewportSize = () => ({ width: innerWidth, height: innerHeight });
+
+	// Closes the submenus at `level` and deeper (level 0 closes them all).
+	function closeFrom(level) {
+		if (subs.length > level) subs = subs.slice(0, level);
+		if (keyLevel > level) keyLevel = level;
+	}
+
+	// How many submenu levels open from `item`: 1 for a plain submenu.
+	function subDepth(item) {
+		if (!Array.isArray(item?.sub)) return 0;
+		return 1 + Math.max(0, ...item.sub.map(subDepth));
+	}
+
+	// Opens the submenu of item `index` of level `level` beside its row: see
+	// placeSubmenu. It is measured hidden first.
+	async function openSub(level, index) {
+		if (subs[level]?.index === index) return;
+		subs = [...subs.slice(0, level), { index, active: -1, style: "visibility: hidden" }];
 		await tick();
-		const row = root?.querySelector(`[data-menu-index="${index}"]`);
-		if (!row || !subMenu) return;
-		const rowRect = row.getBoundingClientRect();
-		const menuRect = root.getBoundingClientRect();
-		const subRect = subMenu.getBoundingClientRect();
-		const fitsRight = menuRect.right + subRect.width < innerWidth - 4;
-		subPosition = {
-			left: fitsRight ? menuRect.width - 4 : -subRect.width + 4,
-			top: Math.max(
-				-menuRect.top + 4,
-				Math.min(rowRect.top - menuRect.top - 5, innerHeight - menuRect.top - subRect.height - 4),
-			),
+		const panel = subPanels[level];
+		const parent = level === 0 ? root : subPanels[level - 1];
+		const row = parent?.querySelector(`[data-menu-index="${index}"]`);
+		if (!panel || !row || !parent) return;
+		const place = placeSubmenu({
+			row: row.getBoundingClientRect(),
+			parent: parent.getBoundingClientRect(),
+			width: panel.offsetWidth,
+			height: panel.scrollHeight + 2,
+			viewport: viewportSize(),
+			levels: level === 0 ? Math.max(1, subDepth(itemsAt(0)[index])) : 1,
+			parentLeftward: level > 0 ? subs[level - 1].leftward : null,
+		});
+		subs[level] = {
+			...subs[level],
+			leftward: place.leftward,
+			style: `left: ${place.left}px; top: ${place.top}px; max-height: ${place.maxHeight}px`,
 		};
 	}
 
-	function choose(item) {
+	function choose(item, level = 0, index = -1) {
 		if (!isRunnable(item)) return;
 		if (isSwatchRow(item)) {
 			choose(item.swatches[swatchActive]);
 			return;
 		}
 		if (Array.isArray(item.sub)) {
-			openSub(list.indexOf(item));
+			enterSub(level, index);
 			return;
 		}
 		close();
@@ -185,52 +216,64 @@
 		return from;
 	}
 
-	async function enterSub() {
-		await openSub(active);
-		subActive = step(subItems, -1, 1);
+	// The highlighted item of level `level`.
+	const activeAt = (level) => (level === 0 ? active : subs[level - 1]?.active ?? -1);
+	function setActive(level, index) {
+		if (level === 0) active = index;
+		else if (subs[level - 1]) subs[level - 1] = { ...subs[level - 1], active: index };
+	}
+
+	// Opens the submenu of item `index` of `level` and moves the keys into it.
+	async function enterSub(level, index) {
+		await openSub(level, index);
+		keyLevel = level + 1;
+		setActive(level + 1, step(itemsAt(level + 1), -1, 1));
+	}
+
+	// The pointer on item `index` of `level`: it is highlighted, deeper
+	// submenus close, and its own submenu opens.
+	function hover(level, index, item) {
+		setActive(level, index);
+		keyLevel = level;
+		closeFrom(level);
+		if (Array.isArray(item.sub) && !item.disabled) openSub(level, index);
 	}
 
 	function onKeydown(event) {
 		if (!open) return;
-		const inSub = sub != null && subActive >= 0;
 		const handled = () => {
 			event.preventDefault();
 			event.stopPropagation();
 		};
+		const level = keyLevel;
+		const levelList = itemsAt(level);
+		const current = levelList[activeAt(level)];
 		if (event.key === "Escape") {
 			handled();
-			if (sub != null) {
-				sub = null;
-				subActive = -1;
-			} else close();
+			if (level > 0) closeFrom(level - 1);
+			else if (subs.length) closeFrom(0);
+			else close();
 		} else if (event.key === "ArrowDown" || event.key === "ArrowUp") {
 			handled();
-			const d = event.key === "ArrowDown" ? 1 : -1;
-			if (inSub) subActive = step(subItems, subActive, d);
-			else {
-				active = step(list, active, d);
-				sub = null;
-			}
-		} else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && !inSub && isSwatchRow(list[active])) {
+			setActive(level, step(levelList, activeAt(level), event.key === "ArrowDown" ? 1 : -1));
+			closeFrom(level);
+		} else if ((event.key === "ArrowRight" || event.key === "ArrowLeft") && level === 0 && isSwatchRow(current)) {
 			handled();
-			const count = list[active].swatches.length;
+			const count = current.swatches.length;
 			swatchActive = (swatchActive + (event.key === "ArrowRight" ? 1 : -1) + count) % count;
 		} else if (event.key === "ArrowRight") {
-			if (!inSub && Array.isArray(list[active]?.sub)) {
+			if (Array.isArray(current?.sub) && isRunnable(current)) {
 				handled();
-				enterSub();
+				enterSub(level, activeAt(level));
 			}
 		} else if (event.key === "ArrowLeft") {
-			if (sub != null) {
+			if (level > 0) {
 				handled();
-				sub = null;
-				subActive = -1;
+				closeFrom(level - 1);
 			}
 		} else if (event.key === "Enter") {
 			handled();
-			if (inSub) choose(subItems[subActive]);
-			else if (Array.isArray(list[active]?.sub)) enterSub();
-			else choose(list[active]);
+			if (current) choose(current, level, activeAt(level));
 		} else if (event.key === "Tab") {
 			handled();
 		}
@@ -344,10 +387,7 @@
 						class="ledger-highlight-swatches flex items-center gap-1 px-3 py-[5px] {active === i ? 'bg-primary-500/20' : ''}"
 						role="group"
 						aria-label={item.label}
-						on:mouseenter={() => {
-							active = i;
-							sub = null;
-						}}
+						on:mouseenter={() => hover(0, i, item)}
 					>
 						<span class="w-4 flex-none opacity-70"><Highlighter size={13} /></span>
 						{#each item.swatches as swatch, k (swatch.id)}
@@ -383,19 +423,15 @@
 						role="menuitem"
 						aria-disabled={item.disabled ? "true" : undefined}
 						aria-haspopup={Array.isArray(item.sub) ? "menu" : undefined}
-						aria-expanded={Array.isArray(item.sub) ? sub === i : undefined}
+						aria-expanded={Array.isArray(item.sub) ? subs[0]?.index === i : undefined}
 						class="flex w-full items-center gap-2 px-3 py-[5px] text-left
 							{item.disabled ? 'cursor-not-allowed opacity-40' : ''}
 							{item.danger ? 'text-error-600 dark:text-error-400' : ''}
-							{(active === i || sub === i) && !item.disabled ? 'bg-primary-500/20' : ''}"
+							{(active === i || subs[0]?.index === i) && !item.disabled ? 'bg-primary-500/20' : ''}"
 						title={item.disabled ? item.hint : ""}
-						on:mouseenter={() => {
-							active = i;
-							if (Array.isArray(item.sub) && !item.disabled) openSub(i);
-							else sub = null;
-						}}
+						on:mouseenter={() => hover(0, i, item)}
 						on:mousedown|preventDefault
-						on:click={() => choose(item)}
+						on:click={() => choose(item, 0, i)}
 					>
 						<span class="w-4 flex-none opacity-70">
 							{#if item.color !== undefined}
@@ -411,42 +447,48 @@
 						{#if item.badge}<span class="badge variant-soft-primary px-1.5 py-0 text-[10px]">{item.badge}</span>{/if}
 						{#if item.disabled && item.hint}<span class="text-[10px] opacity-80">{item.hint}</span>{/if}
 						{#if key && !item.disabled}<kbd class="font-sans text-[10px] opacity-50">{key}</kbd>{/if}
-						{#if Array.isArray(item.sub)}<ChevronRight size={12} class="opacity-60" />{/if}
+						{#if Array.isArray(item.sub) && !item.disabled}<ChevronRight size={12} class="opacity-60" />{/if}
 					</button>
 				{/if}
 			{:else}
 				<p class="px-3 py-2 opacity-50">No matching actions</p>
 			{/each}
 
-			{#if subItems.length}
+			{#each subs as panel, k (k)}
+				{@const level = k + 1}
 				<div
-					bind:this={subMenu}
-					class="ledger-row-submenu absolute z-10 max-h-[60vh] w-72 overflow-auto border border-surface-300-600-token bg-surface-100-800-token py-1 shadow-2xl"
-					style="left: {subPosition.left}px; top: {subPosition.top}px"
+					bind:this={subPanels[k]}
+					class="ledger-row-submenu fixed z-10 w-72 overflow-auto border border-surface-300-600-token bg-surface-100-800-token py-1 shadow-2xl"
+					style={panel.style}
+					data-menu-level={level}
 					role="menu"
-					aria-label={list[sub].label}
+					aria-label={itemsAt(k)[panel.index]?.label}
 				>
-					{#each subItems as item, j}
+					{#each levelItems[k] ?? [] as item, j}
 						{#if item === "sep"}
 							<div class="my-1 border-t border-surface-300-600-token"></div>
 						{:else if item.heading}
 							<div class="px-3 pb-0.5 pt-1.5 text-[10px] uppercase tracking-wide opacity-50">{item.heading}</div>
 						{:else}
 							{@const key = shortcut(item, $menuDispatcher)}
+							{@const opensSub = Array.isArray(item.sub)}
 							<button
 								type="button"
+								data-menu-index={j}
 								data-menu-item={item.id}
 								role={item.checked === undefined ? "menuitem" : "menuitemcheckbox"}
 								aria-checked={item.checked === undefined ? undefined : String(item.checked)}
 								aria-disabled={item.disabled ? "true" : undefined}
+								aria-haspopup={opensSub ? "menu" : undefined}
+								aria-expanded={opensSub ? subs[level]?.index === j : undefined}
 								class="flex w-full items-center gap-2 px-3 py-[5px] text-left
 									{item.disabled ? 'cursor-not-allowed opacity-40' : ''}
 									{item.danger ? 'text-error-600 dark:text-error-400' : ''}
-									{subActive === j && !item.disabled ? 'bg-primary-500/20' : ''}"
+									{(panel.active === j || subs[level]?.index === j) && !item.disabled ? 'bg-primary-500/20' : ''}"
 								title={item.disabled ? item.hint : item.label}
-								on:mouseenter={() => (subActive = j)}
+								on:mouseenter={() => hover(level, j, item)}
 								on:mousedown|preventDefault
-								on:click={() => choose(item)}
+								on:click={() => choose(item, level, j)}
 							>
 								<span class="w-4 flex-none opacity-70">
 									{#if item.checked === true}<Check size={13} class="text-primary-500" />
@@ -459,11 +501,12 @@
 								{/if}
 								{#if item.disabled && item.hint}<span class="text-[10px]">{item.hint}</span>{/if}
 								{#if key && !item.disabled}<kbd class="font-sans text-[10px] opacity-50">{key}</kbd>{/if}
+								{#if opensSub && !item.disabled}<ChevronRight size={12} class="opacity-60" />{/if}
 							</button>
 						{/if}
 					{/each}
 				</div>
-			{/if}
+			{/each}
 		</div>
 		<div class="flex justify-between border-t border-surface-300-600-token px-3 py-1 text-[10px] opacity-50">
 			<span>↑↓ move · → open · ↵ run</span>

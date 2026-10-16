@@ -323,6 +323,7 @@
 							if (Array.isArray(item.sub) && !item.disabled) openSub(i);
 							else sub = null;
 						}}
+						on:mousedown|preventDefault
 						on:click={() => choose(item)}
 					>
 						<span class="w-4 flex-none opacity-70">
@@ -367,6 +368,7 @@
 									{subActive === j && !item.disabled ? 'bg-primary-500/20' : ''}"
 								title={item.disabled ? item.hint : item.label}
 								on:mouseenter={() => (subActive = j)}
+								on:mousedown|preventDefault
 								on:click={() => choose(item)}
 							>
 								<span class="w-4 flex-none opacity-70">

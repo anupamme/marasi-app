@@ -10,6 +10,7 @@ import {
   selectionSummary,
   similarIDs,
 } from "./rowMenu.js";
+import { effectivePalette } from "./highlights.js";
 
 const pair = (id, extra = {}) => ({
   ID: id,
@@ -47,7 +48,7 @@ const item = (items, id) => {
 };
 const ids = (items) => items.filter((it) => it?.id).map((it) => it.id);
 
-test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Copy, Narrow, Select, Metadata", () => {
+test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata", () => {
   const menu = menuFor([pair("a")], context());
   assert.deepEqual(ids(menu), [
     "open",
@@ -56,6 +57,7 @@ test("one pair: open, Launchpad, Armory, Finding, Test case, Note, Copy, Narrow,
     "finding",
     "testcase",
     "note",
+    "highlight",
     "copy",
     "narrow",
     "select",
@@ -166,6 +168,46 @@ test("type-to-filter searches every action, submenus included, and shows where e
   );
   assert.ok(filterMenu(menuFor([pair("a")], context()), "idor").some((it) => it.id === "f-F1"));
   assert.ok(filterMenu(menuFor([pair("a")], context()), "launchpad").length >= 2);
+});
+
+test("the highlight swatches: 8 labelled from the palette, then None, marking the pairs' own", () => {
+  const palette = effectivePalette([], { 3: "IDOR candidate" });
+  const menu = menuFor([pair("a", { Highlight: 3 }), pair("b", { Highlight: 3 })], context({ palette }));
+  const swatches = item(menu, "highlight").swatches;
+  assert.deepEqual(
+    swatches.map((s) => [s.label, s.color, s.checked]),
+    [
+      ["Red", "#ef4444", false],
+      ["Orange", "#f97316", false],
+      ["IDOR candidate", "#eab308", true],
+      ["Green", "#22c55e", false],
+      ["Cyan", "#06b6d4", false],
+      ["Blue", "#3b82f6", false],
+      ["Purple", "#a855f7", false],
+      ["Pink", "#ec4899", false],
+      ["None", null, false],
+    ],
+  );
+  assert.deepEqual(swatches[2].action, { type: "highlight", number: 3 });
+  assert.deepEqual(swatches[8].action, { type: "highlight", number: null });
+});
+
+test("a swatch some of the pairs have is mixed; None is checked when none have one", () => {
+  const palette = effectivePalette([]);
+  const mixed = item(menuFor([pair("a", { Highlight: 5 }), pair("b")], context({ palette })), "highlight");
+  assert.equal(mixed.swatches[4].checked, "mixed");
+  assert.equal(mixed.swatches[8].checked, "mixed");
+  const plain = item(menuFor([pair("a")], context({ palette })), "highlight");
+  assert.equal(plain.swatches[8].checked, true);
+});
+
+test("type-to-filter finds a swatch by its label", () => {
+  const palette = effectivePalette([], { 3: "IDOR candidate" });
+  const found = filterMenu(menuFor([pair("a")], context({ palette })), "idor cand");
+  assert.deepEqual(
+    found.map((it) => [it.trail, it.label, it.color]),
+    [[["Highlight"], "IDOR candidate", "#eab308"]],
+  );
 });
 
 test("narrowing appends a term; a query with OR is grouped first", () => {

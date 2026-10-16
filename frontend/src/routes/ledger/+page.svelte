@@ -34,6 +34,7 @@
 		PanelLeftIcon,
 		MenuIcon,
 		Tags,
+		Highlighter,
 	} from "lucide-svelte";
 	import QueryFieldList from "../../lib/components/QueryFieldList.svelte";
 	import LedgerQueryBox from "../../lib/ledger/LedgerQueryBox.svelte";
@@ -58,12 +59,14 @@
 	} from "../../lib/ledger/rowMenu.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
+	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
+	import { activeHighlightCount, ANY_HIGHLIGHT_TERM, highlightTerm } from "../../lib/ledger/highlights.js";
 	import { MARKS, activeMarkCount } from "../../lib/ledger/marks.js";
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { rowHighlight } from "../../lib/ledger/table.js";
 	import { launchpadStore } from "../../stores/launchpadStore";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
-	import { highlightPalette } from "../../stores/highlightsStore";
+	import { highlightMigrating, highlightPalette, renameHighlight } from "../../stores/highlightsStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
 	import {
@@ -303,6 +306,24 @@
 		});
 	}
 
+	// Gives the pairs highlight `number`, or clears it when null, and says
+	// how many pairs Marasi changed.
+	async function highlightPairs(pairs, number) {
+		const name = number == null ? null : $highlightPalette[number - 1]?.label;
+		try {
+			const changed = await ledgerStore.setHighlight(idsOf(pairs), number);
+			toastStore.trigger({
+				message:
+					number == null
+						? `Cleared the highlight on ${requestCount(changed)}`
+						: `Highlighted ${requestCount(changed)} "${name}"`,
+				background: handoffBackground,
+			});
+		} catch (error) {
+			toastError(`Failed to highlight ${describe(pairs)}`, error);
+		}
+	}
+
 	// The context menu's Copy submenu. Raw requests and responses are read
 	// when copied, never when the menu opens.
 	async function copyPairs(pairs, what) {
@@ -429,6 +450,8 @@
 				return narrow(action.term);
 			case "hide-type":
 				return hideType(action.contentType);
+			case "highlight":
+				return highlightPairs(pairs, action.number);
 			case "select":
 				return selectSimilar(pairs, action.kind);
 			case "metadata":
@@ -461,6 +484,7 @@
 		launchpads: $launchpadStore.launchpads,
 		findings: $findingStore,
 		testCases: $testCaseStore,
+		palette: $highlightPalette,
 	};
 
 	// A shortcut acts on the selection, as the row menu does.
@@ -796,6 +820,24 @@
 	}
 	$: activeMarks = activeMarkCount($queryText);
 
+	// The Highlights menu's counts, read each time it opens.
+	const HIGHLIGHT_TERMS = [ANY_HIGHLIGHT_TERM, ...[1, 2, 3, 4, 5, 6, 7, 8].map(highlightTerm)];
+	let highlightCounts = {};
+	let highlightCountsRead = 0;
+	async function loadHighlightCounts() {
+		const read = ++highlightCountsRead;
+		highlightCounts = {};
+		const counts = await ledgerStore.countQueries(HIGHLIGHT_TERMS);
+		if (read === highlightCountsRead) highlightCounts = counts;
+	}
+	$: activeHighlights = activeHighlightCount($queryText);
+
+	function onRenameHighlight({ number, label, allProjects }) {
+		renameHighlight(number, label, { allProjects }).catch((error) =>
+			toastError(`Failed to rename highlight ${number}`, error),
+		);
+	}
+
 	// Runs a saved query the menu chose, or returns to the live view for "".
 	function applySavedQuery(text) {
 		if (!text) return ledgerStore.clearQuery();
@@ -834,8 +876,7 @@
 	</Dock>
 
 	<div class="flex min-w-0 flex-1 flex-col">
-		<!-- Toolbar: the query box, then the menus. Saved queries and
-		     Highlights join it before Marks. -->
+		<!-- Toolbar: the query box, then the menus. -->
 		<div
 			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-100-800-token"
 		>
@@ -876,6 +917,14 @@
 						<span class="text-warning-500" title={$indexNote}><TriangleAlert size={14} /></span>
 					{/if}
 				{/if}
+				{#if $highlightMigrating}
+					<span
+						id="ledgerHighlightMigration"
+						class="flex items-center gap-1 whitespace-nowrap text-xs opacity-70"
+						role="status"
+						><LoaderCircle size={13} class="animate-spin" />Updating old highlights…</span
+					>
+				{/if}
 				{#if $queryText}
 					<button
 						id="ledgerQueryClear"
@@ -906,6 +955,23 @@
 				valid={$queryActive && !$queryPending && !queryBoxError && $query.ranQuery === $queryText}
 				on:apply={(e) => applySavedQuery(e.detail)}
 			/>
+			<ToolbarMenu
+				id="ledgerHighlights"
+				label="Highlights"
+				icon={Highlighter}
+				title="Pairs by highlight"
+				badge={activeHighlights ? String(activeHighlights) : ""}
+				panelClass="w-72"
+				on:open={loadHighlightCounts}
+			>
+				<HighlightsMenu
+					queryText={$queryText}
+					counts={highlightCounts}
+					palette={$highlightPalette}
+					on:toggle={(e) => ledgerStore.toggleQueryTerm(e.detail)}
+					on:rename={(e) => onRenameHighlight(e.detail)}
+				/>
+			</ToolbarMenu>
 			<ToolbarMenu
 				id="ledgerMarks"
 				label="Marks"

@@ -31,7 +31,6 @@ export const extensions_ui = writable({});
 
 // Ledger Stores. The rest of the Ledger's state is in ledgerStore.
 export const sorting = writable([{ id: "ID", desc: true }]);
-export const contentTypeFilterInput = writable("");
 // The live view, read by pages outside the Ledger.
 export const proxyItems = liveViewItems;
 
@@ -141,7 +140,6 @@ export async function openProject() {
     truncate_length: 0,
     custom_properties: {},
   });
-  contentTypeFilterInput.set("");
   compassCode.set("");
   testerInput.set("");
   checkpointCode.set("");

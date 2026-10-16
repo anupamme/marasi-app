@@ -820,7 +820,11 @@ export function createLedgerStore(api) {
       requestBuffer = [];
       responseBuffer = new Map();
       trafficChanged = false;
-      set(initialState(current.query.runID, current.layout));
+      // The app default exclusion isn't the project's, so it stays.
+      set({
+        ...initialState(current.query.runID, current.layout),
+        defaultExclusion: current.defaultExclusion,
+      });
     },
     populate,
 

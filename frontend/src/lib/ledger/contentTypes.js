@@ -132,7 +132,10 @@ export function typeLabel(contentType) {
   return contentType === "" ? "(no response)" : contentType;
 }
 
-const ADDABLE = /^[\w.+-]+\/(?:[\w.+-]+|\*)$/;
+/** True when `value`, normalised, is an exclusion value: type/subtype or type/*. */
+export function isExclusionValue(value) {
+  return /^[\w.+-]+\/(?:[\w.+-]+|\*)$/.test(normalizeContentType(value));
+}
 
 /**
  * Splits the project's content types into the Types menu's lists.
@@ -176,6 +179,6 @@ export function typeLists(counts, exclusion, find = "") {
 
   const candidate = normalizeContentType(needle);
   const known = countOf.has(candidate) || exclusion.includes(candidate);
-  const addable = ADDABLE.test(candidate) && !known ? candidate : null;
+  const addable = isExclusionValue(candidate) && !known ? candidate : null;
   return { shown, hidden, idle, addable };
 }

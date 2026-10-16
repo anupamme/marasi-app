@@ -449,6 +449,8 @@ test("loadDefaultExclusion reads the app default", async () => {
   const store = createLedgerStore(fakeApi({ defaultExclusion: ["image/*"] }));
   assert.deepEqual(await store.loadDefaultExclusion(), ["image/*"]);
   assert.deepEqual(get(store).defaultExclusion, ["image/*"]);
+  store.clear();
+  assert.deepEqual(get(store).defaultExclusion, ["image/*"], "a project switch keeps the app default");
 });
 
 test("a metadata patch reaches the live view and the query results", async () => {

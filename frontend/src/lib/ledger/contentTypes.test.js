@@ -5,6 +5,7 @@ import {
   groupOf,
   groupState,
   hiddenBy,
+  isExclusionValue,
   normalizeContentType,
   toggleGroup,
   toggleType,
@@ -160,4 +161,12 @@ test("a full type or major/* that is in no list can be added", () => {
   assert.equal(typeLists(counts, ["video/*"], "video/*").addable, null);
   assert.equal(typeLists(counts, [], "protobuf").addable, null);
   assert.equal(typeLists(counts, [], "*/json").addable, null);
+});
+
+test("an exclusion value is a type/subtype or type/*, in any case", () => {
+  assert.ok(isExclusionValue("Font/WOFF2"));
+  assert.ok(isExclusionValue("image/*"));
+  assert.ok(!isExclusionValue("image"));
+  assert.ok(!isExclusionValue("image/*x"));
+  assert.ok(!isExclusionValue(""));
 });

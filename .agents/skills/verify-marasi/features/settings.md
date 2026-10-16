@@ -5,12 +5,13 @@
 - Vim, syntax mode, default interface, and default port
 - Waypoint management
 - Chrome executable paths and profiles
+- App default content-type exclusion (Content Types section): the types the Ledger hides in projects that follow the default, saved to `ledger_content_type_exclusion` in `marasi_appconfig.yaml`
 - Build version displayed beside the page heading (`dev` in a local development build)
 - Keybindings modal (`Configure Keybindings`): rebind menu actions per profile and platform, saved to the `keybindings` section of `marasi_appconfig.yaml`
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Settings`, or press `Command+S` from any route. The page shows `Marasi Settings`, the build version, and a sections list (`nav[aria-label="Settings sections"]`): Keyboard & Editor (default), Listener, Waypoints, Browser and About. Only the selected section is rendered; pick one with `{"click":"nav[aria-label=\"Settings sections\"] button","hasText":"Waypoints"}`.
+Select the rail item titled `Settings`, or press `Command+S` from any route. The page shows `Marasi Settings`, the build version, and a sections list (`nav[aria-label="Settings sections"]`): Keyboard & Editor (default), Listener, Waypoints, Browser, Highlights, Content Types and About. Only the selected section is rendered; pick one with `{"click":"nav[aria-label=\"Settings sections\"] button","hasText":"Waypoints"}`.
 
 Shortcuts: every menu shortcut for this feature is a catalog action in context `global` (Settings has no page menu) in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys.
 
@@ -37,6 +38,7 @@ Keybindings: `{"text":"Configure Keybindings"}` opens the modal (`[data-keybindi
 - Chrome Paths and Chrome Profiles are both in the Browser section; the profiles table can sit below the fold with many paths, and the driver scrolls a unique match into view.
 - Default interface and Default port (Listener section) persist on `change` (blur or Enter), not per keystroke. Both share `placeholder="Listener"`; use `aria-label="Default interface"` / `"Default port"`.
 - Syntax highlighting is a three-button switch (`[role=radiogroup][aria-label="Syntax highlighting"]`); each button writes `syntax_mode` on click and the current one has `aria-checked=true`.
+- Content Types lists the app default in `#settingsDefaultContentTypes` (rows `tr[data-type="…"]`, remove buttons `aria-label="Remove <type>"`); the add row's input is `#settingsNewContentType` and takes `type/subtype` or `type/*`. A project with its own list (edited in the Ledger's Types menu) ignores this list until reset.
 - Row X and pencil buttons have `title="Delete"` / `title="Edit"`; find the `<tr>` with `hasText` first. Each table's add row is its `<tfoot>`.
 - Adding a Chrome profile only appends YAML. Deleting a profile also removes `$configDir/chrome_profiles/<name>`. Directories appear later when Chrome starts.
 - Keybinding conflicts show on the row (`… is also bound to …`) and block Save: `[data-save-blocked]` in the footer names one problem as `Profile · Platform · Page · State · Action: …` (with `(i of N problems)` when there are several), including problems on a profile or platform not on screen. `Show` switches to it; `Next` steps to the next problem in a fixed order (every profile, macOS before Windows / Linux) and switches to it. When the saved section failed to load (for example `version: 99`, set up by editing the isolated YAML and running `restart.sh`), Save first asks `Replace saved keybindings?` in `[role=alertdialog]`; its Cancel leaves the YAML untouched.

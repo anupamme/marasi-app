@@ -117,6 +117,8 @@
 	const statusCount = select(ledgerStore, countLabel);
 	// The window rows in view, as the table reports them.
 	let inView = { first: 0, last: 0 };
+	// Whether the query box shows the whole query, wrapped.
+	let queryExpanded = false;
 	$: position = positionLabel({ start: $results.start, ...inView, empty: $rows.length === 0 });
 	const indexNote = select(ledgerStore, indexWarning);
 	const newKind = select(ledgerStore, newMatchesKind);
@@ -729,9 +731,14 @@
 				});
 			}).then((requestIndex) => {
 				if (!requestIndex) return;
-				ledgerStore.openNumber(parseInt(requestIndex)).then((pair) => {
-					if (pair) selectAndReveal(pair.ID);
-					else toastStore.trigger({ message: `No request ${requestIndex}`, background: "variant-filled-warning", timeout: 2000 });
+				const number = parseInt(requestIndex);
+				ledgerStore.goToNumber(number).then(({ pair, reason }) => {
+					if (pair) return selectAndReveal(pair.ID);
+					const message =
+						reason === "sort"
+							? `Request ${number} isn't loaded. Sort by # to jump to it.`
+							: `No request ${number} in these results`;
+					toastStore.trigger({ message, background: "variant-filled-warning", timeout: 2500 });
 				});
 			});
 		},
@@ -1037,15 +1044,17 @@
 	<div class="flex min-w-0 flex-1 flex-col">
 		<!-- Toolbar: the query box, then the menus. -->
 		<div
-			class="ledger-toolbar relative flex h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-50 dark:bg-surface-900"
+			class="ledger-toolbar relative flex min-h-11 flex-none items-stretch border-b border-surface-300-600-token bg-surface-50 dark:bg-surface-900"
 		>
-			<div class="flex min-w-0 flex-1 items-center gap-2 pl-3">
+			<!-- An expanded query wraps, and the toolbar grows to show it all. -->
+			<div class="flex min-w-0 flex-1 gap-2 pl-3 {queryExpanded ? 'items-start py-3' : 'items-center'}">
 				{#if $queryPending}
 					<LoaderCircle size={15} class="shrink-0 animate-spin opacity-70" />
 				{:else}
 					<Search size={15} class="shrink-0 opacity-70" />
 				{/if}
 				<LedgerQueryBox
+					bind:expanded={queryExpanded}
 					value={$queryText}
 					error={queryBoxError}
 					readyMade={$readyMadeQueries}
@@ -1054,7 +1063,6 @@
 						ledgerStore.scheduleQuery(e.detail);
 					}}
 					on:run={() => ledgerStore.runQuery($queryText)}
-					on:clear={() => ledgerStore.clearQuery()}
 				/>
 				{#if queryBoxError}
 					<span

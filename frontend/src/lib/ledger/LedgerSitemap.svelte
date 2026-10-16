@@ -172,7 +172,11 @@
 						class="min-w-0 flex-1 truncate text-left {origin ? 'font-semibold' : ''} {isPlaceholder(n.Segment)
 							? 'italic text-tertiary-600 dark:text-tertiary-400'
 							: ''} {active ? 'font-bold' : ''}"
-						title={active ? `Remove ${sitemapTerm(n.Name)} from the query` : `Narrow the query to ${sitemapTerm(n.Name)}`}
+						title={hidden
+							? `Show again: remove ${sitemapExcludeTerm(n.Name)}`
+							: active
+								? `Remove ${sitemapTerm(n.Name)} from the query`
+								: `Narrow the query to ${sitemapTerm(n.Name)}`}
 						aria-current={active ? "true" : undefined}
 						on:click={() => dispatch("choose", n.Name)}
 					>

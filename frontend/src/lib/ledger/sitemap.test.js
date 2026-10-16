@@ -37,6 +37,11 @@ test("a node name with a quote or backslash is escaped in its term", () => {
   assert.equal(chooseSitemapNode(text, name), "");
 });
 
+test("choosing a node the query leaves out shows it again", () => {
+  assert.equal(chooseSitemapNode(`note:* sitemap != "${V2}"`, V2), "note:*");
+  assert.equal(chooseSitemapNode(`sitemap != "${V2}"`, V2), "");
+});
+
 test("the eye button toggles a node's sitemap != term", () => {
   assert.equal(excludeSitemapNode("note:*", V2), `note:* sitemap != "${V2}"`);
   assert.equal(excludeSitemapNode(`note:* sitemap != "${V2}"`, V2), "note:*", "a second click shows it again");

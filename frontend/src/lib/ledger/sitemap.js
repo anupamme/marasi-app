@@ -106,8 +106,10 @@ export function activeSitemapNode(text) {
 /**
  * The query after choosing a node: any earlier `sitemap = "…"` term is
  * replaced by the node's, and choosing the active node again removes it.
+ * Choosing a node the query leaves out shows it again instead.
  */
 export function chooseSitemapNode(text, name) {
+  if (isSitemapExcluded(text, name)) return excludeSitemapNode(text, name);
   const wasActive = activeSitemapNode(text) === name;
   let rest = text;
   for (;;) {

@@ -1287,20 +1287,60 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * The pair numbered `number`: the loaded one, else the result of running
-   * `number = N` as the query. undefined, with the query and the table left
-   * as they were, when no shown pair has that number.
+   * A jump to pair `number` in the current results: the loaded pair, else,
+   * under a pair-number sort, the rows around it read into a fresh window
+   * with the query, sort and as_of left as they are. Marasi's cursors name
+   * only the sort and the row, so the edges of the two reads keep paging the
+   * same results. Returns { pair }, or { reason } when there is none:
+   * "missing" when the results don't hold it, "sort" when it isn't loaded
+   * and the sort isn't by number.
    */
-  async function openNumber(number) {
+  async function goToNumber(number) {
     const shown = shownPairAtNumber(number);
-    if (shown) return shown;
-    const text = `number = ${number}`;
-    const counted = await api.countTraffic(text, "", {});
-    if (counted.QueryError || !counted.Count) return undefined;
-    update((state) => ({ ...state, queryText: text }));
-    await runQuery(text);
-    return shownPairAtNumber(number);
+    if (shown) return { pair: shown };
+    if (current.sort.field !== "number") return { reason: "sort" };
+    const { desc } = current.sort;
+    const text = current.query.ranQuery;
+    const within = (condition) => (text ? `(${text}) AND ${condition}` : condition);
+    const asOf = current.results.asOf ?? "";
+    // From N on (N first), and up to N (N last), read backward.
+    const from = within(`number ${desc ? "<=" : ">="} ${number}`);
+    const upTo = within(`number ${desc ? ">=" : "<="} ${number}`);
+    const gen = ++generation;
+    loadingForward = loadingBackward = false;
+    reading = true;
+    let after, before, above;
+    try {
+      [after, before, above] = await Promise.all([
+        api.queryTraffic(pageRequest(from, current.sort, { AsOf: asOf })),
+        api.queryTraffic(pageRequest(upTo, current.sort, { AsOf: asOf, Direction: "backward" })),
+        api.countTraffic(within(`number ${desc ? ">" : "<"} ${number}`), "", { AsOf: asOf }),
+      ]);
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+      if (gen === generation) reading = false;
+      return { reason: "missing" };
+    }
+    if (gen !== generation) return { reason: "missing" };
+    reading = false;
+    const pair = after.Items?.[0];
+    if (after.QueryError || before.QueryError || pair?.Number !== number) return { reason: "missing" };
+    const items = [...(before.Items ?? []).slice(0, -1), ...(after.Items ?? [])];
+    viewport = { first: 0, last: 0, atTop: false };
+    updateResults((r) => ({
+      ...resultsFromPage(after, "x"),
+      chunks: [{ items, first: before.PrevCursor ?? null, last: after.NextCursor ?? null }],
+      hasBefore: before.PrevCursor != null,
+      start: above.Capped || above.QueryError ? null : above.Count - (items.length - (after.Items ?? []).length),
+      asOf: r.asOf ?? after.AsOf ?? null,
+      shownAsOf: r.shownAsOf ?? after.AsOf ?? null,
+      count: r.count,
+      hidden: r.hidden,
+      reset: ++resets,
+    }));
+    return { pair };
   }
+
 
   function updateLayout(fn) {
     update((state) => ({ ...state, layout: fn(state.layout) }));
@@ -1477,7 +1517,7 @@ export function createLedgerStore(api) {
 
     findShownPair,
     pairNumber,
-    openNumber,
+    goToNumber,
     shownPairAtNumber,
 
     /** The request pickers' options: the newest pairs matching `text`. */

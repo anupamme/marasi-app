@@ -2,11 +2,14 @@
 	// The Ledger's query box: a one-line CodeMirror editor. Suggestions come
 	// from ledgerQueryEditor.js, fields, operators, keywords and quoted values
 	// are coloured, and Marasi's query error is underlined at its position.
-	// It reports edits ("change"), Enter ("run") and Escape ("clear"); the
-	// page runs and debounces queries.
+	// It reports edits ("change") and Enter ("run"); the page runs and
+	// debounces queries. Escape, or a click outside it, leaves the box. A query
+	// longer than the box shows an expand button that wraps it onto as many
+	// lines as it needs.
 	import { createEventDispatcher, onDestroy, onMount } from "svelte";
 	import { Decoration, EditorView, keymap, placeholder } from "@codemirror/view";
-	import { EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
+	import { Compartment, EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
+	import { ChevronsDownUp, ChevronsUpDown } from "lucide-svelte";
 	import { autocompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
 	import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 	import { tags } from "@lezer/highlight";
@@ -19,12 +22,37 @@
 	export let readyMade = [];
 	/** The editable element's id, so focus shortcuts and recipes can reach it. */
 	export let id = "searchBox";
+	/** Whether the whole query shows, wrapped, rather than one line. */
+	export let expanded = false;
 
 	const dispatch = createEventDispatcher();
 	let parent;
 	let view;
 	// True while the box takes the page's value, so that edit isn't reported back.
 	let syncing = false;
+	// True when the query runs past the box's one line.
+	let overflowing = false;
+	const wrapping = new Compartment();
+
+	function measureOverflow() {
+		view?.requestMeasure({
+			read: (v) => v.scrollDOM.scrollWidth > v.scrollDOM.clientWidth + 1,
+			write: (wide) => (overflowing = wide),
+		});
+	}
+
+	// Collapsing keeps the button until a measure says one line holds the
+	// query: wrapped, it read as fitting.
+	function toggleExpanded() {
+		if (expanded) overflowing = true;
+		expanded = !expanded;
+	}
+
+	// A click anywhere else leaves the box, rows included (they keep focus
+	// where it is so a drag doesn't select text).
+	function onWindowPointerDown(event) {
+		if (view?.hasFocus && parent && !parent.contains(event.target)) view.contentDOM.blur();
+	}
 
 	const queryLanguage = StreamLanguage.define({
 		token(stream) {
@@ -133,6 +161,7 @@
 						{ mac: "Alt-`", run: requestCompletion },
 					])),
 					autocompletion({ override: [completionSource], icons: false }),
+					wrapping.of([]),
 					// One line only: line breaks from typing or pasting become spaces.
 					EditorState.transactionFilter.of((tr) =>
 						tr.docChanged && tr.newDoc.lines > 1
@@ -144,7 +173,7 @@
 					Prec.high(
 						keymap.of([
 							{ key: "Enter", run: () => (dispatch("run"), true) },
-							{ key: "Escape", run: (v) => (completionStatus(v.state) ? false : (dispatch("clear"), true)) },
+							{ key: "Escape", run: (v) => (completionStatus(v.state) ? false : (v.contentDOM.blur(), true)) },
 						]),
 					),
 					EditorView.domEventHandlers({
@@ -159,6 +188,7 @@
 					}),
 					EditorView.updateListener.of((update) => {
 						if (update.docChanged && !syncing) dispatch("change", update.state.doc.toString());
+						if (update.docChanged || update.geometryChanged) measureOverflow();
 					}),
 				],
 			}),
@@ -175,9 +205,30 @@
 		syncing = false;
 	}
 	$: if (view) view.dispatch({ effects: setError.of(errorDecorations(view.state.doc.toString(), error)) });
+	$: if (view) {
+		view.dispatch({ effects: wrapping.reconfigure(expanded ? EditorView.lineWrapping : []) });
+		measureOverflow();
+	}
 </script>
 
-<div bind:this={parent} class="ledger-query min-w-0 flex-1"></div>
+<svelte:window on:pointerdown|capture={onWindowPointerDown} />
+
+<div class="flex min-w-0 flex-1 items-start gap-1">
+	<div bind:this={parent} class="ledger-query min-w-0 flex-1 {expanded ? 'ledger-query-expanded' : ''}"></div>
+	{#if overflowing || expanded}
+		<button
+			type="button"
+			id="ledgerQueryExpand"
+			class="flex-none p-0.5 opacity-60 hover:opacity-100"
+			title={expanded ? "Back to one line" : "Show the whole query"}
+			aria-label={expanded ? "Back to one line" : "Show the whole query"}
+			aria-pressed={expanded}
+			on:mousedown|preventDefault
+			on:click={toggleExpanded}
+			>{#if expanded}<ChevronsDownUp size={14} />{:else}<ChevronsUpDown size={14} />{/if}</button
+		>
+	{/if}
+</div>
 
 <style>
 	.ledger-query {
@@ -203,6 +254,10 @@
 		font-family: var(--theme-font-family-mono, ui-monospace, SFMono-Regular, Menlo, monospace);
 		overflow: hidden;
 		line-height: 1.5;
+	}
+	.ledger-query-expanded :global(.cm-scroller) {
+		max-height: 30vh;
+		overflow-y: auto;
 	}
 	.ledger-query :global(.cm-content) {
 		padding: 0;

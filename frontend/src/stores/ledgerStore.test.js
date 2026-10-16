@@ -69,7 +69,18 @@ function fakeApi({
   const excluded = () => ownExclusion ?? defaultExclusion;
   const db = traffic.map((p) => ({ ...p }));
   const newest = () => db.reduce((max, p) => (p.ID > max ? p.ID : max), "");
-  const predicate = (text) => (text === "" ? () => true : queries[text]);
+  // Query text: "" for every pair, a key of `queries`, or either with a
+  // pair-number condition, as the jump to a request reads them.
+  const predicate = (text) => {
+    if (text === "") return () => true;
+    if (queries[text]) return queries[text];
+    const m = /^(?:\((.*)\) AND )?number (<=|>=|<|>) (\d+)$/.exec(text);
+    if (!m) return queries[text];
+    const base = predicate(m[1] ?? "");
+    const n = Number(m[3]);
+    const test = { "<=": (x) => x <= n, ">=": (x) => x >= n, "<": (x) => x < n, ">": (x) => x > n }[m[2]];
+    return (p) => base(p) && test(p.Number);
+  };
 
   function listed(req) {
     const [field, dir] = (req.OrderBy || "number desc").split(" ");
@@ -471,30 +482,62 @@ test("a pair keeps its number under any query or sort, gaps included", async () 
   assert.equal(store.shownPairAtNumber(3), undefined, "a deleted number finds nothing");
 });
 
-test("opening a number that isn't loaded runs number = N", async () => {
-  const api = fakeApi({ traffic: pairs(5), queries: { "number = 2": (p) => p.Number === 2, one: (p) => p.Number === 5 } });
+test("jumping to a request that isn't loaded reads the rows around it, under the same query and sort", async () => {
+  const api = fakeApi({ traffic: pairs(1000) });
   const store = createLedgerStore(api);
-  await store.runQuery("one");
-  const found = await store.openNumber(2);
-  assert.equal(found?.ID, idOf(2));
-  assert.equal(get(store).queryText, "number = 2");
-  assert.deepEqual(ids(get(store)), [idOf(2)]);
+  await store.populate();
+  assert.equal(store.shownPairAtNumber(300), undefined, "only the newest page is loaded");
 
-  const before = pageCalls(api).length;
-  assert.equal((await store.openNumber(2))?.ID, idOf(2), "a loaded number opens without a read");
-  assert.equal(pageCalls(api).length, before);
+  const { pair } = await store.goToNumber(300);
+  assert.equal(pair.ID, idOf(300));
+  const state = get(store);
+  assert.equal(state.queryText, "", "the query is left alone");
+  assert.equal(isQueryActive(state.query), false);
+  const numbers = tableRows(state).map((row) => row.Number);
+  assert.ok(numbers.includes(301) && numbers.includes(300) && numbers.includes(299), "rows on both sides");
+  assert.deepEqual(numbers, [...numbers].sort((a, b) => b - a), "newest first");
+  assert.equal(new Set(numbers).size, numbers.length, "no duplicate of 300");
+  assert.equal(state.results.start, 1000 - numbers[0], "the readout knows where the window is");
+  assert.equal(state.results.hasBefore, true);
+  assert.equal(state.results.hasAfter, true);
+
+  // Scrolling on keeps reading the same results by cursor.
+  await scrollTo(store, tableRows(get(store)).length - 20);
+  const more = tableRows(get(store)).map((row) => row.Number);
+  assert.ok(more.at(-1) < numbers.at(-1), "older rows load below");
+  assert.equal(pageCalls(api).at(-1).Query, "");
 });
 
-test("opening a number no pair has leaves the query and the table as they were", async () => {
-  const api = fakeApi({ traffic: pairs(3), queries: { "number = 9": () => false, one: (p) => p.Number === 1 } });
+test("a jump under a query keeps the query's rows only", async () => {
+  const api = fakeApi({ traffic: pairs(1000), queries: { even: (p) => p.Number % 2 === 0 } });
   const store = createLedgerStore(api);
-  store.setQueryText("one");
+  store.setQueryText("even");
   await store.runQuery();
-  const before = pageCalls(api).length;
-  assert.equal(await store.openNumber(9), undefined);
-  assert.equal(get(store).queryText, "one");
-  assert.deepEqual(ids(get(store)), [idOf(1)]);
-  assert.equal(pageCalls(api).length, before, "nothing was read again");
+  const { pair } = await store.goToNumber(400);
+  assert.equal(pair.Number, 400);
+  assert.ok(tableRows(get(store)).every((row) => row.Number % 2 === 0));
+  assert.equal(get(store).queryText, "even");
+});
+
+test("a jump to a request the results don't hold leaves them as they were", async () => {
+  const api = fakeApi({ traffic: pairs(1000), queries: { even: (p) => p.Number % 2 === 0 } });
+  const store = createLedgerStore(api);
+  store.setQueryText("even");
+  await store.runQuery();
+  const before = tableRows(get(store));
+  assert.deepEqual(await store.goToNumber(301), { reason: "missing" });
+  assert.equal(tableRows(get(store)), before);
+});
+
+test("under another sort a jump finds a loaded request, and says why it can't reach others", async () => {
+  const api = fakeApi({ traffic: pairs(1000) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  await store.sortBy("host");
+  const rows = tableRows(get(store));
+  assert.equal((await store.goToNumber(rows[5].Number)).pair.ID, rows[5].ID);
+  const notLoaded = Array.from({ length: 1000 }, (_, i) => i + 1).find((n) => !rows.some((r) => r.Number === n));
+  assert.deepEqual(await store.goToNumber(notLoaded), { reason: "sort" });
 });
 
 test("back to the live view clears the query and the sort and reads newest first from the top", async () => {

@@ -11,6 +11,7 @@ import {
   scrollToReveal,
   shortType,
   DEFAULT_SORT,
+  meetsHeader,
   sortAria,
   sortMark,
   sortTitle,
@@ -67,6 +68,14 @@ test("the default sort, newest first by number, shows no arrow but still reports
   assert.equal(sortTitle({ field: "number", desc: false }, number), "Sort by number");
   assert.equal(sortMark({ field: "requested_at", desc: true }, time), "↓", "time newest first is not the default");
   assert.equal(sortAria(DEFAULT_SORT, time), "none");
+});
+
+test("a row meets the header when it is first, or scrolled to sit right under it", () => {
+  assert.equal(meetsHeader(0, 0, 22), true);
+  assert.equal(meetsHeader(1, 0, 22), false);
+  assert.equal(meetsHeader(3, 66, 22), true);
+  assert.equal(meetsHeader(3, 66.4, 22), true, "sub-pixel scrolling still counts");
+  assert.equal(meetsHeader(3, 70, 22), false, "partly under the header: its top edge is hidden anyway");
 });
 
 test("when rows change around it, the top row in view keeps its place", () => {

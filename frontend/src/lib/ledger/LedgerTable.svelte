@@ -21,6 +21,7 @@
 		rowTemplate,
 		scrollToReveal,
 		shortType,
+		meetsHeader,
 		sortAria,
 		sortMark,
 		sortTitle,
@@ -266,11 +267,9 @@
 				{@const color = rowHighlight(row, palette)}
 				<!-- svelte-ignore a11y-click-events-have-key-events a11y-interactive-supports-focus -->
 				<div
-					class="lg-row ledger-row border-b border-surface-300/50 dark:border-surface-700/60 {selected
+					class="lg-row ledger-row relative border-b border-surface-300/50 dark:border-surface-700/60 {selected
 						? 'bg-primary-500/25'
-						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'} {focused
-						? 'outline outline-1 -outline-offset-1 outline-primary-500'
-						: ''}"
+						: 'hover:bg-surface-200/70 dark:hover:bg-surface-700/60'}"
 					style="grid-template-columns: {template}; height: {ROW_HEIGHT}px;{color
 						? ` box-shadow: inset 3px 0 0 ${color};`
 						: ''}{color && !selected ? ` background-color: ${color}22;` : ''}"
@@ -281,6 +280,20 @@
 					on:pointerenter={() => onRowPointerEnter(row.ID)}
 					on:contextmenu|preventDefault={(event) => dispatch("menu", { id: row.ID, event })}
 				>
+					{#if focused}
+						<!-- The focus frame: it covers the row's bottom border, and skips
+						     its top edge right under the header, whose border is there. -->
+						<span
+							class="ledger-focus pointer-events-none absolute inset-x-0 -bottom-px top-0 border border-primary-500 !p-0 {meetsHeader(
+								range.start + i,
+								scrollTop,
+								ROW_HEIGHT,
+							)
+								? 'border-t-0'
+								: ''}"
+							aria-hidden="true"
+						></span>
+					{/if}
 					<span class="text-right tabular-nums {dim}"
 						>{row.Number || ""}</span
 					>

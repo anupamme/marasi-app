@@ -66,6 +66,15 @@ export function keepRowInPlace({ anchorID, offset, rows, rowHeight }) {
 }
 
 /**
+ * True when row `index` sits right under the sticky header, so its focus
+ * frame needs no top edge: the header's own border is there. `scrollTop`
+ * is measured from the first row.
+ */
+export function meetsHeader(index, scrollTop, rowHeight) {
+  return index * rowHeight === Math.round(scrollTop);
+}
+
+/**
  * The rows a windowed list renders: those in view and `overscan` more on
  * either side. `scrollTop` is measured from the first row. `end` is exclusive.
  */

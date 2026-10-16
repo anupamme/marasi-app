@@ -719,7 +719,7 @@
 									<td
 										class={job.Complete
 											? "opacity-70"
-											: "text-warning-600 dark:text-warning-400"}>{jobStatus(job)}</td
+											: "text-warning-800 dark:text-warning-400"}>{jobStatus(job)}</td
 									>
 								</tr>
 							{:else}

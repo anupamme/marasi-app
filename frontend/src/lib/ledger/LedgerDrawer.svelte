@@ -37,7 +37,7 @@
 		<span class={statusClass(pair.StatusCode)}>{pair.StatusCode > 0 ? pair.StatusCode : "pending"}</span>
 		{#if prettifiedMoving}
 			<span
-				class="ledger-prettified-moving whitespace-nowrap font-sans text-warning-600 dark:text-warning-400"
+				class="ledger-prettified-moving whitespace-nowrap font-sans text-warning-800 dark:text-warning-400"
 				title="Marasi is still moving older formatted bodies, so some may not show prettified yet"
 				>Some formatted bodies still moving</span
 			>

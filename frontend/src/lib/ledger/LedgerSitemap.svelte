@@ -58,7 +58,7 @@
 			</h2>
 			{#if !state.complete}
 				<span
-					class="ledger-sitemap-building flex items-center gap-1 text-[11px] text-warning-600 dark:text-warning-400"
+					class="ledger-sitemap-building flex items-center gap-1 text-[11px] text-warning-800 dark:text-warning-400"
 					title="Marasi is still adding older pairs to the sitemap, so some counts are low"
 				>
 					<LoaderCircle size={11} class="animate-spin" /> Sitemap still building

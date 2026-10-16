@@ -72,7 +72,7 @@
 		eraser: Eraser,
 	};
 	const METHOD_CLASS = {
-		POST: "text-tertiary-500",
+		POST: "text-tertiary-700 dark:text-tertiary-500",
 		PUT: "text-warning-800 dark:text-warning-500",
 		PATCH: "text-warning-800 dark:text-warning-500",
 		DELETE: "text-error-500",

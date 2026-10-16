@@ -152,7 +152,7 @@
 
 {#if expanded}
 	<aside
-		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-100 text-[11px] dark:bg-surface-800"
+		class="ledger-drawer-column flex w-60 flex-none flex-col overflow-y-auto border-r border-surface-300-600-token bg-surface-50 text-[11px] dark:bg-surface-900"
 		aria-label="Request details"
 	>
 		<div class="flex h-7 flex-none flex-nowrap items-center gap-0.5 border-b border-surface-300-600-token px-2">
@@ -196,7 +196,10 @@
 				<span class={statusClass(pair.StatusCode)}>{hasResponse ? statusText(pair.StatusCode) : "pending"}</span>
 				{#if timing}<span class="opacity-60">{timing}</span>{/if}
 			</div>
-			<div class="break-all"><span class="opacity-70">{pair.Host ?? ""}</span>{pair.Path ?? ""}</div>
+			<!-- One line; the whole URL is in the tooltip. -->
+			<div class="ledger-drawer-url truncate" title="{pair.Host ?? ''}{pair.Path ?? ''}">
+				<span class="opacity-70">{pair.Host ?? ""}</span>{pair.Path ?? ""}
+			</div>
 			<div class="opacity-60">
 				{pair.ContentType || (hasResponse ? "no content type" : "no response yet")}{formatSize(pair.Length)
 					? ` · ${formatSize(pair.Length)}`
@@ -209,7 +212,7 @@
 			{#each palette as h (h.number)}
 				<button
 					class="h-3.5 w-3.5 rounded-full {pair.Highlight === h.number
-						? 'ring-2 ring-surface-900 ring-offset-1 ring-offset-surface-100 dark:ring-surface-50 dark:ring-offset-surface-800'
+						? 'ring-2 ring-surface-900 ring-offset-1 ring-offset-surface-50 dark:ring-surface-50 dark:ring-offset-surface-900'
 						: ''}"
 					style="background: {h.color}"
 					role="radio"
@@ -299,7 +302,7 @@
 	</aside>
 {:else}
 	<nav
-		class="ledger-drawer-rail flex w-9 flex-none flex-col items-center border-r border-surface-300-600-token bg-surface-100 pb-0.5 dark:bg-surface-800"
+		class="ledger-drawer-rail flex w-9 flex-none flex-col items-center border-r border-surface-300-600-token bg-surface-50 pb-0.5 dark:bg-surface-900"
 		aria-label="Request actions"
 	>
 		<button

@@ -15,7 +15,7 @@ import { findingStore } from "./stores/findingStore";
 import { connectionStore } from "./stores/connectionStore";
 import { armoryStore } from "./stores/armoryStore";
 import { launchpadStore } from "./stores/launchpadStore";
-import { readHighlights } from "./stores/highlightsStore";
+import { highlightsStore, readHighlights } from "./stores/highlightsStore";
 import { ledgerStore, liveViewItems } from "./stores/ledgerStore";
 
 // Startup
@@ -163,6 +163,9 @@ export async function openProject() {
   // Reset items. The Ledger's live view and exclusion load in the
   // background.
   ledgerStore.populate();
+  // The project's highlight labels, then its old hex highlights migrated in
+  // the background; the Ledger reloads once they are numbers.
+  highlightsStore.openProject({ onMigrated: () => ledgerStore.refresh() });
   await populateLogs();
   await populateScope();
   await populateCheckpoint();

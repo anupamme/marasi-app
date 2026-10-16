@@ -82,6 +82,20 @@ func TestCountTrafficCountsLinkMarks(t *testing.T) {
 	}
 }
 
+// marasi records interception as metadata "intercepted": true on the pair.
+func TestCountTrafficCountsInterceptedMark(t *testing.T) {
+	app := newScratchpadApp(t)
+	intercepted := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/b", statusCode: 200, contentType: "application/json"})
+	if err := app.Proxy.TrafficRepo.UpdateMetadata(map[string]any{"intercepted": true}, intercepted); err != nil {
+		t.Fatalf("marking pair intercepted: %v", err)
+	}
+
+	if got := countTraffic(t, app, "metadata.intercepted = true", "").Count; got != 1 {
+		t.Fatalf("wanted 1 intercepted pair, got %d", got)
+	}
+}
+
 func TestCountTrafficReturnsInvalidQueryAsData(t *testing.T) {
 	app := newScratchpadApp(t)
 

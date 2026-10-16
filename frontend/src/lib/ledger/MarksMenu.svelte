@@ -3,7 +3,7 @@
 	// a row dispatches `toggle` with the mark's query term; a row whose term
 	// is in the query is marked active.
 	import { createEventDispatcher } from "svelte";
-	import { BookCheckIcon, PenIcon, SendIcon, ShieldAlertIcon } from "lucide-svelte";
+	import { BookCheckIcon, FlagIcon, PenIcon, SendIcon, ShieldAlertIcon } from "lucide-svelte";
 	import { hasQueryTerm } from "../ledgerQueryFields.js";
 	import { MARKS, matchCountText } from "./marks.js";
 
@@ -13,7 +13,7 @@
 	export let counts = {};
 
 	const dispatch = createEventDispatcher();
-	const icons = { note: PenIcon, finding: ShieldAlertIcon, "test-case": BookCheckIcon, launchpad: SendIcon };
+	const icons = { note: PenIcon, finding: ShieldAlertIcon, "test-case": BookCheckIcon, launchpad: SendIcon, intercepted: FlagIcon };
 </script>
 
 <div class="py-1 text-xs" role="menu">

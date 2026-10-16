@@ -4,6 +4,7 @@ import {
   curlCommand,
   filterMenu,
   markdownTable,
+  menuAction,
   menuFor,
   narrowQuery,
   pairURL,
@@ -311,4 +312,58 @@ test("a ⌘A selection names its count, and actions that need each pair wait for
   const loaded = menuFor([pair("a"), pair("b")], context({ all: true, count: 2 }));
   assert.equal(item(loaded, "armory").disabled, false, "every pair is loaded");
   assert.equal(item(loaded, "f-F1").checked, true);
+});
+
+test("a shortcut finds its menu action, disabled with the reason when the menu disables it or its submenu", () => {
+  const all = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
+  for (const id of [
+    "ledger.drawer-open.send-to-armory",
+    "ledger.drawer-open.create-finding",
+    "ledger.drawer-open.create-test-case",
+    "ledger.drawer-open.copy-url",
+    "ledger.drawer-open.copy-raw-request",
+  ]) {
+    assert.deepEqual(menuAction(all, id).disabled, true, id);
+    assert.equal(menuAction(all, id).hint, "Not for all matching", id);
+  }
+  assert.deepEqual(menuAction(all, "ledger.drawer-open.send-to-launchpad"), {
+    action: { type: "new-launchpad" },
+    disabled: false,
+    hint: undefined,
+  });
+
+  const two = menuFor([pair("a"), pair("b")], context());
+  assert.deepEqual(menuAction(two, "ledger.drawer-open.copy-url"), {
+    action: { type: "copy", what: "urls" },
+    disabled: false,
+    hint: undefined,
+  });
+  const pending = menuFor([pair("a", { StatusCode: 0 })], context());
+  assert.equal(menuAction(pending, "ledger.drawer-open.copy-raw-response").hint, "No response yet");
+  assert.equal(menuAction(two, "no.such.action"), null);
+});
+
+test("type-to-filter keeps a disabled submenu's actions disabled", () => {
+  const all = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
+  const found = filterMenu(all, "raw requests");
+  assert.equal(found.length, 1);
+  assert.equal(found[0].disabled, true);
+  assert.equal(found[0].hint, "Not for all matching");
+});
+
+test("Select offers each highlight the selection has", () => {
+  const palette = effectivePalette(null, { 3: "IDOR" });
+  const none = menuFor([pair("a"), pair("b")], context({ palette }));
+  assert.equal(item(none, "s-highlight-3"), undefined);
+
+  const one = menuFor([pair("a", { Highlight: 3 }), pair("b")], context({ palette }));
+  assert.equal(item(one, "s-highlight-3").label, "All with this highlight");
+  assert.deepEqual(item(one, "s-highlight-3").action, { type: "select", kind: "highlight", number: 3 });
+
+  const two = menuFor([pair("a", { Highlight: 3 }), pair("b", { Highlight: 1 }), pair("c", { Highlight: 3 })], context({ palette }));
+  assert.equal(item(two, "s-highlight-3").label, "All with highlight IDOR");
+  assert.equal(item(two, "s-highlight-1").label, "All with highlight Red");
+
+  const rows = [pair("a", { Highlight: 3 }), pair("b", { Highlight: 1 }), pair("c", { Highlight: 3 })];
+  assert.deepEqual(similarIDs("highlight", rows, rows, 3), ["a", "c"]);
 });

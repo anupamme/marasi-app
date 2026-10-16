@@ -56,6 +56,8 @@
 	import {
 		curlCommand,
 		markdownTable,
+		menuAction,
+		menuFor,
 		narrowQuery,
 		pairURL,
 		requestCount,
@@ -229,8 +231,6 @@
 	// Adds " (N failed)" when some per-pair calls failed.
 	const failures = ({ failed }) => (failed ? ` (${failed} failed)` : "");
 
-	// The selected pairs, in table order.
-	const selectionPairs = () => selectedPairs(get(ledgerStore));
 	const idsOf = (pairs) => pairs.map((pair) => pair.ID);
 
 	// What an action runs on: the loaded selected pairs, the selection in
@@ -521,8 +521,8 @@
 		});
 	}
 
-	function selectSimilar(pairs, kind) {
-		const ids = similarIDs(kind, $rows, pairs);
+	function selectSimilar(pairs, kind, number) {
+		const ids = similarIDs(kind, $rows, pairs, number);
 		ledgerStore.selectIDs(ids);
 		toastStore.trigger({ message: `Selected ${requestCount(ids.length)}`, background: handoffBackground });
 	}
@@ -586,7 +586,7 @@
 			case "highlight":
 				return highlightPairs(target, action.number);
 			case "select":
-				return selectSimilar(pairs, action.kind);
+				return selectSimilar(pairs, action.kind, action.number);
 			case "metadata":
 				return openMetadata(action.id);
 			case "append-note":
@@ -628,13 +628,24 @@
 		count: rowMenu.target?.all ? $liveSize : null,
 	};
 
-	// A shortcut acts on the selection, as the row menu does.
-	const onSelection = (fn) => () => {
+	// A shortcut runs its row menu item on the selection, exactly as choosing
+	// it would; when the menu disables it (say, Copy under ⌘A over pairs the
+	// table hasn't loaded), it says why instead.
+	function runShortcut(actionId) {
 		if (!drawerOpen) return;
 		rowMenu = { ...rowMenu, open: false };
-		const pairs = selectionPairs();
-		if (pairs.length) fn(pairs);
-	};
+		const target = selectionTarget();
+		if (target.pairs.length === 0) return;
+		const context = { ...rowMenuContext, all: target.all, count: target.all ? $liveSize : null };
+		const item = menuAction(menuFor(target.pairs, context), actionId);
+		if (!item) return;
+		if (item.disabled) {
+			toastStore.trigger({ message: item.hint, background: "variant-filled-warning", timeout: 2000 });
+			return;
+		}
+		runMenuAction(item.action, target);
+	}
+	const shortcut = (actionId) => () => runShortcut(actionId);
 
 	// Opens the modal, or closes it when the same one is already open.
 	function toggleModal(component, modal) {
@@ -761,7 +772,7 @@
 		{
 			actionId: "ledger.drawer-open.send-to-armory",
 			icon: Swords,
-			handler: onSelection(sendToArmory),
+			handler: shortcut("ledger.drawer-open.send-to-armory"),
 		},
 		{
 			actionId: "ledger.drawer-open.previous-request",
@@ -774,13 +785,13 @@
 		{
 			actionId: "ledger.drawer-open.send-to-launchpad",
 			icon: SendIcon,
-			handler: onSelection((pairs) => sendToNewLaunchpad(selectionTarget())),
+			handler: shortcut("ledger.drawer-open.send-to-launchpad"),
 		},
 		{
 			actionId: "ledger.drawer-open.create-test-case",
 			icon: BookCheckIcon,
 			handler: whenOpen(() => {
-				if (!$modalStore[0]) createTestCase(idsOf(selectionPairs()));
+				if (!$modalStore[0]) runShortcut("ledger.drawer-open.create-test-case");
 				else if ($modalStore[0].component === "TestCase") modalStore.close();
 			}),
 		},
@@ -834,7 +845,7 @@
 			actionId: "ledger.drawer-open.create-finding",
 			icon: ShieldAlertIcon,
 			handler: whenOpen(() => {
-				if (!$modalStore[0]) createFinding(idsOf(selectionPairs()));
+				if (!$modalStore[0]) runShortcut("ledger.drawer-open.create-finding");
 				else if ($modalStore[0].component === "Finding") modalStore.close();
 			}),
 		},
@@ -897,17 +908,17 @@
 		{
 			actionId: "ledger.drawer-open.copy-url",
 			icon: CopyIcon,
-			handler: onSelection((pairs) => copyPairs(pairs, "urls")),
+			handler: shortcut("ledger.drawer-open.copy-url"),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-raw-request",
 			icon: CopyIcon,
-			handler: onSelection((pairs) => copyPairs(pairs, "requests")),
+			handler: shortcut("ledger.drawer-open.copy-raw-request"),
 		},
 		{
 			actionId: "ledger.drawer-open.copy-raw-response",
 			icon: CopyIcon,
-			handler: onSelection((pairs) => copyPairs(pairs, "responses")),
+			handler: shortcut("ledger.drawer-open.copy-raw-response"),
 		},
 		{
 			actionId: "ledger.drawer-open.open-row-menu",

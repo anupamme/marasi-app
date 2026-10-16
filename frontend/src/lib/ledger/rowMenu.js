@@ -103,14 +103,15 @@ export function selectionSummary(pairs) {
 
 /**
  * The IDs of `rows` that are like the chosen pairs: "host" (from their
- * hosts), "endpoint" (same method, host and path), "status", "highlight",
- * or "invert" (every row not chosen).
+ * hosts), "endpoint" (same method, host and path), "status", "highlight"
+ * (highlight `number`, or any of theirs), or "invert" (every row not
+ * chosen).
  */
-export function similarIDs(kind, rows, chosen) {
+export function similarIDs(kind, rows, chosen, number = null) {
   const hosts = new Set(chosen.map((pair) => pair.Host));
   const endpoints = new Set(chosen.map((pair) => `${pair.Method} ${pair.Host}${pathOnly(pair.Path)}`));
   const statuses = new Set(chosen.map((pair) => Number(pair.StatusCode) || 0));
-  const highlights = new Set(chosen.map(highlightOf).filter(Boolean));
+  const highlights = new Set(number != null ? [number] : chosen.map(highlightOf).filter(Boolean));
   const chosenIDs = new Set(chosen.map((pair) => String(pair.ID)));
   const test = {
     host: (row) => hosts.has(row.Host),
@@ -212,6 +213,14 @@ function linkMenu({ key, noun, pairs, one, n, partial, targets, newActionId, new
 const NOT_FOR_ALL = "Not for all matching";
 
 /**
+ * True when a ⌘A selection (`all`, with `count` pairs, null until counted)
+ * holds pairs beyond `pairs`, the loaded ones.
+ */
+export function isPartialSelection(pairs, { all = false, count = null } = {}) {
+  return all && !(count != null && count <= pairs.length);
+}
+
+/**
  * The menu for `pairs`, the selected pairs the table has loaded, in table
  * order. `context` holds what the app already knows: { numberOf(pair),
  * launchpads, findings, testCases, palette (the effective highlight
@@ -233,13 +242,14 @@ export function menuFor(
 ) {
   if (pairs.length === 0) return [];
   // Some selected pairs aren't loaded: only bulk actions can reach them.
-  const partial = all && !(count != null && count <= pairs.length);
+  const partial = isPartialSelection(pairs, { all, count });
   const n = partial ? count : pairs.length;
   const many = n == null ? "all" : n.toLocaleString();
   const one = n === 1 ? pairs[0] : null;
   const hosts = unique(pairs.map((pair) => pair.Host));
   const types = unique(pairs.map((pair) => pair.ContentType).filter(Boolean));
   const statuses = unique(pairs.map((pair) => Number(pair.StatusCode) || 0));
+  const highlights = unique(pairs.map(highlightOf).filter(Boolean)).sort((a, b) => a - b);
   const websocket = one && upgradePresentation(upgradeFromLedgerRow(one)).canOpen;
   const finding = linkMenu({
     key: "f",
@@ -491,15 +501,14 @@ export function menuFor(
             statuses.length === 1 ? `All with status ${statuses[0] || "pending"}` : "Same statuses",
           action: { type: "select", kind: "status" },
         },
-        ...(one && highlightOf(one)
-          ? [
-              {
-                id: "s-highlight",
-                label: "All with this highlight",
-                action: { type: "select", kind: "highlight" },
-              },
-            ]
-          : []),
+        ...highlights.map((number) => ({
+          id: `s-highlight-${number}`,
+          label:
+            highlights.length === 1
+              ? "All with this highlight"
+              : `All with highlight ${palette[number - 1]?.label ?? number}`,
+          action: { type: "select", kind: "highlight", number },
+        })),
         { id: "s-invert", label: "Invert selection", action: { type: "select", kind: "invert" } },
       ],
     },
@@ -525,6 +534,19 @@ export function menuFor(
 
 const isAction = (item) => item && item !== "sep" && !item.heading;
 
+// Calls `visit(item, trail)` for every leaf action, with its submenu path
+// as `trail`. A leaf under a disabled submenu comes disabled, with the
+// submenu's hint.
+function eachLeaf(items, visit, trail = [], parent = null) {
+  for (const item of items) {
+    if (!isAction(item)) continue;
+    const children = item.sub ?? item.swatches;
+    const blocked = parent ?? (item.disabled ? item : null);
+    if (children) eachLeaf(children, visit, [...trail, item.label], blocked);
+    else visit(parent ? { ...item, disabled: true, hint: parent.hint } : item, trail);
+  }
+}
+
 /**
  * Every action whose label or submenu path contains `text`, ignoring case,
  * flattened with its path as `trail`. Blank text returns the menu as is.
@@ -533,18 +555,26 @@ export function filterMenu(items, text) {
   const needle = String(text ?? "").trim().toLowerCase();
   if (!needle) return items;
   const out = [];
-  const walk = (list, trail) => {
-    for (const item of list) {
-      if (!isAction(item)) continue;
-      const children = item.sub ?? item.swatches;
-      if (children) walk(children, [...trail, item.label]);
-      else if ([...trail, item.label].join(" ").toLowerCase().includes(needle)) {
-        out.push({ ...item, trail });
-      }
-    }
-  };
-  walk(items, []);
+  eachLeaf(items, (item, trail) => {
+    if ([...trail, item.label].join(" ").toLowerCase().includes(needle)) out.push({ ...item, trail });
+  });
   return out;
+}
+
+/**
+ * The menu action a keyboard shortcut runs: the item whose `actionId` is
+ * `actionId`, as { action, disabled, hint }, so the shortcut acts exactly
+ * as choosing it would, and says why when the menu disables it. null when
+ * the menu has no such item.
+ */
+export function menuAction(items, actionId) {
+  let found = null;
+  eachLeaf(items, (item) => {
+    if (!found && item.actionId === actionId) {
+      found = { action: item.action, disabled: Boolean(item.disabled), hint: item.disabled ? item.hint : undefined };
+    }
+  });
+  return found;
 }
 
 /** Leaves of `items` that can run: not separators, headings or disabled. */

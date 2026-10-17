@@ -24,8 +24,10 @@ type BuildInfo struct {
 	Version string
 }
 
+// GetBuildInfo reports the running build, the same one the updater checks
+// from.
 func (a *App) GetBuildInfo() BuildInfo {
-	return BuildInfo{Channel: buildChannel, Version: version}
+	return a.build
 }
 
 // embeddedSigningPublicKey returns the Marasi signing key built into the app.

@@ -87,6 +87,14 @@ func TestDevelopmentBuildNeverChecks(t *testing.T) {
 	}
 }
 
+func TestBuildInfoIsTheBuildTheUpdaterChecksFrom(t *testing.T) {
+	app, _ := newUpdateApp(t, "nightly", "17.10.2026 (nightly abc1234)", newFakeReleaseServer(t))
+
+	if got, want := app.GetBuildInfo(), app.GetUpdateState().Running; got != want {
+		t.Fatalf("wanted Settings to show the running build %+v, got %+v", want, got)
+	}
+}
+
 func TestDevelopmentBuildSavesNoUpdateSettings(t *testing.T) {
 	releases := newFakeReleaseServer(t)
 	app, _ := newUpdateApp(t, "dev", "dev", releases)

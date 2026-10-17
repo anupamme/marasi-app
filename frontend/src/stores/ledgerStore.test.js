@@ -675,6 +675,27 @@ test("⌘[ and ⌘] open the results' first and last pairs, reading their page w
   assert.equal(pageCalls(api).length, reads, "an edge the window holds needs no read");
 });
 
+test("⌘] opens the results' highest-numbered pair and ⌘[ the lowest, under any sort", async () => {
+  const api = fakeApi({ traffic: pairs(1000), queries: { even: (p) => p.Number % 2 === 0 } });
+  const store = createLedgerStore(api);
+  await store.populate();
+  store.setQueryText("even");
+  await store.runQuery();
+  store.selectPair(idOf(990));
+  assert.equal((await store.goToNumberEnd(false)).pair.Number, 2, "newest first: the bottom row, read when needed");
+  assert.equal(tableRows(get(store)).at(-1).Number, 2);
+  assert.equal((await store.goToNumberEnd(true)).pair.Number, 1000, "and the top row");
+  assert.equal(tableRows(get(store))[0].Number, 1000);
+  await store.sortBy("number");
+  assert.equal((await store.goToNumberEnd(true)).pair.Number, 1000, "oldest first: the bottom row");
+  assert.equal(tableRows(get(store)).at(-1).Number, 1000);
+  await store.sortBy("host");
+  const rows = tableRows(get(store));
+  assert.equal((await store.goToNumberEnd(false)).pair.Number, 2, "another sort: read alone");
+  assert.equal(focusedPair(get(store))?.Number, 2);
+  assert.equal(tableRows(get(store)), rows, "the table stays as it is");
+});
+
 test("back to the live view clears the query and the sort and reads newest first from the top", async () => {
   const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID !== idOf(2) } });
   const store = createLedgerStore(api);

@@ -1272,7 +1272,35 @@ export function createLedgerStore(api) {
   }
 
   /**
-   * ⌘[ / ⌘]: the results' first or (`end`) last pair, selected alone. A
+   * ⌘] / ⌘[: the results' highest- or lowest-numbered pair, selected alone.
+   * Under a # sort it is the table's top or bottom row (see goToEdge);
+   * under another sort it is read alone, selected where the table holds it
+   * and opened on its own otherwise. Returns { pair }, null when the results
+   * are empty.
+   */
+  async function goToNumberEnd(highest) {
+    const { field, desc } = current.sort;
+    if (field === "number") return goToEdge(highest !== desc);
+    const r = current.results;
+    let pair = null;
+    try {
+      const page = await api.queryTraffic({
+        ...pageRequest(current.query.ranQuery, current.sort, { AsOf: r.shownAsOf ?? r.asOf ?? "", Limit: 1 }),
+        OrderBy: highest ? "number desc" : "number",
+      });
+      pair = page.QueryError ? null : (page.Items?.[0] ?? null);
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+    }
+    if (!pair) return { pair: null };
+    const shown = findShownPair(pair.ID);
+    if (shown) selectPair(shown.ID);
+    else focusOutside(pair);
+    return { pair: shown ?? pair };
+  }
+
+  /**
+   * The results' first or (`end`) last row, selected alone. A
    * window that holds that edge selects it there; else the edge's page is
    * read into a fresh window (the last one backward from the end) under the
    * as_of the table shows. Returns { pair }, null when the results are empty.
@@ -1584,6 +1612,7 @@ export function createLedgerStore(api) {
     stepSelection,
     stepNumber,
     goToEdge,
+    goToNumberEnd,
     selectAll,
     selectIDs: selectListed,
     contextRow,

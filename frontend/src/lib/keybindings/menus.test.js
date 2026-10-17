@@ -66,16 +66,33 @@ test("⌘S searches, ⌘F filters and ⌘⇧O opens a request on the Ledger, dra
 test("with a selection, the row menu's shortcuts reach its actions", () => {
   const dispatcher = mac();
   const open = on("/ledger", requestDrawer());
-  assert.equal(dispatcher.resolve(cmd(".", "Period"), open), "ledger.drawer-open.open-row-menu");
-  assert.equal(dispatcher.resolve(cmd("l", "KeyL"), open), "ledger.drawer-open.send-to-launchpad");
+  assert.equal(dispatcher.resolve(cmdShift(">", "Period"), open), "ledger.drawer-open.open-row-menu");
+  assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), open), "ledger.drawer-open.send-to-launchpad");
   assert.equal(dispatcher.resolve(cmdShift("A", "KeyA"), open), "ledger.drawer-open.send-to-armory");
   assert.equal(dispatcher.resolve(cmdShift("T", "KeyT"), open), "ledger.drawer-open.create-test-case");
-  assert.equal(dispatcher.resolve(cmd("n", "KeyN"), open), "ledger.drawer-open.view-note");
+  assert.equal(dispatcher.resolve(cmdShift("N", "KeyN"), open), "ledger.drawer-open.view-note");
   assert.equal(dispatcher.resolve(cmdShift("C", "KeyC"), open), "ledger.drawer-open.copy-url");
-  assert.equal(dispatcher.resolve(cmd("m", "KeyM"), open), "ledger.drawer-open.view-metadata");
-  // With nothing selected, the global actions keep their keys.
-  assert.equal(dispatcher.resolve(cmd(".", "Period"), on("/ledger")), "global.jump-to-toast");
-  assert.equal(dispatcher.resolve(cmd("l", "KeyL"), on("/ledger")), "global.setup-listener");
+  assert.equal(dispatcher.resolve(cmdShift("M", "KeyM"), open), "ledger.drawer-open.view-metadata");
+  // The global actions keep their keys, with a selection or without.
+  for (const state of [open, on("/ledger")]) {
+    assert.equal(dispatcher.resolve(cmd(".", "Period"), state), "global.jump-to-toast");
+    assert.equal(dispatcher.resolve(cmd("l", "KeyL"), state), "global.setup-listener");
+  }
+});
+
+test("⌘⇧\\ jumps to the sitemap's find box with the drawer open or closed", () => {
+  const dispatcher = mac();
+  const press = () => cmdShift("|", "Backslash");
+  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.focus-sitemap");
+  assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), "ledger.drawer-open.focus-sitemap");
+});
+
+test("with the drawer open, ⌘[ and ⌘] open the results' lowest and highest numbers", () => {
+  const dispatcher = mac();
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmd("[", "BracketLeft"), open), "ledger.drawer-open.first-result");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), open), "ledger.drawer-open.last-result");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), on("/ledger")), "ledger.drawer-closed.next-page");
 });
 
 test("⌘\\ toggles the Ledger's sitemap dock with the drawer open or closed", () => {

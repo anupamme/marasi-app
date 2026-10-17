@@ -589,7 +589,7 @@
 		drawerPane = pane;
 	}
 
-	// ⌘N and ⌘M: the note or metadata pane, or back to the response.
+	// ⌘⇧N and ⌘⇧M: the note or metadata pane, or back to the response.
 	function toggleDrawerPane(pane) {
 		if ($modalStore[0]) return;
 		drawerPane = drawerPane === pane ? null : pane;
@@ -666,7 +666,7 @@
 		rowMenu = { open: true, x, y, pairs: target.pairs, target };
 	}
 
-	// Opens the row menu under the focused row, as ⌘. and the menu key do.
+	// Opens the row menu under the focused row, as ⌘⇧. and the menu key do.
 	function openRowMenuAtFocus() {
 		if (!drawerOpen || $modalStore[0]) return;
 		if (rowMenu.open) {
@@ -753,6 +753,14 @@
 		icon: PanelLeftIcon,
 		handler: () => dock?.toggle(),
 	};
+	// ⌘⇧\: the sitemap's find box, expanding the dock; again leaves it.
+	const focusSitemap = {
+		icon: SearchIcon,
+		handler: () => {
+			if (sitemapFind && document.activeElement === sitemapFind) sitemapFind.blur();
+			else dock?.expand(true);
+		},
+	};
 
 	// Search, Filter and Open request, with the drawer open or closed.
 	const focusQuery = { icon: SearchIcon, handler: () => toggleFocus(document.getElementById("searchBox")) };
@@ -783,11 +791,11 @@
 		},
 	});
 
-	// ⌘[ / ⌘]: back to the results' first or last request, with the table
-	// scrolled to it.
-	function goToEdge(end) {
+	// ⌘] / ⌘[: back to the results' highest- or lowest-numbered request,
+	// with the table scrolled to it.
+	function goToNumberEnd(highest) {
 		modalStore.close();
-		ledgerStore.goToEdge(end).then(({ pair }) => pair && selectAndReveal(pair.ID));
+		ledgerStore.goToNumberEnd(highest).then(({ pair }) => pair && selectAndReveal(pair.ID));
 	}
 
 	let ledgerMenu = [
@@ -810,6 +818,7 @@
 		},
 		{ actionId: "ledger.drawer-closed.open-request", ...openRequest("ledger.drawer-closed.open-request") },
 		{ actionId: "ledger.drawer-closed.toggle-sidebar", ...toggleSidebar },
+		{ actionId: "ledger.drawer-closed.focus-sitemap", ...focusSitemap },
 	];
 
 	// Each drawer action works on the focused pair.
@@ -831,13 +840,13 @@
 		},
 		{
 			actionId: "ledger.drawer-open.first-result",
-			icon: ArrowUpToLineIcon,
-			handler: whenOpen(() => goToEdge(false)),
+			icon: ArrowDownToLineIcon,
+			handler: whenOpen(() => goToNumberEnd(false)),
 		},
 		{
 			actionId: "ledger.drawer-open.last-result",
-			icon: ArrowDownToLineIcon,
-			handler: whenOpen(() => goToEdge(true)),
+			icon: ArrowUpToLineIcon,
+			handler: whenOpen(() => goToNumberEnd(true)),
 		},
 		{
 			actionId: "ledger.drawer-open.send-to-armory",
@@ -1006,6 +1015,7 @@
 			handler: () => ($lineWrap = !$lineWrap),
 		},
 		{ actionId: "ledger.drawer-open.toggle-sidebar", ...toggleSidebar },
+		{ actionId: "ledger.drawer-open.focus-sitemap", ...focusSitemap },
 	];
 	const websocketDrawerMenuItem = {
 		actionId: "ledger.drawer-open.websocket.open-stream",

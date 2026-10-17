@@ -12,7 +12,7 @@
 
 ## How to get to it (user POV)
 
-Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad`: the row menu's `Send to Launchpad › New launchpad`, or `⌘L` with a row selected. Both show `Sent 1 request to a new launchpad` (`Sent N requests …` for a multi-selection, which makes one launchpad named `N requests`) with a `Jump to Launchpad` action, or create an empty one with +.
+Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad`: the row menu's `Send to Launchpad › New launchpad`, or `⌘⇧L` with a row selected. Both show `Sent 1 request to a new launchpad` (`Sent N requests …` for a multi-selection, which makes one launchpad named `N requests`) with a `Jump to Launchpad` action, or create an empty one with +.
 
 Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count (`[title="Entries"]`), and its last status (`[title="Last status"]`, `…` while the newest entry awaits its response). Count and status come from `GetLaunchpads` (Marasi's `EntryCount`/`LastStatusCode`), so they show for launchpads that were never expanded; the page loads a launchpad's entries only when it opens (selected, expanded, Expand all, or listed by a search). A launch updates its launchpad's count and last status live. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the request editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side. The editor title (`.lp-request-title`) reads `Request`, and `Request draft` with the unsaved dot only while the draft is dirty. Expand all opens every launchpad (and every status folder while grouping); Collapse all closes them all, and the selected launchpad stays closed.
 
@@ -38,14 +38,14 @@ Run `scripts/drive.sh launchpad` for route proof. It requires `Group by status`,
 ```json
 {"name":"send-to-launchpad","steps":[
  {"click":".ledger-row","hasText":"/compass-allowed"},{"waitSelector":".ledger-drawer"},
- {"key":"cmd+l"},{"waitText":"to a new launchpad"},
+ {"key":"cmd+shift+l"},{"waitText":"to a new launchpad"},
  {"text":"Jump to Launchpad"},{"waitPath":"/launchpad"},{"waitNoSelector":".ledger-drawer"},
  {"waitText":"Group by status"}]}
 ```
 
 The Ledger keeps its selection, so its drawer is open again on the next Ledger visit; close it there before the next Ledger recipe.
 
-Both Ledger paths, `⌘L` with one row selected and the row menu's `Send to Launchpad › New launchpad`, create a launchpad named `Request N`, and their toast's `Jump to Launchpad` opens `/launchpad?id=<id>`. The page opens that launchpad, selects its newest entry, opens its row even after `Collapse all`, and scrolls it into view. The previously open launchpad is not reselected. This also works when the toast is clicked while `/launchpad` is already open. If the id no longer exists, the page shows `That launchpad no longer exists.` and keeps the current launchpad. Other launchpads can already show `entry 1 of 1`, so wait on the sent path instead:
+Both Ledger paths, `⌘⇧L` with one row selected and the row menu's `Send to Launchpad › New launchpad`, create a launchpad named `Request N`, and their toast's `Jump to Launchpad` opens `/launchpad?id=<id>`. The page opens that launchpad, selects its newest entry, opens its row even after `Collapse all`, and scrolls it into view. The previously open launchpad is not reselected. This also works when the toast is clicked while `/launchpad` is already open. If the id no longer exists, the page shows `That launchpad no longer exists.` and keeps the current launchpad. Other launchpads can already show `entry 1 of 1`, so wait on the sent path instead:
 
 ```json
 {"name":"right-click-jump","steps":[

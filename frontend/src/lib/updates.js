@@ -108,6 +108,18 @@ export function installFailureMessage(failure) {
   return `${title}: ${failure?.Reason || "unknown error"}`;
 }
 
+/**
+ * The state after a check found update (the update-available event, or a
+ * "Check for updates…" result). An update downloading or waiting for a
+ * restart stays: it is what the researcher chose to install.
+ */
+export function withUpdateFound(state, update) {
+  if (state?.Status === "downloading" || state?.Status === "restart-pending") {
+    return state;
+  }
+  return { ...state, Status: "available", Update: update, Progress: null, Failure: null };
+}
+
 /** The state once the researcher chose Install, before any progress. */
 export function withInstallStarted(state) {
   return { ...state, Status: "downloading", Progress: null, Failure: null };

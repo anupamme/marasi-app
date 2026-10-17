@@ -204,8 +204,9 @@ func (a *App) checkForUpdate(ctx context.Context, kind checkKind) UpdateCheck {
 		if kind == checkAutomatic && a.isDismissed(update) {
 			return check
 		}
-		a.setKnownUpdate(update)
-		a.emitEvent(updateAvailableEvent, *update)
+		if a.setKnownUpdate(update) {
+			a.emitEvent(updateAvailableEvent, *update)
+		}
 	}
 	return check
 }
@@ -278,21 +279,27 @@ func releaseUpdate(release githubRelease) *Update {
 }
 
 // setKnownUpdate records the update the latest check found, or none. While
-// an install runs or waits for a restart, the update being installed stays.
-func (a *App) setKnownUpdate(update *Update) {
-	a.updates.mu.Lock()
-	defer a.updates.mu.Unlock()
-	switch a.updates.status {
-	case UpdateStatusDownloading, UpdateStatusRestartPending:
-		return
+// an install runs or waits for a restart, the update being installed stays
+// and setKnownUpdate reports false.
+func (a *App) setKnownUpdate(update *Update) bool {
+	return a.updates.setKnown(update)
+}
+
+// setKnown is setKnownUpdate on the updater.
+func (u *updater) setKnown(update *Update) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.busy() != nil {
+		return false
 	}
-	a.updates.failure = nil
-	a.updates.update = update
+	u.failure = nil
+	u.update = update
 	if update == nil {
-		a.updates.status = UpdateStatusIdle
+		u.status = UpdateStatusIdle
 	} else {
-		a.updates.status = UpdateStatusAvailable
+		u.status = UpdateStatusAvailable
 	}
+	return true
 }
 
 // Channels a build can follow. A development build has none.

@@ -13,6 +13,7 @@ import {
   withInstallStarted,
   withInstalled,
   withProgress,
+  withUpdateFound,
 } from "./updates.js";
 
 const running = { Channel: "release", Version: "16.10.2026" };
@@ -158,6 +159,22 @@ test("switching a nightly to release says the nightly stays until a newer releas
     channelSwitchNotice({ Settings: { Channel: "release" }, Check: null }, running).message,
     "Switched to release",
   );
+});
+
+test("a found update makes it available and clears an earlier failure", () => {
+  const update = { Version: "18.10.2026" };
+  const failed = { Status: "failed", Update: { Version: "17.10.2026" }, Progress: null, Failure: { Kind: "network" } };
+
+  assert.deepEqual(withUpdateFound(failed, update), { Status: "available", Update: update, Progress: null, Failure: null });
+});
+
+test("a found update never replaces one downloading or waiting for a restart", () => {
+  const installing = { Version: "17.10.2026" };
+  const downloading = { Status: "downloading", Update: installing, Progress: { Received: 1, Total: 2 }, Failure: null };
+  const installed = { Status: "restart-pending", Update: installing, Progress: null, Failure: null };
+
+  assert.deepEqual(withUpdateFound(downloading, { Version: "18.10.2026" }), downloading);
+  assert.deepEqual(withUpdateFound(installed, { Version: "18.10.2026" }), installed);
 });
 
 test("the details panel links to the Channel setting in Settings → About", () => {

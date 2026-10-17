@@ -14,6 +14,7 @@ import {
   withInstallStarted,
   withInstalled,
   withProgress,
+  withUpdateFound,
 } from "../lib/updates.js";
 
 // The app's update state (the Go UpdateState): what the update indicator and
@@ -51,7 +52,7 @@ export function dismissUpdate() {
 
 /** Records an update found by a check (the update-available event). */
 export function onUpdateAvailable(update) {
-  updateState.update((state) => ({ ...state, Status: "available", Update: update, Failure: null }));
+  updateState.update((state) => withUpdateFound(state, update));
 }
 
 /**

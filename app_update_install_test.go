@@ -587,3 +587,27 @@ func assertFailed(t *testing.T, app *App, events *recordedEvents, result UpdateI
 		t.Fatalf("wanted the failed state to keep the update and the failure, got %+v", state)
 	}
 }
+
+func TestCheckFindingANewerBuildWhileARestartIsPendingKeepsTheInstalledUpdate(t *testing.T) {
+	for _, kind := range []checkKind{checkManual, checkAutomatic} {
+		releases := newFakeReleaseServer(t)
+		keys := newSigningKeys(t)
+		publishSignedRelease(releases, keys, "17.10.2026", updateBinary)
+		app, _ := newInstallApp(t, releases, keys)
+		if result, err := app.InstallUpdate(); err != nil || result.Outcome != InstallOutcomeInstalled {
+			t.Fatalf("wanted the update installed, got %+v (%v)", result, err)
+		}
+		publishSignedRelease(releases, keys, "18.10.2026", updateBinary)
+		events := &recordedEvents{}
+		app.emitEvent = events.emit
+
+		app.checkForUpdate(context.Background(), kind)
+
+		if events.has(updateAvailableEvent) {
+			t.Fatalf("wanted no %s while a restart is pending, got %v", updateAvailableEvent, events.names)
+		}
+		if state := app.GetUpdateState(); state.Status != UpdateStatusRestartPending || state.Update.Version != "17.10.2026" {
+			t.Fatalf("wanted 17.10.2026 still pending a restart, got %q %+v", state.Status, state.Update)
+		}
+	}
+}

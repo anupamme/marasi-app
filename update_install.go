@@ -158,7 +158,7 @@ var errCancelled = errors.New("the download was cancelled")
 // than a failed install, when there is nothing to install or an install is
 // already running.
 func (a *App) InstallUpdate() (UpdateInstall, error) {
-	update, ctx, err := a.startInstall()
+	update, ctx, err := a.startInstall(nil)
 	if err != nil {
 		return UpdateInstall{}, err
 	}
@@ -211,22 +211,42 @@ func (a *App) relaunchIfRestarting() {
 	}
 }
 
-// startInstall moves the known update to downloading and returns it with
-// the context the install runs under.
-func (a *App) startInstall() (*Update, context.Context, error) {
+// busy reports why no install can start now: one is running or waits for a
+// restart. Callers hold mu.
+func (u *updater) busy() error {
+	switch u.status {
+	case UpdateStatusDownloading:
+		return errors.New("an update is already being installed")
+	case UpdateStatusRestartPending:
+		return errors.New("an update is already installed; restart Marasi to run it")
+	}
+	return nil
+}
+
+// installBusy reports why no install can start now, or nil.
+func (a *App) installBusy() error {
+	a.updates.mu.Lock()
+	defer a.updates.mu.Unlock()
+	return a.updates.busy()
+}
+
+// startInstall moves the update to install to downloading and returns it
+// with the context the install runs under. The update is target when given
+// (a reinstall, which replaces any known update), else the known update.
+func (a *App) startInstall(target *Update) (*Update, context.Context, error) {
 	if a.updateChannel() == "" {
 		return nil, nil, errors.New("this build does not install updates")
 	}
 	a.updates.mu.Lock()
 	defer a.updates.mu.Unlock()
-	switch a.updates.status {
-	case UpdateStatusAvailable, UpdateStatusFailed:
-	case UpdateStatusDownloading:
-		return nil, nil, errors.New("an update is already being installed")
-	case UpdateStatusRestartPending:
-		return nil, nil, errors.New("an update is already installed; restart Marasi to run it")
-	default:
+	if err := a.updates.busy(); err != nil {
+		return nil, nil, err
+	}
+	if target == nil && a.updates.status != UpdateStatusAvailable && a.updates.status != UpdateStatusFailed {
 		return nil, nil, errors.New("there is no update to install")
+	}
+	if target != nil {
+		a.updates.update = target
 	}
 	if a.updates.update == nil {
 		return nil, nil, errors.New("there is no update to install")

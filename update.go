@@ -167,7 +167,7 @@ func (a *App) checkForUpdate(ctx context.Context) UpdateCheck {
 		check.Outcome = UpdateOutcomeUnavailable
 		return check
 	}
-	ctx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
+	ctx, cancel := withUpdateCheckTimeout(ctx)
 	defer cancel()
 
 	update, err := a.findUpdate(ctx, channel)
@@ -185,6 +185,11 @@ func (a *App) checkForUpdate(ctx context.Context) UpdateCheck {
 		a.emitEvent(updateAvailableEvent, *update)
 	}
 	return check
+}
+
+// withUpdateCheckTimeout bounds a request for release metadata.
+func withUpdateCheckTimeout(ctx context.Context) (context.Context, context.CancelFunc) {
+	return context.WithTimeout(ctx, updateCheckTimeout)
 }
 
 // findUpdate returns the update on channel, or nil when the running build is

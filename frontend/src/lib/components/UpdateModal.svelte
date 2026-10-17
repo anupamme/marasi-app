@@ -1,8 +1,9 @@
 <script>
 	// The update details panel: the running version, the update's version and
-	// its release notes, opened from the update indicator or by "Check for
-	// updates…" when it finds an update. Install, Dismiss and the nightly
-	// compare link are added by later work on updates.
+	// its release notes (a release) or a "changes since your build" compare
+	// link (a nightly), opened from the update indicator or by "Check for
+	// updates…" when it finds an update. Install and Dismiss are added by
+	// later work on updates.
 	import { getModalStore } from "@skeletonlabs/skeleton";
 	import { ExternalLink, X } from "lucide-svelte";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
@@ -45,7 +46,19 @@
 			{/if}
 		</dl>
 
-		{#if update}
+		{#if update?.CompareURL}
+			<section class="space-y-2">
+				<h3 class="h5">Changes since your build</h3>
+				<button
+					type="button"
+					class="anchor text-sm inline-flex items-center gap-1"
+					on:click={() => BrowserOpenURL(update.CompareURL)}
+				>
+					<span>Compare your build with this nightly on GitHub</span>
+					<ExternalLink size={14} />
+				</button>
+			</section>
+		{:else if update}
 			<section class="space-y-2">
 				<h3 class="h5">Release notes</h3>
 				{#if update.Notes}

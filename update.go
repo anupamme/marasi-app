@@ -72,6 +72,11 @@ type Update struct {
 	// ReleasePage is the build's page on GitHub, where it can be installed by
 	// hand.
 	ReleasePage string
+	// Commit is the full commit a nightly was built from; "" for a release.
+	Commit string
+	// CompareURL is the GitHub comparison of the running nightly's commit
+	// with Commit ("changes since your build"); "" for a release.
+	CompareURL string
 
 	// release is the GitHub release the update came from, kept for the
 	// install pipeline (its assets). Never sent to the frontend.
@@ -164,6 +169,8 @@ func (a *App) findUpdate(ctx context.Context, channel string) (*Update, error) {
 	switch channel {
 	case channelRelease:
 		return a.findReleaseUpdate(ctx)
+	case channelNightly:
+		return a.findNightlyUpdate(ctx)
 	default:
 		return nil, fmt.Errorf("checking the %s channel is not supported", channel)
 	}

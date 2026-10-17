@@ -110,6 +110,9 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ inputs.ref || github.ref_name }}
           SHA: ${{ needs.prepare.outputs.sha }}
+          # The app reads the nightly's date from its title (its version
+          # string) and its commit from the Commit line of its notes.
+          VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           notes=$(printf 'Ref: %s\nCommit: %s\n' "$REF" "$SHA")
           if gh release view nightly >/dev/null 2>&1; then
@@ -117,7 +120,7 @@ jobs:
           fi
           gh release create nightly \
             --verify-tag \
-            --title Nightly \
+            --title "$VERSION" \
             --prerelease \
             --latest=false \
             --notes "$notes" \

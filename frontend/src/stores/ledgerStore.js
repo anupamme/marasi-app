@@ -44,6 +44,8 @@ export {
   isQueryActive,
   newMatchesKind,
   newMatchesLabel,
+  rowMenuTarget,
+  selectionTarget,
   tableRows,
 } from "./createLedgerStore.js";
 

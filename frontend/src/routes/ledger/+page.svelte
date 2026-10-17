@@ -92,14 +92,13 @@
 		isQueryActive,
 		isLiveNewestFirst,
 		indexWarning,
-		selectedPairs,
 		countLabel,
 		newMatchesKind,
 		newMatchesLabel,
 		allSelectedLabel,
-		isAllSelected,
 		selectionSize,
-		selectionSpec,
+		rowMenuTarget,
+		selectionTarget as storeSelectionTarget,
 	} from "../../stores/ledgerStore";
 
 	// The parts of the Ledger store the page follows. Each notifies only when
@@ -288,19 +287,8 @@
 
 	const idsOf = (pairs) => pairs.map((pair) => pair.ID);
 
-	// What an action runs on: the loaded selected pairs, the selection in
-	// Marasi's shape (listed ids, or after ⌘A the query, exclusion and
-	// as_of), whether it is ⌘A, and how many pairs it holds (null while a ⌘A
-	// selection is counted).
-	function selectionTarget() {
-		const state = get(ledgerStore);
-		return {
-			pairs: selectedPairs(state),
-			selection: selectionSpec(state),
-			all: isAllSelected(state),
-			count: selectionSize(state),
-		};
-	}
+	// What an action runs on (selectionTarget in the store).
+	const selectionTarget = () => storeSelectionTarget(get(ledgerStore));
 
 	// "Request 4", "3 requests", or after ⌘A "all 1,200 matching requests".
 	function describeTarget(target) {
@@ -690,9 +678,8 @@
 		}
 	}
 
-	// Opens the row menu at a point, on the selection.
-	function openRowMenu(x, y) {
-		const target = selectionTarget();
+	// Opens the row menu at a point, on the selection or `target`.
+	function openRowMenu(x, y, target = selectionTarget()) {
 		if (target.pairs.length === 0) return;
 		rowMenu = { open: true, x, y, pairs: target.pairs, target };
 	}
@@ -1327,8 +1314,8 @@
 						}}
 						on:sort={(e) => ledgerStore.sortBy(e.detail)}
 						on:menu={(e) => {
-							ledgerStore.contextRow(e.detail.id);
-							openRowMenu(e.detail.event.clientX, e.detail.event.clientY);
+							const target = rowMenuTarget(get(ledgerStore), e.detail.id);
+							openRowMenu(e.detail.event.clientX, e.detail.event.clientY, target);
 						}}
 					/>
 				</div>

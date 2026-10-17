@@ -3,6 +3,7 @@ package main
 import (
 	"errors"
 	"fmt"
+	"log"
 )
 
 // Reinstalling the latest release (spec "Channels", ADR 0006): the one way
@@ -47,5 +48,13 @@ func (a *App) ReinstallLatestRelease() (UpdateInstall, error) {
 		return UpdateInstall{}, err
 	}
 	err = a.install(installCtx, update)
-	return a.finishInstall(installCtx, update, err), nil
+	result := a.finishInstall(installCtx, update, err)
+	if result.Outcome == InstallOutcomeInstalled {
+		// The release now installed follows the release channel, so a
+		// nightly is not offered again after the restart (ADR 0006).
+		if err := a.Config.setUpdateChannel(channelRelease); err != nil {
+			log.Printf("[!] saving the release channel after reinstalling: %v", err)
+		}
+	}
+	return result, nil
 }

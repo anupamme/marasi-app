@@ -281,6 +281,10 @@
 		reinstalling = true;
 		reinstallLatestRelease()
 			.then((result) => {
+				if (result.Outcome === "installed") {
+					// The reinstalled release follows the release channel.
+					GetUpdateSettings().then((settings) => (updateSettings = settings));
+				}
 				if (result.Outcome === "installed" || result.Outcome === "failed") {
 					modalStore.trigger(updatePanelModal());
 				}

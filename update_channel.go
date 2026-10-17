@@ -73,14 +73,7 @@ func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 	default:
 		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("%q is not a channel; choose release or nightly", channel)
 	}
-	cfg := a.Config
-	cfg.mu.Lock()
-	err := writeConfigKeys(cfg.path(), map[string]any{updateChannelKey: channel})
-	if err == nil {
-		cfg.updateChannel = channel
-	}
-	cfg.mu.Unlock()
-	if err != nil {
+	if err := a.Config.setUpdateChannel(channel); err != nil {
 		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("saving the channel: %w", err)
 	}
 
@@ -93,4 +86,15 @@ func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 		change.Check = &check
 	}
 	return change, nil
+}
+
+// setUpdateChannel saves the Channel the app follows.
+func (cfg *Config) setUpdateChannel(channel string) error {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	if err := writeConfigKeys(cfg.path(), map[string]any{updateChannelKey: channel}); err != nil {
+		return err
+	}
+	cfg.updateChannel = channel
+	return nil
 }

@@ -133,3 +133,43 @@ func TestReinstallWhileAnUpdateWaitsForARestartIsRefusedWithoutWarning(t *testin
 		t.Fatalf("wanted the restart still pending, got %q", state.Status)
 	}
 }
+
+func TestReinstallingTheLatestReleaseFollowsTheReleaseChannelAfterTheRestart(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "16.10.2026", releaseBinary)
+	app, _ := newNightlyInstallApp(t, releases, keys)
+	if _, err := app.SetUpdateChannel("nightly"); err != nil {
+		t.Fatalf("choosing nightly: %v", err)
+	}
+	withDialog(app, "Reinstall latest release")
+
+	if result, err := app.ReinstallLatestRelease(); err != nil || result.Outcome != InstallOutcomeInstalled {
+		t.Fatalf("wanted the release reinstalled, got %+v (%v)", result, err)
+	}
+
+	if got := app.GetUpdateSettings().Channel; got != "release" {
+		t.Fatalf("wanted the channel release once reinstalled, got %q", got)
+	}
+	restarted, _ := restartedUpdateApp(t, app)
+	restarted.build = BuildInfo{Channel: "release", Version: "16.10.2026"}
+	if got := restarted.GetUpdateState().Channel; got != "release" {
+		t.Fatalf("wanted the reinstalled release to follow the release channel, got %q", got)
+	}
+}
+
+func TestCancelledReinstallKeepsTheChannel(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "16.10.2026", releaseBinary)
+	app, _ := newNightlyInstallApp(t, releases, keys)
+	withDialog(app, "Cancel")
+
+	if result, err := app.ReinstallLatestRelease(); err != nil || result.Outcome != InstallOutcomeCancelled {
+		t.Fatalf("wanted the reinstall cancelled, got %+v (%v)", result, err)
+	}
+
+	if got := app.GetUpdateSettings().Channel; got != "nightly" {
+		t.Fatalf("wanted the channel still nightly, got %q", got)
+	}
+}

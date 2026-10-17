@@ -34,6 +34,7 @@
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
 	import { channelSwitchNotice, updatePanelModal } from "../../lib/updates.js";
 	import { reinstallLatestRelease, setUpdateChannel } from "../../stores/updateStore";
 	import { chromeError } from "../../lib/globalActions.js";
@@ -74,9 +75,14 @@
 	];
 	let section = "editing";
 	// ?section=<id> opens a section, as the update panel's link to the
-	// Channel setting does.
+	// Channel setting does. Choosing a section puts it in the URL, so that
+	// link switches section even after the researcher moved to another one.
 	$: requestedSection = $page.url.searchParams.get("section");
 	$: if (sections.some((entry) => entry.id === requestedSection)) section = requestedSection;
+	function selectSection(id) {
+		section = id;
+		goto(`?section=${id}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 
 	let targetHost = "";
 	let override = "";
@@ -347,7 +353,7 @@
 						? 'border-primary-500 bg-surface-200 dark:bg-surface-700'
 						: 'border-transparent'}"
 					aria-current={section === entry.id ? "true" : undefined}
-					on:click={() => (section = entry.id)}
+					on:click={() => selectSection(entry.id)}
 				>
 					<svelte:component this={entry.icon} size={18} class="shrink-0 opacity-80" />
 					<span class="flex flex-col">

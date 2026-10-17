@@ -52,6 +52,18 @@ type App struct {
 	// unsavedDrafts is the number of launchpads with a dirty Launchpad
 	// draft, reported by the frontend, which holds drafts in memory only.
 	unsavedDrafts atomic.Int64
+
+	// Updates (update.go). build is the running build, from the build-time
+	// buildChannel and version; tests set their own.
+	build BuildInfo
+	// releaseSource is the base URL of the GitHub releases API releases are
+	// read from (defaultReleaseSource); tests point it at a fake server.
+	releaseSource string
+	// updateClient replaces the client update requests use; nil uses
+	// updateHTTPClient's.
+	updateClient *http.Client
+	// updates is the known update state.
+	updates updater
 }
 
 // NewApp creates a new App application struct
@@ -93,7 +105,11 @@ func NewApp() *App {
 // bound to the listener so listener shutdown interrupts project Lua before
 // draining the requests it may be holding.
 func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, logWriter io.Writer, logger *slog.Logger) *App {
-	app := &App{Proxy: proxy}
+	app := &App{
+		Proxy:         proxy,
+		build:         BuildInfo{Channel: buildChannel, Version: version},
+		releaseSource: defaultReleaseSource,
+	}
 	app.emitEvent = app.emit
 	app.messageDialog = func(options runtime.MessageDialogOptions) (string, error) {
 		return runtime.MessageDialog(app.ctx, options)

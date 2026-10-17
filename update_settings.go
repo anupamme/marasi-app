@@ -20,14 +20,19 @@ type UpdateSettings struct {
 	// AutomaticChecks: check at startup and every 6 hours. Off, the app makes
 	// no update request the researcher did not ask for.
 	AutomaticChecks bool
+	// Channel the app follows: "release" or "nightly", the build channel
+	// until one is chosen (update_channel.go); "" for a development build.
+	Channel string
 }
 
 // GetUpdateSettings reports the update settings.
 func (a *App) GetUpdateSettings() UpdateSettings {
 	cfg := a.Config
 	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	return cfg.updateSettings
+	settings := cfg.updateSettings
+	cfg.mu.Unlock()
+	settings.Channel = a.updateChannel()
+	return settings
 }
 
 // SetAutomaticUpdateChecks turns automatic checks on or off and saves the
@@ -36,12 +41,15 @@ func (a *App) GetUpdateSettings() UpdateSettings {
 func (a *App) SetAutomaticUpdateChecks(on bool) (UpdateSettings, error) {
 	cfg := a.Config
 	cfg.mu.Lock()
-	defer cfg.mu.Unlock()
-	if err := writeConfigKeys(cfg.path(), map[string]any{updateChecksKey: on}); err != nil {
-		return cfg.updateSettings, fmt.Errorf("saving automatic checks: %w", err)
+	err := writeConfigKeys(cfg.path(), map[string]any{updateChecksKey: on})
+	if err == nil {
+		cfg.updateSettings.AutomaticChecks = on
 	}
-	cfg.updateSettings.AutomaticChecks = on
-	return cfg.updateSettings, nil
+	cfg.mu.Unlock()
+	if err != nil {
+		return a.GetUpdateSettings(), fmt.Errorf("saving automatic checks: %w", err)
+	}
+	return a.GetUpdateSettings(), nil
 }
 
 // automaticChecksOn reports whether automatic checks are on.

@@ -19,8 +19,8 @@ const updateChannelKey = "update_channel"
 
 // ChannelChange is the result of SetUpdateChannel.
 type ChannelChange struct {
-	// Channel the app now follows.
-	Channel string
+	// Settings are the update settings after the change.
+	Settings UpdateSettings
 	// Check is the check a switch to nightly runs; nil otherwise.
 	Check *UpdateCheck
 }
@@ -66,12 +66,12 @@ func (a *App) updateChannel() string {
 func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 	current := a.updateChannel()
 	if current == "" {
-		return ChannelChange{}, errors.New("this build does not follow a channel")
+		return ChannelChange{Settings: a.GetUpdateSettings()}, errors.New("this build does not follow a channel")
 	}
 	switch channel {
 	case channelRelease, channelNightly:
 	default:
-		return ChannelChange{Channel: current}, fmt.Errorf("%q is not a channel; choose release or nightly", channel)
+		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("%q is not a channel; choose release or nightly", channel)
 	}
 	cfg := a.Config
 	cfg.mu.Lock()
@@ -81,10 +81,10 @@ func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 	}
 	cfg.mu.Unlock()
 	if err != nil {
-		return ChannelChange{Channel: current}, fmt.Errorf("saving the channel: %w", err)
+		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("saving the channel: %w", err)
 	}
 
-	change := ChannelChange{Channel: channel}
+	change := ChannelChange{Settings: a.GetUpdateSettings()}
 	if channel != current {
 		a.setKnownUpdate(nil)
 	}

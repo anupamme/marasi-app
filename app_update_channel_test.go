@@ -16,7 +16,7 @@ func TestSwitchingAReleaseBuildToNightlyChecksTheNightlyRightAway(t *testing.T) 
 	if err != nil {
 		t.Fatalf("switching to nightly: %v", err)
 	}
-	if change.Channel != "nightly" || change.Check == nil {
+	if change.Settings.Channel != "nightly" || change.Check == nil {
 		t.Fatalf("wanted the switch to nightly to check, got %+v", change)
 	}
 	check := change.Check
@@ -45,6 +45,9 @@ func TestWithNoChannelSavedTheAppFollowsItsBuildChannel(t *testing.T) {
 	if got := app.GetUpdateState().Channel; got != "nightly" {
 		t.Fatalf("wanted the build channel nightly, got %q", got)
 	}
+	if got := app.GetUpdateSettings().Channel; got != "nightly" {
+		t.Fatalf("wanted the settings to show the build channel nightly, got %q", got)
+	}
 	if content := readAppConfig(t, app.Config.ConfigDir); strings.Contains(content, "update_channel") {
 		t.Fatalf("wanted no channel written until one is chosen, got:\n%s", content)
 	}
@@ -66,6 +69,13 @@ func TestTheChosenChannelIsSavedAppWideAndSurvivesARestart(t *testing.T) {
 	restarted.build = app.build
 	if got := restarted.GetUpdateState().Channel; got != "nightly" {
 		t.Fatalf("wanted nightly after a restart, got %q", got)
+	}
+	settings, err := restarted.SetAutomaticUpdateChecks(false)
+	if err != nil {
+		t.Fatalf("turning automatic checks off: %v", err)
+	}
+	if settings.Channel != "nightly" || settings.AutomaticChecks {
+		t.Fatalf("wanted nightly with automatic checks off, got %+v", settings)
 	}
 }
 
@@ -138,7 +148,7 @@ func TestSwitchingANightlyToReleaseKeepsTheNightlyUntilALaterRelease(t *testing.
 			if err != nil {
 				t.Fatalf("switching to release: %v", err)
 			}
-			if change.Channel != "release" || change.Check != nil {
+			if change.Settings.Channel != "release" || change.Check != nil {
 				t.Fatalf("wanted the switch to release saved without a check, got %+v", change)
 			}
 			if got := releases.requestCount(); got != 0 {

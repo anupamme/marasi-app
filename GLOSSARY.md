@@ -81,3 +81,21 @@ _Avoid_: keybinding mode
 **Keybinding profile**:
 A named collection of bindings for Marasi menu actions that a researcher can select and customize. Factory defaults remain recoverable independently of those customizations.
 _Avoid_: Vim mode, Chrome profile
+
+### Updates
+
+**Channel**:
+The stream of builds an installed app follows: release or nightly. An app starts on the channel of the build that was installed, and a researcher can switch it. A development build has no channel.
+_Avoid_: track, ring, stable, beta
+
+**Release**:
+A build of Marasi App from main, named by the date it was cut.
+_Avoid_: main release, stable release
+
+**Nightly**:
+The latest daily build of Marasi App. Only one nightly exists at a time; each one replaces the last.
+_Avoid_: beta, preview, snapshot
+
+**Update**:
+A build on the app's channel that is newer than the running one and replaces it once the researcher installs it. It is never an older build; going back to an older release is a reinstall.
+_Avoid_: upgrade, patch; not to be confused with new matches

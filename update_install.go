@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"time"
 )
 
 // Installing an update (spec "Trust", "Replacement", "Relaunch"). The
@@ -503,4 +504,37 @@ func resolveInstallLocation(installer platformInstaller) string {
 		return ""
 	}
 	return location
+}
+
+// leftoverRemover is a platformInstaller whose install leaves the previous
+// version beside the install location until the next launch: Windows, which
+// cannot delete the .exe that is running.
+type leftoverRemover interface {
+	removeLeftovers(location string) error
+}
+
+// Removing a leftover is retried for a while: right after "Restart now" the
+// previous build may still be exiting and hold its file open.
+const (
+	leftoverAttempts   = 10
+	leftoverRetryDelay = time.Second
+)
+
+// removeUpdateLeftovers deletes what the last install left beside the
+// install location. startup runs it in the background on every launch.
+func (a *App) removeUpdateLeftovers() {
+	remover, ok := a.installer.(leftoverRemover)
+	if !ok || a.installLocation == "" {
+		return
+	}
+	var err error
+	for attempt := 1; attempt <= leftoverAttempts; attempt++ {
+		if err = remover.removeLeftovers(a.installLocation); err == nil {
+			return
+		}
+		if attempt < leftoverAttempts {
+			time.Sleep(leftoverRetryDelay)
+		}
+	}
+	log.Printf("removing the previous version left by an update: %v", err)
 }

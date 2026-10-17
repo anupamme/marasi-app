@@ -68,6 +68,11 @@ type App struct {
 	systemProxy func(*http.Request) (*url.URL, error)
 	// updates is the known update state.
 	updates updater
+	// updateSchedule runs the automatic checks (update_schedule.go).
+	updateSchedule updateScheduler
+	// updateTicker replaces the ticker automatic checks follow; nil uses a
+	// time.Ticker. Tests tick by hand.
+	updateTicker func(interval time.Duration) (<-chan time.Time, func())
 	// signingKey is the Marasi signing key updates must be signed with (ADR
 	// 0005), from the key built into the app; nil when the build has none,
 	// and then it cannot install updates.
@@ -161,6 +166,7 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	go a.removeUpdateLeftovers()
 	logHandler := NewLogHandler(ctx)
 	if a.attachFrontendLog != nil {
 		a.attachFrontendLog(logHandler.Handler())
@@ -184,6 +190,7 @@ func (a *App) startup(ctx context.Context) {
 		}),
 		marasi.WithLogger(logHandler),
 	)
+	a.startUpdateChecks(ctx)
 }
 func (a *App) ToggleFlag(name string) (*Config, error) {
 	err := a.Config.ToggleFlag(name)
@@ -357,9 +364,10 @@ func (a *App) prepareOpenedProject() {
 	}
 }
 func (a *App) close(ctx context.Context) {
+	a.stopUpdateChecks()
+	a.CancelUpdateDownload()
 	// Like the service's shutdown: end pending launches first, so their
 	// outcomes are written to the open project before the listener goes.
-	a.CancelUpdateDownload()
 	a.Proxy.InterruptLaunches()
 	_ = a.listener.Shutdown()
 	if a.projects != nil {

@@ -89,7 +89,7 @@ func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 		a.setKnownUpdate(nil)
 	}
 	if channel == channelNightly {
-		check := a.checkForUpdate(a.updateContext())
+		check := a.checkForUpdate(a.updateContext(), checkManual)
 		change.Check = &check
 	}
 	return change, nil

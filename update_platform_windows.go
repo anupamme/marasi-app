@@ -1,7 +1,7 @@
 package main
 
-// defaultInstaller is nil until Windows installs updates (ticket 08), so the
-// panel offers only the release page.
+// defaultInstaller installs marasi-app.exe by moving the running one aside;
+// the next launch removes the copy moved aside.
 func defaultInstaller() platformInstaller {
-	return nil
+	return exeInstaller{}
 }

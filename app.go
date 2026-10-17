@@ -62,6 +62,9 @@ type App struct {
 	// updateClient replaces the client update requests use; nil uses
 	// updateHTTPClient's.
 	updateClient *http.Client
+	// systemProxy finds the system proxy for an update request; nil reads
+	// the environment and the OS proxy settings. Tests point it at a proxy.
+	systemProxy func(*http.Request) (*url.URL, error)
 	// updates is the known update state.
 	updates updater
 	// updateSchedule runs the automatic checks (update_schedule.go).

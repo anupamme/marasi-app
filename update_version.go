@@ -10,8 +10,8 @@ import (
 // Version strings, as build_info.go sets them:
 //   - release: the tag, "DD.MM.YYYY" with an optional "-<suffix>" for a
 //     same-day re-release ("17.10.2026-1")
-//   - nightly: "DD.MM.YYYY (nightly <commit>)" (ordering added with the
-//     nightly channel)
+//   - nightly: "DD.MM.YYYY (nightly <commit>)", the short commit the build
+//     was made from
 
 // releaseDateLayout is the DD.MM.YYYY date that names a release.
 const releaseDateLayout = "02.01.2006"
@@ -110,3 +110,57 @@ func compareDigits(a, b string) int {
 }
 
 func isDigit(c byte) bool { return '0' <= c && c <= '9' }
+
+// nightlyVersion is a parsed nightly version string.
+type nightlyVersion struct {
+	date time.Time
+	// commit is the commit as the version string has it, usually the short
+	// hash.
+	commit string
+}
+
+// parseNightlyVersion parses "DD.MM.YYYY (nightly <commit>)".
+func parseNightlyVersion(s string) (nightlyVersion, bool) {
+	datePart, rest, ok := strings.Cut(s, " (nightly ")
+	if !ok {
+		return nightlyVersion{}, false
+	}
+	commit, ok := strings.CutSuffix(rest, ")")
+	if !ok || !isCommitHash(commit) {
+		return nightlyVersion{}, false
+	}
+	date, ok := parseReleaseDate(datePart)
+	if !ok {
+		return nightlyVersion{}, false
+	}
+	return nightlyVersion{date: date, commit: commit}, true
+}
+
+// isCommitHash reports whether s looks like a git commit hash, full or
+// shortened.
+func isCommitHash(s string) bool {
+	if len(s) < 4 || len(s) > 64 {
+		return false
+	}
+	for i := 0; i < len(s); i++ {
+		c := s[i]
+		if !isDigit(c) && (c < 'a' || c > 'f') && (c < 'A' || c > 'F') {
+			return false
+		}
+	}
+	return true
+}
+
+// sameCommit reports whether two hashes name the same commit, where either
+// may be shortened.
+func sameCommit(a, b string) bool {
+	a, b = strings.ToLower(a), strings.ToLower(b)
+	return strings.HasPrefix(a, b) || strings.HasPrefix(b, a)
+}
+
+// isUpdateFor reports whether the published nightly v is an update for the
+// running nightly: built from another commit, and dated the same day as the
+// running build or later. The same commit is never an update.
+func (v nightlyVersion) isUpdateFor(running nightlyVersion) bool {
+	return !sameCommit(v.commit, running.commit) && !v.date.Before(running.date)
+}

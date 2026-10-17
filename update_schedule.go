@@ -32,11 +32,11 @@ func (a *App) startUpdateChecks(ctx context.Context) {
 	}
 	ctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan struct{})
-	ticks, stopTicks := a.newUpdateTicker(updateCheckInterval)
 	go func(done chan struct{}) {
 		defer close(done)
-		defer stopTicks()
 		a.automaticCheck(ctx)
+		ticks, stopTicks := a.newUpdateTicker(updateCheckInterval)
+		defer stopTicks()
 		for {
 			select {
 			case <-ctx.Done():

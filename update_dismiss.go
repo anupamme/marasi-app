@@ -37,10 +37,8 @@ func (a *App) DismissUpdate() (UpdateState, error) {
 // identity tells builds apart for Dismiss: a release by its tag, a nightly by
 // its commit, since every nightly is tagged "nightly".
 func (u Update) identity() string {
-	if u.Channel == channelNightly {
-		if _, rest, ok := strings.Cut(u.Version, "(nightly "); ok {
-			return strings.TrimSuffix(strings.TrimSpace(rest), ")")
-		}
+	if u.Channel == channelNightly && u.Commit != "" {
+		return u.Commit
 	}
 	return u.Version
 }

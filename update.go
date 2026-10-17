@@ -163,6 +163,9 @@ func (a *App) checkForUpdate(ctx context.Context, kind checkKind) UpdateCheck {
 
 	update, err := a.findUpdate(ctx, channel)
 	switch {
+	case kind == checkAutomatic && errors.Is(err, errNoNightlyPublished):
+		// Most likely mid-publish: nothing to report until the next check.
+		check.Outcome = UpdateOutcomeNone
 	case err != nil:
 		check.Outcome = UpdateOutcomeFailed
 		check.Reason = err.Error()

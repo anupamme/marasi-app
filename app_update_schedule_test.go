@@ -16,18 +16,33 @@ import (
 type fakeUpdateTicker struct {
 	ticks    chan time.Time
 	interval time.Duration
+	// started closes when the automatic checks start ticking, which they do
+	// once the startup check has finished.
+	started chan struct{}
 }
 
 func withFakeUpdateTicker(app *App) *fakeUpdateTicker {
-	ticker := &fakeUpdateTicker{ticks: make(chan time.Time)}
+	ticker := &fakeUpdateTicker{ticks: make(chan time.Time), started: make(chan struct{})}
 	app.updateTicker = func(interval time.Duration) (<-chan time.Time, func()) {
 		ticker.interval = interval
+		close(ticker.started)
 		return ticker.ticks, func() {}
 	}
 	return ticker
 }
 
-// tick makes the next automatic check due.
+// waitForStartupCheck waits until the startup check has finished.
+func (f *fakeUpdateTicker) waitForStartupCheck(t *testing.T) {
+	t.Helper()
+	select {
+	case <-f.started:
+	case <-time.After(5 * time.Second):
+		t.Fatal("wanted the startup check finished")
+	}
+}
+
+// tick makes the next automatic check due. Ticking twice returns once the
+// first tick's check has finished.
 func (f *fakeUpdateTicker) tick(t *testing.T) {
 	t.Helper()
 	select {
@@ -45,18 +60,6 @@ func startAutomaticChecks(t *testing.T, app *App) {
 	t.Cleanup(app.stopUpdateChecks)
 }
 
-// waitForRequests waits until the release server has answered n requests.
-func waitForRequests(t *testing.T, releases *fakeReleaseServer, n int) {
-	t.Helper()
-	deadline := time.Now().Add(5 * time.Second)
-	for releases.requestCount() < n {
-		if time.Now().After(deadline) {
-			t.Fatalf("wanted %d requests to GitHub, got %v", n, releases.requested())
-		}
-		time.Sleep(time.Millisecond)
-	}
-}
-
 func TestAutomaticChecksRunAtStartupAndEverySixHours(t *testing.T) {
 	releases := newFakeReleaseServer(t)
 	releases.publishRelease("16.10.2026", "")
@@ -64,10 +67,16 @@ func TestAutomaticChecksRunAtStartupAndEverySixHours(t *testing.T) {
 	ticker := withFakeUpdateTicker(app)
 
 	startAutomaticChecks(t, app)
-	waitForRequests(t, releases, 1)
+	ticker.waitForStartupCheck(t)
+	if n := releases.requestCount(); n != 1 {
+		t.Fatalf("wanted a check at startup, got %v", releases.requested())
+	}
 	ticker.tick(t)
-	waitForRequests(t, releases, 2)
+	ticker.tick(t)
 
+	if n := releases.requestCount(); n != 2 {
+		t.Fatalf("wanted a check when the next 6 hours were up, got %v", releases.requested())
+	}
 	if ticker.interval != 6*time.Hour {
 		t.Fatalf("wanted checks every 6 hours, got every %v", ticker.interval)
 	}
@@ -77,11 +86,8 @@ func TestAutomaticCheckShowsTheUpdateItFinds(t *testing.T) {
 	releases := newFakeReleaseServer(t)
 	releases.publishRelease("17.10.2026", "")
 	app, events := newUpdateApp(t, "release", "16.10.2026", releases)
-	withFakeUpdateTicker(app)
 
-	startAutomaticChecks(t, app)
-	waitForRequests(t, releases, 1)
-	app.stopUpdateChecks()
+	runAutomaticCheck(t, app)
 
 	if !events.has(updateAvailableEvent) {
 		t.Fatalf("wanted %s emitted, got %v", updateAvailableEvent, events.names)
@@ -95,12 +101,9 @@ func TestFailedAutomaticCheckIsLoggedNeverShown(t *testing.T) {
 	releases := newFakeReleaseServer(t)
 	releases.fail(http.StatusBadGateway)
 	app, events := newUpdateApp(t, "release", "16.10.2026", releases)
-	withFakeUpdateTicker(app)
 	logged := captureLog(t)
 
-	startAutomaticChecks(t, app)
-	waitForRequests(t, releases, 1)
-	app.stopUpdateChecks()
+	runAutomaticCheck(t, app)
 
 	if len(events.names) != 0 {
 		t.Fatalf("wanted nothing shown, got events %v", events.names)
@@ -149,7 +152,7 @@ func TestTurningAutomaticChecksOffWhileRunningStopsTheNextCheck(t *testing.T) {
 	app, _ := newUpdateApp(t, "release", "16.10.2026", releases)
 	ticker := withFakeUpdateTicker(app)
 	startAutomaticChecks(t, app)
-	waitForRequests(t, releases, 1)
+	ticker.waitForStartupCheck(t)
 
 	if _, err := app.SetAutomaticUpdateChecks(false); err != nil {
 		t.Fatal(err)
@@ -214,7 +217,7 @@ func TestDismissedUpdateStaysHiddenFromAutomaticChecks(t *testing.T) {
 	}
 	events.names, events.data = nil, nil
 
-	runAutomaticCheck(t, app, releases)
+	runAutomaticCheck(t, app)
 
 	if events.has(updateAvailableEvent) {
 		t.Fatalf("wanted the dismissed update kept hidden, got %v", events.names)
@@ -234,7 +237,7 @@ func TestDismissedUpdateStaysHiddenAfterARestart(t *testing.T) {
 	}
 
 	restarted, events := restartedUpdateApp(t, app)
-	runAutomaticCheck(t, restarted, releases)
+	runAutomaticCheck(t, restarted)
 
 	if events.has(updateAvailableEvent) {
 		t.Fatalf("wanted the dismissed update kept hidden after a restart, got %v", events.names)
@@ -255,7 +258,7 @@ func TestNewerBuildThanTheDismissedOneShowsTheIndicatorAgain(t *testing.T) {
 	events.names, events.data = nil, nil
 
 	releases.publishRelease("18.10.2026", "")
-	runAutomaticCheck(t, app, releases)
+	runAutomaticCheck(t, app)
 
 	if !events.has(updateAvailableEvent) {
 		t.Fatalf("wanted the newer update shown, got %v", events.names)
@@ -282,7 +285,7 @@ func TestManualCheckShowsTheDismissedUpdateAgain(t *testing.T) {
 	}
 	// The manual check cleared the dismissal, so the next launch shows it too.
 	restarted, restartedEvents := restartedUpdateApp(t, app)
-	runAutomaticCheck(t, restarted, releases)
+	runAutomaticCheck(t, restarted)
 	if !restartedEvents.has(updateAvailableEvent) {
 		t.Fatalf("wanted the update shown after a restart, got %v", restartedEvents.names)
 	}
@@ -296,10 +299,60 @@ func TestIndicatorStaysUntilTheUpdateIsInstalledOrDismissed(t *testing.T) {
 
 	releases.unpublish("17.10.2026")
 	releases.publishRelease("16.10.2026", "")
-	runAutomaticCheck(t, app, releases)
+	runAutomaticCheck(t, app)
 
 	if state := app.GetUpdateState(); state.Status != UpdateStatusAvailable || state.Update == nil {
 		t.Fatalf("wanted the update still shown, got %+v", state)
+	}
+}
+
+func TestAutomaticCheckWithNoNightlyPublishedIsNoUpdate(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	releases.publishRelease("17.10.2026", "")
+	publishNightly(releases, "18.10.2026 (nightly def5678)", "def5678ffff0000")
+	app, events := newUpdateApp(t, "nightly", "17.10.2026 (nightly abc1234)", releases)
+	app.CheckForUpdate()
+	events.names, events.data = nil, nil
+	logged := captureLog(t)
+
+	releases.unpublish("nightly")
+	runAutomaticCheck(t, app)
+
+	if len(events.names) != 0 {
+		t.Fatalf("wanted nothing shown, got events %v", events.names)
+	}
+	if logged.String() != "" {
+		t.Fatalf("wanted a missing nightly treated as no update, got logged %q", logged.String())
+	}
+	if state := app.GetUpdateState(); state.Status != UpdateStatusAvailable || state.Update.Commit != "def5678ffff0000" {
+		t.Fatalf("wanted the known nightly still shown, got %+v", state)
+	}
+}
+
+func TestDismissedNightlyIsTheCommitNotTheTag(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	publishNightly(releases, "18.10.2026 (nightly def5678)", "def5678ffff0000")
+	app, events := newUpdateApp(t, "nightly", "17.10.2026 (nightly abc1234)", releases)
+	app.CheckForUpdate()
+	if _, err := app.DismissUpdate(); err != nil {
+		t.Fatal(err)
+	}
+
+	// The same commit published again stays dismissed.
+	releases.unpublish("nightly")
+	publishNightly(releases, "19.10.2026 (nightly def5678)", "def5678ffff0000")
+	events.names, events.data = nil, nil
+	runAutomaticCheck(t, app)
+	if events.has(updateAvailableEvent) {
+		t.Fatalf("wanted the dismissed commit kept hidden, got %v", events.names)
+	}
+
+	// A nightly from a new commit shows again.
+	releases.unpublish("nightly")
+	publishNightly(releases, "19.10.2026 (nightly 0123abc)", "0123abcffff0000")
+	runAutomaticCheck(t, app)
+	if !events.has(updateAvailableEvent) {
+		t.Fatalf("wanted the nightly from a new commit shown, got %v", events.names)
 	}
 }
 
@@ -318,12 +371,11 @@ func TestDismissWithNoUpdateDoesNothing(t *testing.T) {
 
 // runAutomaticCheck runs the startup check of app's automatic checks and
 // waits for it to finish.
-func runAutomaticCheck(t *testing.T, app *App, releases *fakeReleaseServer) {
+func runAutomaticCheck(t *testing.T, app *App) {
 	t.Helper()
-	withFakeUpdateTicker(app)
-	before := releases.requestCount()
+	ticker := withFakeUpdateTicker(app)
 	startAutomaticChecks(t, app)
-	waitForRequests(t, releases, before+1)
+	ticker.waitForStartupCheck(t)
 	app.stopUpdateChecks()
 }
 

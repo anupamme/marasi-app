@@ -12,11 +12,15 @@ import (
 // than the running one. The frontend reaches this module only through the
 // bound App methods below and the events they emit.
 //
-// Files:
-//   - update.go: the state held by App, the bound methods and events
-//   - update_source.go: reading releases from the GitHub releases API
-//   - update_version.go: which build counts as newer
-//   - update_client.go: the HTTP client update requests use
+// The update_*.go files group as:
+//   - checking: update.go (state, checks, events), update_source.go,
+//     update_nightly.go, update_version.go, and update_client.go with
+//     update_system_proxy*.go for the HTTP client;
+//   - settings: update_settings.go, update_channel.go, update_dismiss.go,
+//     update_schedule.go (automatic checks);
+//   - installing: update_install.go (the shared pipeline), update_verify.go,
+//     update_reinstall.go, and the per-platform update_install_*.go,
+//     update_platform_*.go and update_relaunch_*.go.
 
 // defaultReleaseSource is the GitHub releases API of the Marasi App
 // repository. App.releaseSource holds it so tests can serve releases from a

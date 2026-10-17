@@ -356,6 +356,20 @@ func TestDismissedNightlyIsTheCommitNotTheTag(t *testing.T) {
 	}
 }
 
+func TestAnInstalledUpdateCannotBeDismissed(t *testing.T) {
+	app, _ := newInstalledApp(t)
+
+	state, err := app.DismissUpdate()
+
+	if err == nil || state.Status != UpdateStatusRestartPending {
+		t.Fatalf("wanted Dismiss refused with a restart pending, got %+v (%v)", state, err)
+	}
+	restarted, _ := restartedUpdateApp(t, app)
+	if restarted.Config.dismissedUpdate != "" {
+		t.Fatalf("wanted nothing dismissed in config, got %q", restarted.Config.dismissedUpdate)
+	}
+}
+
 func TestDismissWithNoUpdateDoesNothing(t *testing.T) {
 	releases := newFakeReleaseServer(t)
 	releases.publishRelease("17.10.2026", "")

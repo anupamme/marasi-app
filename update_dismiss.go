@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"fmt"
 	"log"
 	"strings"
@@ -19,12 +20,18 @@ const dismissedUpdateKey = "dismissed_update"
 
 // DismissUpdate hides the available update until a newer build is published,
 // and returns the update state without it. With no update available it does
-// nothing. On error the update stays available.
+// nothing. An update downloading or installed cannot be dismissed. On error
+// the update stays as it was.
 func (a *App) DismissUpdate() (UpdateState, error) {
 	a.updates.mu.Lock()
-	update := a.updates.update
+	update, status := a.updates.update, a.updates.status
 	a.updates.mu.Unlock()
-	if update == nil {
+	switch {
+	case status == UpdateStatusDownloading:
+		return a.GetUpdateState(), errors.New("the update is downloading; cancel the download first")
+	case status == UpdateStatusRestartPending:
+		return a.GetUpdateState(), errors.New("the update is installed and runs at the next launch")
+	case update == nil:
 		return a.GetUpdateState(), nil
 	}
 	if err := a.Config.setDismissedUpdate(update.identity()); err != nil {

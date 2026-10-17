@@ -17,6 +17,8 @@ export const FETCH_SIZE = 500;
 export const WINDOW = 10;
 /** Children each "Show more" adds. */
 export const STEP = 50;
+/** Levels per ListSitemapLevels call: Marasi's MaxSitemapLevels. */
+const MAX_LEVELS = 64;
 /** Pairs whose response is still awaited, kept to count their 5xx. */
 const MAX_PENDING = 5000;
 
@@ -60,7 +62,7 @@ export function hostCountLabel(state) {
 
 /**
  * The dock's rows, top to bottom:
- *   { kind: "node", node, depth, parent, open, loading, matching, dimmed, stale }
+ *   { kind: "node", node, depth, open, loading, matching, dimmed, stale }
  *   { kind: "more", parent, depth, hidden, partial }  (partial: more pages follow)
  *   { kind: "loading", depth } / { kind: "failed", parent, depth }
  * `matching` is the node's matching count in All traffic with a query,
@@ -99,7 +101,6 @@ export function sitemapRows(state, find = "") {
         kind: "node",
         node,
         depth,
-        parent,
         open,
         loading: !!childLevel?.loading,
         matching,
@@ -233,21 +234,12 @@ export function createSitemapStore(api) {
     );
   }
 
-  // The levels whose rows the dock shows on screen (setVisible).
-  let visible = [];
-
-  // A level's depth: 0 for the origins, 1 for a host, then one per segment.
-  const depthOf = (name) => (name === "" ? 0 : name.replace(/^[a-z]+:\/\//i, "").split("/").length);
-  const deepestFirst = (names) =>
-    names.map((name, i) => [name, i]).sort((a, b) => depthOf(b[0]) - depthOf(a[0]) || a[1] - b[1]).map(([n]) => n);
-
   /**
    * Reads the origins and every open level again, keeping how many each
-   * shows; their counts show as stale until read. Marasi answers one call
-   * at a time, so the reads go one by one in an order the researcher
-   * sees: the levels in view first, then the rest, deepest first in each
-   * (the counts read most closely), and a newer reload skips the ones not
-   * yet sent. Closed levels are dropped and read when they next open.
+   * shows; their counts show as stale until the answer lands. One
+   * ListSitemapLevels call reads them all (Marasi resolves the query once
+   * for the lot), in groups of MAX_LEVELS; a newer reload's answer wins.
+   * Closed levels are dropped and read when they next open.
    */
   function reload() {
     const gen = ++generation;
@@ -260,21 +252,50 @@ export function createSitemapStore(api) {
     }
     update((state) => ({ ...state, levels }));
     if (!ready || (query && !asOf)) return Promise.resolve();
-    const seen = new Set(visible.filter((name) => names.includes(name)));
-    const order = [...deepestFirst([...seen]), ...deepestFirst(names.filter((name) => !seen.has(name)))];
-    return track(
-      (async () => {
-        for (const name of order) {
-          if (gen !== generation) return;
-          await fetchLevel(name);
-        }
-      })(),
-    );
+    const groups = [];
+    for (let i = 0; i < names.length; i += MAX_LEVELS) groups.push(names.slice(i, i + MAX_LEVELS));
+    return Promise.all(groups.map((group) => fetchLevels(group, gen)));
   }
 
-  /** The dock's levels whose rows are on screen, to read first. */
-  function setVisible(names) {
-    visible = [...names];
+  // Reads the first page of each of `names` in one call.
+  function fetchLevels(names, gen) {
+    const { Node, Cursor, ...shared } = request("", null);
+    for (const name of names) {
+      updateLevel(name, (level) => ({ children: [], cursor: null, shown: WINDOW, ...level, loading: true, failed: false }));
+    }
+    return track(
+      api
+        .listSitemapLevels({ ...shared, Nodes: names, Cursors: {} })
+        .then((result) => {
+          if (gen !== generation) return;
+          if (result?.QueryError) throw new Error(result.QueryError.Message);
+          const byNode = new Map((result?.Levels ?? []).map((level) => [level.Node, level]));
+          update((state) => {
+            const next = { ...state.levels };
+            for (const name of names) {
+              const page = byNode.get(name);
+              next[name] = {
+                ...next[name],
+                children: page?.Children ?? [],
+                cursor: page?.NextCursor ?? null,
+                loading: false,
+                failed: false,
+                stale: false,
+              };
+            }
+            return { ...state, complete: result?.Complete ?? true, levels: next };
+          });
+        })
+        .catch((err) => {
+          if (gen !== generation) return;
+          console.error("Reading the sitemap levels failed:", err);
+          update((state) => {
+            const next = { ...state.levels };
+            for (const name of names) next[name] = { ...next[name], loading: false, failed: true, stale: false };
+            return { ...state, levels: next };
+          });
+        }),
+    );
   }
 
   function sameContext(a, b) {
@@ -413,7 +434,6 @@ export function createSitemapStore(api) {
     subscribe,
     setContext,
     setScope,
-    setVisible,
     reload,
     toggle,
     showMore,

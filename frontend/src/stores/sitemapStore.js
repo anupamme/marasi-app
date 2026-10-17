@@ -1,7 +1,7 @@
 // The app's sitemap store, bound to the Wails backend and following the
 // Ledger store. The logic lives in createSitemapStore.js, which tests load
 // with a fake API.
-import { ListSitemapChildren } from "../lib/wailsjs/go/main/App";
+import { ListSitemapChildren, ListSitemapLevels } from "../lib/wailsjs/go/main/App";
 import { createSitemapStore } from "./createSitemapStore.js";
 import { FLUSH_INTERVAL_MS } from "./createLedgerStore.js";
 import { ledgerStore } from "./ledgerStore";
@@ -12,6 +12,9 @@ export const sitemapStore = createSitemapStore({
   // { Node, Cursor, Limit, Query, AsOf, Matching, Exclusion } →
   // { Children, NextCursor, Complete, Missing, QueryError }.
   listSitemapChildren: (request) => ListSitemapChildren(request),
+  // { Nodes, Cursors, Limit, Query, AsOf, Matching, Exclusion } →
+  // { Levels: [{ Node, Children, NextCursor, Missing }], Complete, QueryError }.
+  listSitemapLevels: (request) => ListSitemapLevels(request),
 });
 
 // The running query, its results' as_of and the exclusion, which each read

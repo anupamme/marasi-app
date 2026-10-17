@@ -5,7 +5,7 @@
 	// the eye-off button leaves it out. Rows come from the sitemap store
 	// (sitemapRows); this component only renders.
 	import { modeCurrent } from "@skeletonlabs/skeleton";
-	import { afterUpdate, createEventDispatcher } from "svelte";
+	import { createEventDispatcher } from "svelte";
 	import {
 		ChevronDown,
 		ChevronRight,
@@ -47,27 +47,6 @@
 	const staleCount = "ledger-sitemap-stale animate-pulse !opacity-30";
 	const STALE_TIP = "Updating for the current query…";
 
-	// Tells the store which levels have rows on screen, so a reload reads
-	// those first.
-	let scroller;
-	let reportPending = false;
-	function reportVisible() {
-		if (reportPending || !scroller) return;
-		reportPending = true;
-		requestAnimationFrame(() => {
-			reportPending = false;
-			const box = scroller.getBoundingClientRect();
-			const parents = [];
-			for (const el of scroller.querySelectorAll("[data-sitemap-parent]")) {
-				const r = el.getBoundingClientRect();
-				if (r.bottom < box.top || r.top > box.bottom) continue;
-				const parent = el.dataset.sitemapParent;
-				if (!parents.includes(parent)) parents.push(parent);
-			}
-			store.setVisible(parents);
-		});
-	}
-	afterUpdate(reportVisible);
 	// The ghost rows' bars, as in the table's ghost rows.
 	const ghostBar = "block h-2 animate-pulse rounded-sm bg-surface-300 dark:bg-surface-600";
 	$: hosts = hostCountLabel(state);
@@ -145,11 +124,7 @@
 		</div>
 	</header>
 
-	<div
-		bind:this={scroller}
-		on:scroll={reportVisible}
-		class="lp-scroll no-select min-h-0 flex-1 overflow-y-auto pb-10 font-mono text-[11px]"
-	>
+	<div class="lp-scroll no-select min-h-0 flex-1 overflow-y-auto pb-10 font-mono text-[11px]">
 		{#each rows as row}
 			{#if row.kind === "more"}
 				<div
@@ -180,7 +155,6 @@
 				{@const hidden = isSitemapExcluded(queryText, n.Name)}
 				<div
 					data-sitemap-node={n.Name}
-					data-sitemap-parent={row.parent}
 					class="ledger-sitemap-node group flex items-center gap-1 border-l-4 pr-2 {origin
 						? 'py-1 font-sans text-xs'
 						: 'py-[2px]'} {origin && row.open ? 'sticky top-0 z-10' : ''} {active

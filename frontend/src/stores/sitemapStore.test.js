@@ -26,10 +26,26 @@ function fakeApi({ tree = {}, matching = {}, complete = true } = {}) {
   const calls = [];
   const api = {
     calls,
+    levelCalls: [],
     tree,
     complete,
-    listSitemapChildren: async (request) => {
-      calls.push(request);
+    // One call for several nodes: each node's first page, or its cursor's.
+    listSitemapLevels: async (request) => {
+      api.levelCalls.push(request);
+      const levels = [];
+      let done = true;
+      for (const node of request.Nodes) {
+        const page = await api.listSitemapChildren(
+          { ...request, Node: node, Cursor: request.Cursors?.[node] ?? "" },
+          { record: false },
+        );
+        done &&= page.Complete;
+        levels.push({ Node: node, Children: page.Children, NextCursor: page.NextCursor, Missing: page.Missing });
+      }
+      return { Levels: levels, Complete: done };
+    },
+    listSitemapChildren: async (request, { record = true } = {}) => {
+      if (record) calls.push(request);
       const source = request.Matching ? matching : api.tree;
       if (!(request.Node in source) && request.Node !== "") {
         return { Children: [], NextCursor: null, Complete: true, Missing: true };
@@ -73,13 +89,13 @@ test("the origins load once the ledger's first rows have", async () => {
 
   store.setContext({ ...LIVE, ready: false });
   await store.settled();
-  assert.equal(api.calls.length, 0);
+  assert.equal(api.levelCalls.length, 0);
 
   store.setContext(LIVE);
   await store.settled();
   assert.deepEqual(nodeRows(get(store)), [API, "https://www.acme.test"]);
-  assert.deepEqual(api.calls, [
-    { Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "", AsOf: "", Matching: false, Exclusion: [] },
+  assert.deepEqual(api.levelCalls, [
+    { Nodes: [""], Cursors: {}, Limit: FETCH_SIZE, Query: "", AsOf: "", Matching: false, Exclusion: [] },
   ]);
   assert.equal(hostCountLabel(get(store)), "2 hosts");
 
@@ -87,7 +103,7 @@ test("the origins load once the ledger's first rows have", async () => {
   store.setContext({ ...LIVE, ready: false });
   store.setContext(LIVE);
   await store.settled();
-  assert.equal(api.calls.length, 1);
+  assert.equal(api.levelCalls.length, 1);
 });
 
 test("the sitemap reads under the ledger's exclusion, not whatever is stored yet", async () => {
@@ -95,7 +111,7 @@ test("the sitemap reads under the ledger's exclusion, not whatever is stored yet
   const store = await loadedStore(api);
   store.setContext({ ...LIVE, exclusion: ["image/*"] });
   await store.settled();
-  assert.deepEqual(api.calls.at(-1).Exclusion, ["image/*"]);
+  assert.deepEqual(api.levelCalls.at(-1).Exclusion, ["image/*"]);
 });
 
 test("each level shows its busiest 10 children, then N more, 50 at a time", async () => {
@@ -194,15 +210,15 @@ test("Matching the query is only in effect while a query runs, with its results'
   store.setContext({ ...LIVE, query: "status_code >= 500", asOf: "pair-9" });
   await store.settled();
   assert.equal(sitemapScope(get(store)), "matching");
-  assert.deepEqual(api.calls.at(-1), {
-    Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "status_code >= 500", AsOf: "pair-9", Matching: true, Exclusion: [],
+  assert.deepEqual(api.levelCalls.at(-1), {
+    Nodes: [""], Cursors: {}, Limit: FETCH_SIZE, Query: "status_code >= 500", AsOf: "pair-9", Matching: true, Exclusion: [],
   });
   assert.deepEqual(nodeRows(get(store)), [API]);
 
   store.setContext(LIVE);
   await store.settled();
   assert.equal(sitemapScope(get(store)), "all");
-  assert.equal(api.calls.at(-1).Matching, false);
+  assert.equal(api.levelCalls.at(-1).Matching, false);
   assert.deepEqual(nodeRows(get(store)), [API, "https://www.acme.test"]);
 });
 
@@ -210,7 +226,7 @@ test("All traffic with a query asks for matching counts and dims nodes without m
   const api = fakeApi({ tree: { "": [child(API, 5, { matching: 2 }), child("https://www.acme.test", 2, { matching: 0 })] } });
   const store = await loadedStore(api, { ...LIVE, query: "note:*", asOf: "pair-3" });
 
-  assert.deepEqual(api.calls.at(-1), { Node: "", Cursor: "", Limit: FETCH_SIZE, Query: "note:*", AsOf: "pair-3", Matching: false, Exclusion: [] });
+  assert.deepEqual(api.levelCalls.at(-1), { Nodes: [""], Cursors: {}, Limit: FETCH_SIZE, Query: "note:*", AsOf: "pair-3", Matching: false, Exclusion: [] });
   const rows = sitemapRows(get(store)).filter((row) => row.kind === "node");
   assert.deepEqual(
     rows.map((row) => [row.node.Segment, row.matching, row.dimmed]),
@@ -231,21 +247,27 @@ test("the open levels reload when the query, its as_of or the exclusion changes,
   store.setContext({ ...LIVE, asOf: "pair-4" });
   store.setContext({ ...LIVE, asOf: "pair-5" });
   await store.settled();
-  // Deepest first: an open level's counts before its parent's.
-  assert.deepEqual(api.calls.slice(before).map((call) => call.Node), [API, ""]);
+  // One call reads every open level.
+  assert.deepEqual(api.levelCalls.slice(-1).map((call) => call.Nodes), [["", API]]);
+  const levelsBefore = api.levelCalls.length;
 
   store.setContext({ ...LIVE, asOf: "pair-6" });
   await store.settled();
-  assert.equal(api.calls.length, before + 2);
+  assert.equal(api.levelCalls.length, levelsBefore);
 
   store.setContext({ ...LIVE, asOf: "pair-6", exclusion: ["image/*"] });
   await store.settled();
-  assert.equal(api.calls.length, before + 4);
+  assert.equal(api.levelCalls.length, levelsBefore + 1);
 
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-6", exclusion: ["image/*"] });
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-7", exclusion: ["image/*"] });
   await store.settled();
-  assert.deepEqual(api.calls.slice(-2).map((call) => [call.Node, call.AsOf]), [[API, "pair-7"], ["", "pair-7"]]);
+  assert.deepEqual(
+    api.levelCalls.slice(-1).map((call) => [call.Nodes, call.AsOf]),
+    [[["", API], "pair-7"]],
+    "the newest reload's answer is the one shown",
+  );
+  assert.equal(api.calls.length, before, "no single-level reads");
 });
 
 test("the header warns while Marasi's sitemap is still building", async () => {
@@ -339,7 +361,7 @@ test("a reload reads only the open levels; a closed one reads again when it next
 
   store.reload();
   await store.settled();
-  assert.deepEqual(api.calls.slice(-1).map((call) => call.Node), [""]);
+  assert.deepEqual(api.levelCalls.at(-1).Nodes, [""]);
 
   store.toggle(API);
   await store.settled();
@@ -352,19 +374,22 @@ test("a reload reads only the open levels; a closed one reads again when it next
 function gatedApi(base) {
   const waiting = [];
   let inFlight = 0;
+  const gate = (read) => (request) =>
+    new Promise((resolve) => {
+      inFlight++;
+      api.maxInFlight = Math.max(api.maxInFlight, inFlight);
+      waiting.push(() => {
+        inFlight--;
+        resolve(read(request));
+      });
+    });
   const api = {
     calls: base.calls,
+    levelCalls: base.levelCalls,
     maxInFlight: 0,
     waiting,
-    listSitemapChildren: (request) =>
-      new Promise((resolve) => {
-        inFlight++;
-        api.maxInFlight = Math.max(api.maxInFlight, inFlight);
-        waiting.push(() => {
-          inFlight--;
-          resolve(base.listSitemapChildren(request));
-        });
-      }),
+    listSitemapChildren: gate(base.listSitemapChildren),
+    listSitemapLevels: gate(base.listSitemapLevels),
     async releaseAll() {
       while (waiting.length) {
         waiting.shift()();
@@ -393,15 +418,12 @@ async function openTree(api) {
   return store;
 }
 
-test("a reload shows each level's old counts as stale until its own read lands", async () => {
+test("a reload shows the open levels' old counts as stale until its read lands", async () => {
   const api = gatedApi(fakeApi({ tree: TREE }));
   const store = await openTree(api);
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-9" });
   const stale = () => sitemapRows(get(store)).filter((r) => r.kind === "node" && r.stale).map((r) => r.node.Segment);
-  assert.deepEqual(stale(), [API, "v2", "users", "v1", "items"], "every loaded count is stale at first");
-  api.waiting.shift()();
-  await new Promise((r) => setTimeout(r, 0));
-  assert.equal(stale().length, 4, "one level's counts are fresh once its read lands");
+  assert.deepEqual(stale(), [API, "v2", "users", "v1", "items"], "every loaded count is stale until the read lands");
   await api.releaseAll();
   assert.deepEqual(stale(), []);
 });
@@ -416,31 +438,30 @@ test("showing more of a level doesn't mark its counts stale", async () => {
   await store.settled();
 });
 
-test("a reload reads one level at a time, the levels in view first and deepest first", async () => {
-  const api = gatedApi(fakeApi({ tree: TREE }));
-  const store = await openTree(api);
-  const before = api.calls.length;
-  api.maxInFlight = 0;
-  store.setVisible([`${API}/v1`, ""]);
+test("a reload reads every open level in one call, in groups of 64", async () => {
+  const names = Array.from({ length: 70 }, (_, i) => `${API}/n${i}`);
+  const tree = { "": [child(API, 70, { hasChildren: true })], [API]: names.map((n) => child(n, 1, { hasChildren: true })) };
+  for (const n of names) tree[n] = [child(`${n}/leaf`, 1)];
+  const api = fakeApi({ tree });
+  const store = await loadedStore(api);
+  store.toggle(API);
+  for (const n of names) store.toggle(n);
+  await store.settled();
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-9" });
-  await api.releaseAll();
-  assert.equal(api.maxInFlight, 1, "one read at a time");
-  assert.deepEqual(
-    api.calls.slice(before).map((c) => c.Node),
-    [`${API}/v1`, "", V2, API],
-    "in view first, deepest first, then the rest deepest first",
-  );
+  await store.settled();
+  assert.deepEqual(api.levelCalls.slice(-2).map((c) => c.Nodes.length), [64, 8]);
+  assert.ok(sitemapRows(get(store)).every((r) => !r.stale));
 });
 
-test("a newer reload skips the older one's reads that haven't started", async () => {
-  const api = gatedApi(fakeApi({ tree: TREE }));
+test("an older reload's answer arriving after a newer one's is dropped", async () => {
+  const api = gatedApi(fakeApi({ tree: TREE, matching: { "": [child(API, 1)] } }));
   const store = await openTree(api);
-  const before = api.calls.length;
   store.setContext({ ...LIVE, query: "a:*", asOf: "pair-9" });
-  store.setContext({ ...LIVE, query: "b:*", asOf: "pair-9" });
+  store.setScope("matching");
+  // Answer the newer (Matching) read first, then the older one.
+  api.waiting.pop()();
+  await new Promise((r) => setTimeout(r, 0));
   await api.releaseAll();
-  const queries = api.calls.slice(before).map((c) => c.Query);
-  assert.equal(queries.filter((q) => q === "a:*").length, 1, "only the read already sent for a:*");
-  assert.equal(queries.filter((q) => q === "b:*").length, 4);
+  assert.deepEqual(nodeRows(get(store)), [API]);
   assert.deepEqual(sitemapRows(get(store)).filter((r) => r.stale), []);
 });

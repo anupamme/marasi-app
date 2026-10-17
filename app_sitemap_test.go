@@ -159,3 +159,57 @@ func TestListSitemapChildrenUsesTheExclusionTheRequestGives(t *testing.T) {
 		t.Fatalf("wanted an empty exclusion to hide nothing %q, got %q", want, got)
 	}
 }
+
+func TestListSitemapLevelsReadsSeveralLevelsInOneCall(t *testing.T) {
+	app := newScratchpadApp(t)
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/v2/users", statusCode: 500, contentType: "application/json"})
+	capturePair(t, app, capturedPair{host: "api.acme.test", path: "/v2/orders", statusCode: 200, contentType: "application/json"})
+	asOf := capturePair(t, app, capturedPair{host: "www.acme.test", path: "/", statusCode: 200, contentType: "text/html"})
+
+	for _, tc := range []struct {
+		matching bool
+		want     map[string]string
+	}{
+		{false, map[string]string{
+			"":                         "https://api.acme.test 2/1 matching=1+, https://www.acme.test 1/0 matching=0",
+			"https://api.acme.test/v2": "users 1/1 matching=1, orders 1/0 matching=0",
+			"https://gone.acme.test":   "missing",
+		}},
+		// Matching mode counts only the matches, as ListSitemapChildren does.
+		{true, map[string]string{
+			"":                         "https://api.acme.test 1/1+",
+			"https://api.acme.test/v2": "users 1/1",
+			"https://gone.acme.test":   "missing",
+		}},
+	} {
+		result, err := app.ListSitemapLevels(SitemapLevelsRequest{
+			Nodes: []string{"", "https://api.acme.test/v2", "https://gone.acme.test"}, Query: `status_code >= 500`, AsOf: asOf.String(), Matching: tc.matching,
+		})
+		if err != nil || result.QueryError != nil {
+			t.Fatalf("matching=%v: %v %+v", tc.matching, err, result.QueryError)
+		}
+		if len(result.Levels) != 3 {
+			t.Fatalf("matching=%v: wanted 3 levels, got %d", tc.matching, len(result.Levels))
+		}
+		for _, level := range result.Levels {
+			got := formatSitemap(level.Children)
+			if level.Missing {
+				got = "missing"
+			}
+			if got != tc.want[level.Node] {
+				t.Fatalf("matching=%v %q: wanted %q, got %q", tc.matching, level.Node, tc.want[level.Node], got)
+			}
+		}
+	}
+}
+
+func TestListSitemapLevelsReportsAnInvalidQuery(t *testing.T) {
+	app := newScratchpadApp(t)
+	asOf := capturePair(t, app, capturedPair{host: "api.acme.test", path: "/a", statusCode: 200, contentType: "application/json"})
+
+	result, err := app.ListSitemapLevels(SitemapLevelsRequest{Nodes: []string{""}, Query: `nope ==`, AsOf: asOf.String()})
+
+	if err != nil || result.QueryError == nil {
+		t.Fatalf("wanted a query error, got %v %+v", err, result)
+	}
+}

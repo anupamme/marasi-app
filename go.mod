@@ -3,6 +3,7 @@ module github.com/tfkr-ae/marasi-app
 go 1.26.0
 
 require (
+	aead.dev/minisign v0.3.0
 	github.com/google/martian v2.1.0+incompatible
 	github.com/spf13/viper v1.21.0
 	github.com/wailsapp/wails/v2 v2.10.1

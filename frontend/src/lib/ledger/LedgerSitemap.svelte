@@ -57,7 +57,8 @@
 
 	function onFindKeydown(event) {
 		event.stopPropagation();
-		if (event.key === "Escape") find = "";
+		// Escape leaves the box; the × clears it.
+		if (event.key === "Escape") findInput?.blur();
 	}
 </script>
 

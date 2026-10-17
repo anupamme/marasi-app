@@ -10,7 +10,7 @@
 	import { Decoration, EditorView, keymap, placeholder } from "@codemirror/view";
 	import { Compartment, EditorState, Prec, StateEffect, StateField } from "@codemirror/state";
 	import { ChevronsDownUp, ChevronsUpDown } from "lucide-svelte";
-	import { autocompletion, completionStatus, startCompletion } from "@codemirror/autocomplete";
+	import { autocompletion, startCompletion } from "@codemirror/autocomplete";
 	import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 	import { tags } from "@lezer/highlight";
 	import { explicitCompletion, fieldNamed, queryErrorRange, querySuggestions } from "../ledgerQueryEditor";
@@ -160,6 +160,19 @@
 						{ key: "Ctrl-Space", run: requestCompletion },
 						{ mac: "Alt-`", run: requestCompletion },
 					])),
+					// Escape leaves the box, suggestions open or not (leaving
+					// closes them), and stays with it, as it did with the input.
+					// Ahead of the suggestion keymap, which would only close them.
+					Prec.highest(
+						EditorView.domEventHandlers({
+							keydown: (event, v) => {
+								if (event.key !== "Escape") return false;
+								event.stopPropagation();
+								v.contentDOM.blur();
+								return true;
+							},
+						}),
+					),
 					autocompletion({ override: [completionSource], icons: false }),
 					wrapping.of([]),
 					// One line only: line breaks from typing or pasting become spaces.
@@ -168,20 +181,10 @@
 							? [tr, { changes: { from: 0, to: tr.newDoc.length, insert: tr.newDoc.toString().replace(/\n/g, " ") }, sequential: true }]
 							: tr,
 					),
-					// After the suggestion keymap, so Enter and Escape act on
-					// an open suggestion list first.
-					Prec.high(
-						keymap.of([
-							{ key: "Enter", run: () => (dispatch("run"), true) },
-							{ key: "Escape", run: (v) => (completionStatus(v.state) ? false : (v.contentDOM.blur(), true)) },
-						]),
-					),
+					// After the suggestion keymap, so Enter acts on an open
+					// suggestion list first.
+					Prec.high(keymap.of([{ key: "Enter", run: () => (dispatch("run"), true) }])),
 					EditorView.domEventHandlers({
-						// Escape stays with the query box, as it did with the input.
-						keydown: (event) => {
-							if (event.key === "Escape") event.stopPropagation();
-							return false;
-						},
 						focus: (_event, v) => {
 							if (!v.state.doc.length) setTimeout(() => requestCompletion(v));
 						},

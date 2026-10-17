@@ -24,7 +24,8 @@
 		// Scrolling stops at the editor's edges: no bounce past them and no
 		// scroll passed on to the page.
 		".cm-scroller": { overflow: "auto", overscrollBehavior: "contain" },
-		// The first line sits flush against the drawer's top border.
+		// The pane around the editor keeps the first line off the drawer's
+		// top line.
 		".cm-content": { paddingTop: "0" },
 	};
 </script>

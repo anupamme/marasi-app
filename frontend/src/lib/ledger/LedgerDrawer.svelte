@@ -105,6 +105,11 @@
 	$: hasResponse = Boolean(bodies.response);
 
 	const message = "p-3 text-[11px] opacity-50";
+	// The panes start a few pixels below the drawer's red top line, on the
+	// editors' own background: WebKit snaps an editor's scrolling layer to
+	// device pixels apart from the line, so text flush against it could paint
+	// over it.
+	const paneBox = "relative min-w-0 flex-1 pt-[3px] bg-white dark:bg-[#282c34]";
 </script>
 
 <div class="ledger-drawer flex h-full min-h-0 bg-surface-50 text-[11px] dark:bg-surface-900">
@@ -137,7 +142,7 @@
 	/>
 	<div class="flex min-w-0 flex-1 flex-col">
 		<div class="flex min-h-0 flex-1">
-			<div class="ledger-drawer-request relative min-w-0 flex-1">
+			<div class="ledger-drawer-request {paneBox}">
 				{#if details === undefined}
 					<p class={message}>Loading…</p>
 				{:else if details === null}
@@ -150,7 +155,7 @@
 					/>
 				{/if}
 			</div>
-			<div class="ledger-drawer-response relative flex min-w-0 flex-1 flex-col border-l border-surface-300-600-token">
+			<div class="ledger-drawer-response {paneBox} flex flex-col border-l border-surface-300-600-token">
 				{#if pane === "note"}
 					{#if note === null}
 						<p class={message}>Loading the note…</p>

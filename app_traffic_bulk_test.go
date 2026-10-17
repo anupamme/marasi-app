@@ -2,7 +2,9 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"slices"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -207,5 +209,25 @@ func TestDeleteTrafficReportsAnInvalidQuery(t *testing.T) {
 	}
 	if got := countTraffic(t, app, "", "").Count; got != 1 {
 		t.Fatalf("wanted nothing deleted, got %d left", got)
+	}
+}
+
+func TestBulkOpsReportAQuerySelectionRefusedWhileTheIndexBuilds(t *testing.T) {
+	app := newLegacyTrafficApp(t)
+	asOf, err := uuid.NewV7()
+	if err != nil {
+		t.Fatalf("creating as_of: %v", err)
+	}
+
+	n, err := app.SetHighlight(querySelection(t, `"acme"`, asOf), 3)
+
+	if n != 0 || !errors.Is(err, domain.ErrSelectionIncomplete) {
+		t.Fatalf("wanted ErrSelectionIncomplete and nothing changed, got %d, %v", n, err)
+	}
+	if !strings.Contains(err.Error(), "selection_incomplete (traffic_index") {
+		t.Fatalf("wanted the selection_incomplete code and its jobs in %q", err)
+	}
+	if _, err := app.SetHighlight(querySelection(t, `host = "api.acme.test"`, asOf), 3); err != nil {
+		t.Fatalf("a query without a text term still applies while the index builds: %v", err)
 	}
 }

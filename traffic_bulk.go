@@ -1,7 +1,9 @@
 package main
 
 import (
+	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tfkr-ae/marasi/domain"
@@ -39,13 +41,29 @@ func (target TrafficLinkTarget) domainTarget() (domain.LinkTarget, error) {
 	return domain.LinkTarget{Kind: kind, ID: id}, nil
 }
 
+// selectionIncomplete starts the error a bulk operation returns when Marasi
+// refuses a query selection because a job its query depends on is still
+// building: "selection_incomplete (traffic_index, annotation_index)". The
+// frontend reads the code and the jobs from the message (Wails passes only
+// the text) and offers to try again.
+const selectionIncomplete = "selection_incomplete"
+
 // bulk runs one of Marasi's bulk operations and wraps its error with what.
+// A refused query selection changes nothing and reads as selectionIncomplete.
 func (a *App) bulk(what string, op func(domain.TrafficRepository) (int, error)) (int, error) {
 	traffic, err := a.Proxy.GetTrafficRepo()
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", what, err)
 	}
 	n, err := op(traffic)
+	var incomplete *domain.SelectionIncompleteError
+	if errors.As(err, &incomplete) {
+		jobs := make([]string, len(incomplete.Jobs))
+		for i, job := range incomplete.Jobs {
+			jobs[i] = string(job)
+		}
+		return 0, fmt.Errorf("%s: %s (%s): %w", what, selectionIncomplete, strings.Join(jobs, ", "), err)
+	}
 	if err != nil {
 		return 0, fmt.Errorf("%s: %w", what, err)
 	}

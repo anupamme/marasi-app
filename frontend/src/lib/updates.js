@@ -97,6 +97,7 @@ const failureTitles = {
   network: "Download failed",
   signature: "Signature check failed",
   checksum: "Checksum check failed",
+  team: "Developer team check failed",
   permissions: "Marasi cannot replace itself",
   install: "Install failed",
 };

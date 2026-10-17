@@ -20,7 +20,7 @@ const pair = (n, extra = {}) => ({ ID: idOf(n), Number: n, Method: "GET", Host: 
 // An in-memory Marasi: one page newest first under as_of, queries as
 // predicates by text, CountTraffic, and the bulk operations, which record
 // their selection and return `changed` (default: the selection's size).
-function fakeApi({ traffic = [], exclusion = [], queries = {}, changed } = {}) {
+function fakeApi({ traffic = [], exclusion = [], queries = {}, changed, refuse = null } = {}) {
   const calls = [];
   const db = traffic.map((p) => ({ ...p }));
   const newest = () => db.reduce((max, p) => (p.ID > max ? p.ID : max), "");
@@ -30,8 +30,10 @@ function fakeApi({ traffic = [], exclusion = [], queries = {}, changed } = {}) {
     sel.ids
       ? db.filter((p) => sel.ids.includes(p.ID))
       : db.filter((p) => p.ID <= sel.as_of && match(sel.query)(p) && !sel.exclusion.includes(p.ContentType));
+  // `refuse` stands for Marasi refusing a query selection while a job builds.
   const bulk = (name) => async (sel, ...args) => {
     calls.push([name, structuredClone(sel), ...args]);
+    if (refuse && !sel.ids) throw new Error(`${name}: selection_incomplete (${refuse})`);
     return changed ?? inSelection(sel).length;
   };
   return {
@@ -62,6 +64,9 @@ function fakeApi({ traffic = [], exclusion = [], queries = {}, changed } = {}) {
     createLaunchpad: async (name, description) => {
       calls.push(["createLaunchpad", name, description]);
       return "lp1";
+    },
+    deleteLaunchpad: async (id) => {
+      calls.push(["deleteLaunchpad", id]);
     },
     setHighlight: bulk("setHighlight"),
     clearHighlight: bulk("clearHighlight"),
@@ -325,4 +330,21 @@ test("a highlight on a ⌘A selection goes to Marasi as the query and paints the
   await store.setHighlight(sel, null);
   assert.deepEqual(bulkCalls(api).at(-1), ["clearHighlight", { query: "", exclusion: [], as_of: idOf(4) }]);
   assert.ok(tableRows(get(store)).every((row) => (row.Highlight ?? null) === null));
+});
+
+test("a ⌘A selection Marasi refuses while a job builds changes nothing and leaves no empty launchpad", async () => {
+  const { store, api } = await storeWith({ refuse: "traffic_index, annotation_index" });
+  store.selectAll();
+  await store.settled();
+  const selection = selectionSpec(get(store));
+  await assert.rejects(store.setHighlight(selection, 2), /selection_incomplete/);
+  assert.ok(tableRows(get(store)).every((row) => row.Highlight == null), "no row is painted");
+  await assert.rejects(store.sendToNewLaunchpad(selection, 4), /selection_incomplete/);
+  assert.deepEqual(
+    api.calls.filter(([name]) => name === "createLaunchpad" || name === "deleteLaunchpad").map(([name, x]) => name),
+    ["createLaunchpad", "deleteLaunchpad"],
+    "the launchpad made for it goes again",
+  );
+  store.clickRow(idOf(2));
+  assert.equal(await store.setHighlight(selectionSpec(get(store)), 2), 1, "listed ids are never refused");
 });

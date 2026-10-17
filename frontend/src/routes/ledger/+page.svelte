@@ -70,6 +70,7 @@
 	import { LAUNCHPADS_EACH_MAX, sameID } from "../../lib/ledger/pairs.js";
 	import { select } from "../../lib/storeSelect.js";
 	import { toastError as showError } from "../../lib/toasts.js";
+	import { incompleteJobs, incompleteText } from "../../lib/ledger/selectionIncomplete.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
@@ -246,6 +247,20 @@
 
 	const toastError = (message, error) => showError(toastStore, message, error);
 
+	// A bulk change that failed. When Marasi refused a ⌘A selection because
+	// its query waits on a job still building, nothing changed: it says so
+	// and offers to run `retry` again.
+	function bulkFailed(message, error, retry) {
+		const jobs = incompleteJobs(error);
+		if (!jobs) return toastError(message, error);
+		toastStore.trigger({
+			message: `${message}: ${incompleteText(jobs)}`,
+			background: "variant-filled-warning",
+			timeout: 10000,
+			action: { label: "Retry", response: retry },
+		});
+	}
+
 	// A toast with a button that leaves for another page.
 	function toastJump(message, label, path) {
 		const toastId = toastStore.trigger({
@@ -359,7 +374,7 @@
 				"/launchpad?id=" + result.launchpadId,
 			);
 		} catch (error) {
-			toastError("Failed to create a launchpad", error);
+			bulkFailed("Failed to create a launchpad", error, () => sendToNewLaunchpad(target));
 		}
 	}
 
@@ -383,7 +398,9 @@
 		try {
 			count = await ledgerStore.addToLaunchpad(target.selection, launchpadId);
 		} catch (error) {
-			return toastError(`Failed to add ${describeTarget(target)} to "${name}"`, error);
+			return bulkFailed(`Failed to add ${describeTarget(target)} to "${name}"`, error, () =>
+				addToLaunchpad(target, launchpadId, name),
+			);
 		}
 		refreshLaunchpads();
 		if (!count) return unchanged(target, { type: "add-to-launchpad", name });
@@ -400,7 +417,9 @@
 				background: handoffBackground,
 			});
 		} catch (error) {
-			toastError(`Failed to remove ${describeTarget(target)} from "${name}"`, error);
+			bulkFailed(`Failed to remove ${describeTarget(target)} from "${name}"`, error, () =>
+				removeFromLaunchpad(target, launchpadId, name),
+			);
 		}
 	}
 
@@ -411,7 +430,9 @@
 		try {
 			count = await run(target.selection);
 		} catch (error) {
-			return toastError(`Failed to ${verb.toLowerCase()} ${describeTarget(target)}`, error);
+			return bulkFailed(`Failed to ${verb.toLowerCase()} ${describeTarget(target)}`, error, () =>
+				changeLinks(target, run, verb, noun, title),
+			);
 		}
 		if (!count) return unchanged(target, { type: verb === "Linked" ? "link" : "unlink", noun, name: title });
 		const preposition = verb === "Linked" ? "to" : "from";
@@ -433,34 +454,44 @@
 			buttonTextSubmit: "Append",
 			response: async (text) => {
 				if (typeof text !== "string" || !text.trim()) return;
-				try {
-					const count = await ledgerStore.appendNote(target.selection, text);
-					if (!count) return unchanged(target, { type: "append-note" });
-					toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
-				} catch (error) {
-					toastError("Failed to append the note", error);
-				}
+				const append = async () => {
+					try {
+						const count = await ledgerStore.appendNote(target.selection, text);
+						if (!count) return unchanged(target, { type: "append-note" });
+						toastStore.trigger({ message: `Appended a note to ${requestCount(count)}`, background: handoffBackground });
+					} catch (error) {
+						bulkFailed("Failed to append the note", error, append);
+					}
+				};
+				await append();
 			},
 		});
 	}
 
 	function clearNotes(target) {
 		const what = describeTarget(target);
-		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", async () => {
+		const clear = async () => {
 			try {
 				const count = await ledgerStore.clearNotes(target.selection);
 				if (!count) return unchanged(target, { type: "clear-notes" });
 				toastStore.trigger({ message: `Cleared ${plural(count, "note")}`, background: handoffBackground });
 			} catch (error) {
-				toastError("Failed to clear the notes", error);
+				bulkFailed("Failed to clear the notes", error, clear);
 			}
-		});
+		};
+		confirm("Clear notes?", `Clear the notes on ${what}? This can't be undone.`, "Clear notes", clear);
 	}
 
 	// Deletes the selection from the project once confirmed, warning when any
 	// of it is evidence in a finding.
 	async function deleteFromProject(target) {
-		const what = describeTarget(target);
+		// A ⌘A selection reaches the pairs captured up to when it was made,
+		// as they are when it runs: one that has since answered can match.
+		const what = target.all
+			? target.count == null
+				? "all requests that match now"
+				: `all ${requestCount(target.count)} that match now`
+			: describeTarget(target);
 		let evidence = 0;
 		try {
 			evidence = await ledgerStore.findingEvidence(target.selection, $findingStore);
@@ -474,7 +505,7 @@
 			"Delete from project?",
 			`Delete ${what} from the project? Their notes, links, WebSocket messages and logs go too. This can't be undone.${warning}`,
 			"Delete",
-			async () => {
+			async function remove() {
 				try {
 					const count = await ledgerStore.deleteFromProject(target.selection);
 					refreshLaunchpads();
@@ -482,7 +513,7 @@
 					if (!count) return unchanged(target, { type: "delete" });
 					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
-					toastError(`Failed to delete ${what}`, error);
+					bulkFailed(`Failed to delete ${what}`, error, remove);
 				}
 			},
 		);
@@ -503,7 +534,7 @@
 				background: handoffBackground,
 			});
 		} catch (error) {
-			toastError(`Failed to highlight ${describeTarget(target)}`, error);
+			bulkFailed(`Failed to highlight ${describeTarget(target)}`, error, () => highlightPairs(target, number));
 		}
 	}
 

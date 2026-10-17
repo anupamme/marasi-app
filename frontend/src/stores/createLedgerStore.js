@@ -31,6 +31,7 @@ import { searchRequests } from "../lib/requestPicker.js";
 import { select } from "../lib/storeSelect.js";
 import { LAUNCHPADS_EACH_MAX, pairIDSet, sameID } from "../lib/ledger/pairs.js";
 import { formatCount, matchNoun, requestCount } from "../lib/ledger/counts.js";
+import { incompleteJobs } from "../lib/ledger/selectionIncomplete.js";
 import { DEFAULT_SORT } from "../lib/ledger/table.js";
 
 /** The drawer's share of the table area's height: default and limits. */
@@ -1557,7 +1558,11 @@ export function createLedgerStore(api) {
     const text = current.query.ranQuery;
     const within = (condition) => (text ? `(${text}) AND ${condition}` : condition);
     const asOf = current.results.asOf ?? "";
-    // From N on (N first), and up to N (N last), read backward.
+    // From N on (N first), and up to N (N last), read backward. These are
+    // two walks joined at N, which Marasi's cursors don't promise to line
+    // up in general (a pair can keep its pre-response place within one
+    // walk); under a # sort no pair ever moves, so the joined window is
+    // exact and each side pages on with its own walk's cursors.
     const from = within(`number ${desc ? "<=" : ">="} ${number}`);
     const upTo = within(`number ${desc ? ">=" : "<="} ${number}`);
     const gen = ++generation;
@@ -1922,7 +1927,18 @@ export function createLedgerStore(api) {
         ? ["Matching requests", "Launchpad for the matching requests"]
         : [requestCount(count), `Launchpad for ${requestCount(count)}`];
     const launchpadId = await api.createLaunchpad(...name);
-    const linked = await link(selection, "launchpad", launchpadId);
+    let linked;
+    try {
+      linked = await link(selection, "launchpad", launchpadId);
+    } catch (err) {
+      // Marasi refused the selection (its query waits on a job still
+      // building) and linked nothing: the launchpad goes again rather than
+      // stay empty.
+      if (incompleteJobs(err)) {
+        await api.deleteLaunchpad(launchpadId).catch((cause) => console.error("Removing the empty launchpad failed:", cause));
+      }
+      throw err;
+    }
     return { launchpadId, count: linked };
   }
 

@@ -7,6 +7,7 @@ import {
   CountContentTypes,
   CountTraffic,
   CreateLaunchpadEntry,
+  DeleteLaunchpad,
   DeleteTraffic,
   GetContentTypeExclusion,
   GetDefaultContentTypeExclusion,
@@ -81,6 +82,7 @@ export const ledgerStore = createLedgerStore({
   setHighlight: (selection, highlight) => SetHighlight(selection, highlight),
   clearHighlight: (selection) => ClearHighlight(selection),
   createLaunchpad: (name, description) => CreateLaunchpadEntry(name, description),
+  deleteLaunchpad: (id) => DeleteLaunchpad(id),
   // target: { Kind: "launchpad" | "finding" | "test_case", ID }. The
   // finding and test case lists reread their links afterwards.
   linkTraffic: (selection, target) => relinked(LinkTraffic(selection, target), target.Kind),

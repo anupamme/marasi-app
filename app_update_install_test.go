@@ -525,6 +525,11 @@ func TestFailedInstallLeavesTheInstallUnchangedAndSaysWhatFailed(t *testing.T) {
 			checksums := checksumsFor(map[string][]byte{"marasi-app.exe": updateBinary})
 			publishRelease(r, "17.10.2026", updateBinary, checksums, minisign.Sign(keys.private, checksums))
 		}, UpdateFailureChecksum, "do not list marasi-app"},
+		{"no build for this platform", func(r *fakeReleaseServer, keys signingKeys) {
+			checksums := checksumsFor(map[string][]byte{"marasi-app.exe": updateBinary})
+			publishRelease(r, "17.10.2026", nil, checksums, minisign.Sign(keys.private, checksums))
+			r.addAsset("17.10.2026", "marasi-app.exe", updateBinary)
+		}, UpdateFailureNoBuild, "this release has no build for your platform"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {

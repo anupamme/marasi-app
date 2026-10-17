@@ -102,6 +102,9 @@ type UpdateFailureKind string
 const (
 	// UpdateFailureNetwork: a download did not complete.
 	UpdateFailureNetwork UpdateFailureKind = "network"
+	// UpdateFailureNoBuild: the release publishes no build for this
+	// platform; it can only be installed by hand, if at all.
+	UpdateFailureNoBuild UpdateFailureKind = "no-build"
 	// UpdateFailureSignature: checksums.txt is not signed by the Marasi
 	// signing key, or this build has no key to check it with.
 	UpdateFailureSignature UpdateFailureKind = "signature"
@@ -319,7 +322,7 @@ func (a *App) install(ctx context.Context, update *Update) error {
 	}
 	build, ok := release.asset(installer.asset())
 	if !ok {
-		return failed(UpdateFailureNetwork, "the release has no %s to download", installer.asset())
+		return failed(UpdateFailureNoBuild, "this release has no build for your platform (%s)", installer.asset())
 	}
 
 	checksums, err := a.downloadSmall(ctx, checksumsURL)

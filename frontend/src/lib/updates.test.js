@@ -93,6 +93,13 @@ test("a failed install says which check failed and why", () => {
   }
 });
 
+test("a release with no build for this platform says so plainly", () => {
+  assert.equal(
+    installFailureMessage({ Kind: "no-build", Reason: "this release has no build for your platform (marasi-app)" }),
+    "This release has no build for your platform",
+  );
+});
+
 test("update events move the panel through download, install and failure", () => {
   const update = { Version: "17.10.2026" };
   const available = { Status: "available", Update: update, Progress: null, Failure: null };

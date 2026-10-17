@@ -104,6 +104,9 @@ const failureTitles = {
 
 /** What the panel says about a failed install (an UpdateFailure). */
 export function installFailureMessage(failure) {
+  if (failure?.Kind === "no-build") {
+    return "This release has no build for your platform";
+  }
   const title = failureTitles[failure?.Kind] ?? "Install failed";
   return `${title}: ${failure?.Reason || "unknown error"}`;
 }

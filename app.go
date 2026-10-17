@@ -64,6 +64,11 @@ type App struct {
 	updateClient *http.Client
 	// updates is the known update state.
 	updates updater
+	// updateSchedule runs the automatic checks (update_schedule.go).
+	updateSchedule updateScheduler
+	// updateTicker replaces the ticker automatic checks follow; nil uses a
+	// time.Ticker. Tests tick by hand.
+	updateTicker func(interval time.Duration) (<-chan time.Time, func())
 }
 
 // NewApp creates a new App application struct
@@ -151,6 +156,7 @@ func (a *App) startup(ctx context.Context) {
 		}),
 		marasi.WithLogger(logHandler),
 	)
+	a.startUpdateChecks(ctx)
 }
 func (a *App) ToggleFlag(name string) (*Config, error) {
 	err := a.Config.ToggleFlag(name)
@@ -324,6 +330,7 @@ func (a *App) prepareOpenedProject() {
 	}
 }
 func (a *App) close(ctx context.Context) {
+	a.stopUpdateChecks()
 	// Like the service's shutdown: end pending launches first, so their
 	// outcomes are written to the open project before the listener goes.
 	a.Proxy.InterruptLaunches()

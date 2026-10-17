@@ -1,6 +1,7 @@
 package main
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -105,4 +106,9 @@ func TestSearchLaunchpadEntriesMatchesHostileTextLiterally(t *testing.T) {
 		}
 		assertIDs(t, []uuid.UUID{want[text]}, result.EntriesByLaunchpad[launchpad.String()])
 	}
+}
+
+// aipString writes s as an AIP-160 string literal.
+func aipString(s string) string {
+	return `"` + strings.NewReplacer(`\`, `\\`, `"`, `\"`).Replace(s) + `"`
 }

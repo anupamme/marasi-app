@@ -17,9 +17,10 @@ import { bindingFromEvent, isModifiedBinding } from "./keys.js";
 export const NON_BLOCKING_MODALS = new Set(["WebsocketStream"]);
 
 // Routes where modified shortcuts also fire from inside form fields, such as
-// the Marasi menu from the Launchpad search, rename and create fields.
+// the Marasi menu from the Launchpad search, rename and create fields, or
+// ⌘U from a Settings field.
 // Actions that yield to editors still leave their keys to the field.
-const FORM_FIELD_ROUTES = new Set(["/ledger", "/logbook", "/launchpad"]);
+const FORM_FIELD_ROUTES = new Set(["/ledger", "/logbook", "/launchpad", "/settings"]);
 const FORM_FIELD_TAGS = new Set(["INPUT", "SELECT", "TEXTAREA"]);
 // The Marasi menu's own search field.
 const MENU_SEARCH_ID = "commandmenu";

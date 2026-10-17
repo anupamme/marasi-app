@@ -18,8 +18,9 @@
 	} from "lucide-svelte";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
-	import { proxyItems } from "../../stores";
 	import RequestResponseView from "./RequestResponseView.svelte";
+	import { createRequestPicker } from "../requestPicker.js";
+	import { ledgerStore } from "../../stores/ledgerStore";
 	import CVSSCalculator from "./CVSSCalculator.svelte";
 	import { GetArtifact, DownloadArtifact } from "../wailsjs/go/main/App";
 	import { onDestroy } from "svelte";
@@ -35,8 +36,6 @@
 	let requestInput = "";
 	let imageUrls = {};
 	let showTestCaseSearch = false;
-	let displayedRequests = [];
-	let requestSearchTimeout;
 	// Seeded with the saved score so opening a finding keeps a manually set severity.
 	let lastSeenScore = finding.CVSSScore;
 
@@ -54,43 +53,12 @@
 	$: requests =
 		$findingStore.find((fnd) => fnd.ID === finding.ID)?.Requests ||
 		[];
-	$: allRequests = $proxyItems.map((item, i) => {
-		const label = `${i + 1} - ${item.Scheme}://${item.Host}${item.Path}`;
-		return {
-			label,
-			searchLabel: label.toLowerCase(),
-			value: item.ID,
-			...item,
-		};
-	});
-	$: {
-		clearTimeout(requestSearchTimeout);
-
-		requestSearchTimeout = setTimeout(() => {
-			const inputFormatted = requestInput
-				.toLowerCase()
-				.trim();
-
-			if (!inputFormatted) {
-				displayedRequests = allRequests.slice(0, 100);
-			} else {
-				const matches = [];
-				for (let i = 0; i < allRequests.length; i++) {
-					if (
-						allRequests[
-							i
-						].searchLabel.includes(
-							inputFormatted,
-						)
-					) {
-						matches.push(allRequests[i]);
-					}
-					if (matches.length === 100) break;
-				}
-				displayedRequests = matches;
-			}
-		}, 200);
-	}
+	// The picker searches the project's traffic as the researcher types,
+	// newest first, rather than holding every pair.
+	const requestPicker = createRequestPicker(ledgerStore.searchRequests);
+	$: requestPicker.search(requestInput);
+	$: displayedRequests = $requestPicker;
+	onDestroy(requestPicker.cancel);
 	const passThroughFilter = () => displayedRequests;
 
 	$: {

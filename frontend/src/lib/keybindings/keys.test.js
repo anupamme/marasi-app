@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { normalizeBinding, bindingFromEvent, formatBinding } from "./keys.js";
+import { normalizeBinding, bindingFromEvent, formatBinding, shortcutLabel } from "./keys.js";
 
 test("legacy menu notation normalizes to one canonical binding", () => {
   assert.equal(normalizeBinding("⌘+⇧+F"), "meta+shift+f");
@@ -80,4 +80,14 @@ test("bindings display in the palette's existing notation for each platform", ()
   assert.equal(formatBinding("ctrl+shift+enter", "windows-linux"), "ctrl+⇧+enter");
   assert.equal(formatBinding("meta+shift+arrowdown", "macos"), "⌘+⇧+down");
   assert.equal(formatBinding("meta+`", "macos"), "⌘+`");
+});
+
+test("an action's shortcut label is its first binding in the live keymap, or blank", () => {
+  const keymap = {
+    platform: "macos",
+    bindingsFor: (id) => ({ "a.note": ["meta+n", "meta+shift+n"] })[id] ?? [],
+  };
+  assert.equal(shortcutLabel(keymap, "a.note"), "⌘+N");
+  assert.equal(shortcutLabel(keymap, "a.unbound"), "");
+  assert.equal(shortcutLabel(keymap, undefined), "");
 });

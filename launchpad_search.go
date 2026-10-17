@@ -5,6 +5,8 @@ import (
 	"fmt"
 
 	"github.com/google/uuid"
+	"github.com/tfkr-ae/marasi/db"
+	"github.com/tfkr-ae/marasi/domain"
 )
 
 // LaunchpadSearchResult lists, per launchpad id, the entries a traffic query
@@ -29,7 +31,14 @@ func (a *App) SearchLaunchpadEntries(query string) (LaunchpadSearchResult, error
 		return LaunchpadSearchResult{}, errors.New("searching launchpads: no project is open")
 	}
 	result := LaunchpadSearchResult{EntriesByLaunchpad: map[string][]uuid.UUID{}}
-	items, _, _, err := traffic.ListTraffic(nil, 1, "launchpad:* AND ("+query+")")
+	// Validate the researcher's text on its own, so error positions refer to
+	// what they typed and unbalanced parentheses can't pair up with the ones
+	// added around it below.
+	if queryErr, ok := asQueryError(db.ValidateTrafficQuery(query, nil, "")); ok {
+		result.QueryError = queryErr
+		return result, nil
+	}
+	page, err := traffic.ListTraffic(domain.TrafficQuery{Text: "launchpad:* AND (" + query + ")", Limit: 1})
 	if queryErr, ok := asQueryError(err); ok {
 		result.QueryError = queryErr
 		return result, nil
@@ -37,7 +46,7 @@ func (a *App) SearchLaunchpadEntries(query string) (LaunchpadSearchResult, error
 	if err != nil {
 		return LaunchpadSearchResult{}, fmt.Errorf("searching launchpads: %w", err)
 	}
-	if len(items) == 0 {
+	if len(page.Items) == 0 {
 		return result, nil
 	}
 	launchpads, err := a.Proxy.LaunchpadRepo.GetLaunchpads()
@@ -45,7 +54,7 @@ func (a *App) SearchLaunchpadEntries(query string) (LaunchpadSearchResult, error
 		return LaunchpadSearchResult{}, fmt.Errorf("listing launchpads: %w", err)
 	}
 	for _, launchpad := range launchpads {
-		entries, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(launchpad.ID, query)
+		entries, _, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(launchpad.ID, query, nil, "")
 		if queryErr, ok := asQueryError(err); ok {
 			return LaunchpadSearchResult{QueryError: queryErr}, nil
 		}

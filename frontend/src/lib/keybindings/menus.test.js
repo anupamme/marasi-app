@@ -28,7 +28,18 @@ function keydown(key, code, mods = {}, target = { tagName: "BODY" }) {
 const cmd = (key, code) => keydown(key, code, { metaKey: true });
 const cmdShift = (key, code) => keydown(key, code, { metaKey: true, shiftKey: true });
 
+// The Ledger's drawer lives in the Ledger store, not Skeleton's drawer, so on
+// the Ledger the layout reports it as `ledgerDrawer`.
 function on(route, drawer = { open: false }) {
+  if (route === "/ledger") {
+    return {
+      route,
+      modal: null,
+      dialogOpen: false,
+      drawer: { open: false },
+      ledgerDrawer: { open: drawer.open, meta: drawer.meta ?? null },
+    };
+  }
   return { route, modal: null, dialogOpen: false, drawer };
 }
 
@@ -37,13 +48,64 @@ const websocketUpgrade = { metadata: { protocol: "websocket" } };
 
 const mac = () => createDispatcher({ catalog: buildCatalog(), platform: MACOS });
 
-test("⌘⇧F filters the Ledger with its drawer closed and creates a finding with it open", () => {
+test("⌘S searches, ⌘F filters and ⌘⇧O opens a request on the Ledger, drawer open or closed", () => {
   const dispatcher = mac();
-  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
-  assert.equal(
-    dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger", requestDrawer())),
-    "ledger.drawer-open.create-finding",
-  );
+  const closed = on("/ledger");
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), closed), "ledger.drawer-closed.focus-query");
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), open), "ledger.drawer-open.focus-query");
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), closed), "ledger.drawer-closed.focus-exclusion");
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), open), "ledger.drawer-open.focus-exclusion");
+  assert.equal(dispatcher.resolve(cmdShift("O", "KeyO"), open), "ledger.drawer-open.open-request");
+  // ⌘⇧F still creates a finding with the drawer open; Settings moved to ⌘,.
+  assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), open), "ledger.drawer-open.create-finding");
+  assert.equal(dispatcher.resolve(cmd(",", "Comma"), closed), "global.go-settings");
+  assert.equal(dispatcher.resolve(cmd("s", "KeyS"), on("/launchpad")), null, "⌘S is the Ledger's alone now");
+});
+
+test("with a selection, the row menu's shortcuts reach its actions", () => {
+  const dispatcher = mac();
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmdShift(">", "Period"), open), "ledger.drawer-open.open-row-menu");
+  assert.equal(dispatcher.resolve(cmdShift("L", "KeyL"), open), "ledger.drawer-open.send-to-launchpad");
+  assert.equal(dispatcher.resolve(cmdShift("A", "KeyA"), open), "ledger.drawer-open.send-to-armory");
+  assert.equal(dispatcher.resolve(cmdShift("T", "KeyT"), open), "ledger.drawer-open.create-test-case");
+  assert.equal(dispatcher.resolve(cmdShift("N", "KeyN"), open), "ledger.drawer-open.view-note");
+  assert.equal(dispatcher.resolve(cmdShift("C", "KeyC"), open), "ledger.drawer-open.copy-url");
+  assert.equal(dispatcher.resolve(cmdShift("M", "KeyM"), open), "ledger.drawer-open.view-metadata");
+  // The global actions keep their keys, with a selection or without.
+  for (const state of [open, on("/ledger")]) {
+    assert.equal(dispatcher.resolve(cmd(".", "Period"), state), "global.jump-to-toast");
+    assert.equal(dispatcher.resolve(cmd("l", "KeyL"), state), "global.setup-listener");
+  }
+});
+
+test("⌘⇧\\ jumps to the sitemap's find box with the drawer open or closed", () => {
+  const dispatcher = mac();
+  const press = () => cmdShift("|", "Backslash");
+  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.focus-sitemap");
+  assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), "ledger.drawer-open.focus-sitemap");
+});
+
+test("with the drawer open, ⌘[ and ⌘] open the results' lowest and highest numbers", () => {
+  const dispatcher = mac();
+  const open = on("/ledger", requestDrawer());
+  assert.equal(dispatcher.resolve(cmd("[", "BracketLeft"), open), "ledger.drawer-open.first-result");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), open), "ledger.drawer-open.last-result");
+  assert.equal(dispatcher.resolve(cmd("]", "BracketRight"), on("/ledger")), "ledger.drawer-closed.next-page");
+});
+
+test("⌘\\ toggles the Ledger's sitemap dock with the drawer open or closed", () => {
+  const dispatcher = mac();
+  const press = () => cmd("\\", "Backslash");
+  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
+  assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), "ledger.drawer-open.toggle-sidebar");
+});
+
+test("a Skeleton drawer over the Ledger, such as an extension's, is not the Ledger drawer", () => {
+  const dispatcher = mac();
+  const state = { ...on("/ledger"), drawer: { open: true, id: "extension-drawer", meta: {} } };
+  assert.equal(dispatcher.resolve(cmd("f", "KeyF"), state), "ledger.drawer-closed.focus-exclusion");
 });
 
 test("opening the Ledger drawer replaces the page's actions; closing it restores them", () => {
@@ -59,11 +121,16 @@ test("opening the Ledger drawer replaces the page's actions; closing it restores
   assert.deepEqual(calls, ["ledger.drawer-closed.toggle-settings"]);
 });
 
-test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer", () => {
+test("⌘⇧G opens the WebSocket stream only from an upgrade request's drawer", () => {
   const dispatcher = mac();
-  const press = () => cmdShift("O", "KeyO");
-  assert.equal(dispatcher.resolve(press(), on("/ledger")), "ledger.drawer-closed.open-request");
+  const press = () => cmdShift("G", "KeyG");
+  assert.equal(dispatcher.resolve(cmdShift("O", "KeyO"), on("/ledger")), "ledger.drawer-closed.open-request");
   assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer())), null);
+  assert.equal(
+    dispatcher.resolve(cmdShift("O", "KeyO"), on("/ledger", requestDrawer(websocketUpgrade))),
+    "ledger.drawer-open.open-request",
+    "⌘⇧O opens a request on an upgrade row too",
+  );
   assert.equal(
     dispatcher.resolve(press(), on("/ledger", requestDrawer(websocketUpgrade))),
     "ledger.drawer-open.websocket.open-stream",
@@ -74,9 +141,9 @@ test("⌘⇧O opens the WebSocket stream only from an upgrade request's drawer",
   );
 });
 
-test("⌘⇧O does not open a stream for a failed or dropped upgrade", () => {
+test("⌘⇧G does not open a stream for a failed or dropped upgrade", () => {
   const dispatcher = mac();
-  const press = () => cmdShift("O", "KeyO");
+  const press = () => cmdShift("G", "KeyG");
   for (const state of ["failed", "dropped"]) {
     const meta = { metadata: { protocol: "websocket", "websocket.state": state } };
     assert.equal(dispatcher.resolve(press(), on("/ledger", requestDrawer(meta))), null, state);
@@ -140,7 +207,8 @@ test("global actions stay available on pages and in drawers", () => {
 test("Windows/Linux page shortcuts use Ctrl", () => {
   const dispatcher = createDispatcher({ catalog: buildCatalog(), platform: WINDOWS_LINUX });
   const ctrlShift = (key, code) => keydown(key, code, { ctrlKey: true, shiftKey: true });
-  assert.equal(dispatcher.resolve(ctrlShift("F", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
+  const ctrl = (key, code) => keydown(key, code, { ctrlKey: true });
+  assert.equal(dispatcher.resolve(ctrl("f", "KeyF"), on("/ledger")), "ledger.drawer-closed.focus-exclusion");
   assert.equal(dispatcher.resolve(ctrlShift("F", "KeyF"), on("/ledger", requestDrawer())), "ledger.drawer-open.create-finding");
   assert.equal(dispatcher.resolve(cmdShift("F", "KeyF"), on("/ledger")), null);
 });
@@ -336,14 +404,15 @@ test("a modal closes on its opening action's binding for the current platform", 
   assert.equal(dispatcher.isModalToggle(cmdShift("F", "KeyF"), toggle, armory), false);
 });
 
-test("the WebSocket modal closes on ⌘⇧O except where its open tab binds the key", () => {
+test("the WebSocket modal closes on ⌘⇧G from every tab; ⌘⇧O stays the Inject tab's", () => {
   const dispatcher = mac();
   dispatcher.register("websocket.inject.cycle-opcode", () => {});
   const toggle = "ledger.drawer-open.websocket.open-stream";
-  const press = () => cmdShift("O", "KeyO");
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("stream")), true);
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("checkpoint")), true);
-  assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal("inject")), false);
+  const press = () => cmdShift("G", "KeyG");
+  for (const tab of ["stream", "checkpoint", "inject"]) {
+    assert.equal(dispatcher.isModalToggle(press(), toggle, websocketModal(tab)), true, tab);
+  }
+  assert.equal(dispatcher.isModalToggle(cmdShift("O", "KeyO"), toggle, websocketModal("inject")), false);
 });
 
 test("an extension's menu actions run only on that extension's page", () => {
@@ -413,7 +482,9 @@ test("Launchpad page shortcuts run only on the Launchpad page", () => {
   for (const [event, actionId] of expected) {
     assert.equal(dispatcher.resolve(event, on("/launchpad")), actionId, event.key);
   }
-  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), null);
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/checkpoint")), null);
+  // The Ledger binds the same key to its own dock.
+  assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
 });
 
 test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {

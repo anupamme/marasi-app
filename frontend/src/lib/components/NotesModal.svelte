@@ -2,7 +2,7 @@
     import { getModalStore, modeCurrent } from "@skeletonlabs/skeleton";
     import { UpdateNote } from "../wailsjs/go/main/App";
     import { onDestroy, onMount } from "svelte";
-    import { patchShownPairMetadata } from "../../stores/ledgerRows";
+    import { ledgerStore } from "../../stores/ledgerStore";
     import { X } from "lucide-svelte";
 
     export let parent;
@@ -20,7 +20,7 @@
         UpdateNote($modalStore[0].requestID.toString(), content)
             .then(() => {
                 isSaved = true;
-                patchShownPairMetadata(requestId, {
+                ledgerStore.patchMetadata(requestId, {
                     has_note: content.length > 0 ? 1 : 0,
                 });
                 modalStore.close();
@@ -43,7 +43,7 @@
         if (!isSaved) {
             UpdateNote(requestId, content)
                 .then(() => {
-                    patchShownPairMetadata(requestId, {
+                    ledgerStore.patchMetadata(requestId, {
                         has_note: content.length > 0 ? 1 : 0,
                     });
                     modalStore.close();

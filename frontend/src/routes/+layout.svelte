@@ -32,7 +32,7 @@
 		CompassIcon,
 		ZapIcon,
 	} from "svelte-feather-icons";
-	import { goto } from "$app/navigation";
+	import { goto, preloadCode } from "$app/navigation";
 	import "../app.css";
 	let currentTile = 0;
 	import { page } from "$app/stores";
@@ -45,14 +45,14 @@
 		marasiConfig,
 		extensions,
 		extensions_ui,
-		addRequest,
-		addResponse,
 		appState,
-		patchWebSocketMetadata,
 		projectOpenMessage,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
+	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
+	import { sitemapStore } from "../stores/sitemapStore";
+	import { recentTraffic } from "../stores/recentTrafficStore";
 	import {
 		EventsOn,
 		EventsOff,
@@ -195,6 +195,7 @@
 			modal: get(modalStore)[0]?.component ?? null,
 			dialogOpen: Boolean(document.querySelector("dialog[open]")),
 			drawer: get(drawerStore),
+			ledgerDrawer: drawerKeybindingState(get(ledgerStore)),
 			websocketTab: get(websocketTab),
 			capturing: get(keybindingCapture),
 		};
@@ -233,12 +234,19 @@
 			}
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
 			$appState.isReady = true;
+			// The rail navigates by click, so nothing preloads the Ledger's
+			// code on hover; load it now, so the first visit renders at once.
+			preloadCode("/ledger").catch((err) =>
+				console.error("Preloading the Ledger failed:", err),
+			);
 
 			function handleNewLog(newLog) {
 				$logItems = [...$logItems, newLog];
 			}
 			EventsOn("request", (newRequest) => {
-				addRequest(newRequest);
+				ledgerStore.onRequest(newRequest);
+				sitemapStore.onRequest(newRequest);
+				recentTraffic.onRequest(newRequest);
 				launchpadStore.onRequest(newRequest);
 			});
 			EventsOn("launch-started", (launch) =>
@@ -248,7 +256,9 @@
 				launchpadStore.onLaunchFinished(launch),
 			);
 			EventsOn("response", (newResponse) => {
-				addResponse(newResponse);
+				ledgerStore.onResponse(newResponse);
+				sitemapStore.onResponse(newResponse);
+				recentTraffic.onResponse(newResponse);
 				launchpadStore.onResponse(newResponse);
 				if (
 					$drawerStore.id ===
@@ -278,14 +288,14 @@
 			});
 			EventsOn("ws-open", (conn) => {
 				connectionStore.upsertConnection(conn);
-				patchWebSocketMetadata(conn);
+				ledgerStore.patchWebSocketMetadata(conn);
 			});
 			EventsOn("ws-close", (conn) => {
 				connectionStore.upsertConnection(conn);
 				connectionStore.clearInterceptions(
 					conn.RequestID,
 				);
-				patchWebSocketMetadata(conn);
+				ledgerStore.patchWebSocketMetadata(conn);
 			});
 			EventsOn("ws-progress", (progress) =>
 				connectionStore.upsertProgress(progress),
@@ -293,7 +303,7 @@
 			// An upgrade whose handshake failed or was dropped opens no
 			// connection, so only its Ledger row changes.
 			EventsOn("ws-state", ({ RequestID, State }) =>
-				patchWebSocketMetadata({ RequestID, State }),
+				ledgerStore.patchWebSocketMetadata({ RequestID, State }),
 			);
 			EventsOn("log", (newLog) => {
 				if (typeof newLog?.Level !== "string") {
@@ -801,7 +811,7 @@
 />
 <Modal
 	components={modalRegistery}
-	background="bg-surface-50-800-token text-surface-900-50-token"
+	background="bg-surface-50 dark:bg-surface-800 text-surface-900-50-token"
 	buttonPositive={$modeCurrent
 		? "variant-ghost-primary border-0 ring-0"
 		: "variant-filled-primary"}

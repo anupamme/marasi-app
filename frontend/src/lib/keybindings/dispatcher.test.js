@@ -139,11 +139,12 @@ test("while the menu is open only the menu shortcut runs, so it can close the me
   assert.equal(dispatcher.resolve(keydown("k", "KeyK", { metaKey: true }, searchInput), paletteOpen), "global.open-menu");
 });
 
-test("form fields block shortcuts except on Ledger and Logbook", () => {
+test("form fields block shortcuts except on Ledger, Logbook, Launchpad and Settings", () => {
   const dispatcher = createDispatcher({ catalog: buildCatalog(), platform: MACOS });
   const input = { tagName: "INPUT" };
   const press = () => keydown("1", "Digit1", { metaKey: true }, input);
-  assert.equal(dispatcher.resolve(press(), { ...home, route: "/settings" }), null);
+  assert.equal(dispatcher.resolve(press(), { ...home, route: "/armory" }), null);
+  assert.equal(dispatcher.resolve(press(), { ...home, route: "/settings" }), "global.go-home");
   assert.equal(dispatcher.resolve(press(), { ...home, route: "/ledger" }), "global.go-home");
   assert.equal(dispatcher.resolve(press(), { ...home, route: "/logbook" }), "global.go-home");
 });

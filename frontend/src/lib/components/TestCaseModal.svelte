@@ -19,8 +19,10 @@
 		Video,
 		X,
 	} from "lucide-svelte";
-	import { marasiConfig, proxyItems } from "../../stores";
+	import { marasiConfig } from "../../stores";
 	import RequestResponseView from "./RequestResponseView.svelte";
+	import { createRequestPicker } from "../requestPicker.js";
+	import { ledgerStore } from "../../stores/ledgerStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	export let parent;
 	const modalStore = getModalStore();
@@ -33,8 +35,6 @@
 	let templateSearchInput = "";
 	let showTemplateSearch = isNew;
 	let imageUrls = {};
-	let displayedRequests = [];
-	let requestSearchTimeout;
 
 	if (!testCase.Tags || testCase.Tags.length === 0) {
 		testCase.Tags = ["example_tag"];
@@ -45,43 +45,12 @@
 	$: requests =
 		$testCaseStore.find((tc) => tc.ID === testCase.ID)?.Requests ||
 		[];
-	$: allRequests = $proxyItems.map((item, i) => {
-		const label = `${i + 1} - ${item.Scheme}://${item.Host}${item.Path}`;
-		return {
-			label,
-			searchLabel: label.toLowerCase(),
-			value: item.ID,
-			...item,
-		};
-	});
-	$: {
-		clearTimeout(requestSearchTimeout);
-
-		requestSearchTimeout = setTimeout(() => {
-			const inputFormatted = requestInput
-				.toLowerCase()
-				.trim();
-
-			if (!inputFormatted) {
-				displayedRequests = allRequests.slice(0, 100);
-			} else {
-				const matches = [];
-				for (let i = 0; i < allRequests.length; i++) {
-					if (
-						allRequests[
-							i
-						].searchLabel.includes(
-							inputFormatted,
-						)
-					) {
-						matches.push(allRequests[i]);
-					}
-					if (matches.length === 100) break;
-				}
-				displayedRequests = matches;
-			}
-		}, 200);
-	}
+	// The picker searches the project's traffic as the researcher types,
+	// newest first, rather than holding every pair.
+	const requestPicker = createRequestPicker(ledgerStore.searchRequests);
+	$: requestPicker.search(requestInput);
+	$: displayedRequests = $requestPicker;
+	onDestroy(requestPicker.cancel);
 	const passThroughFilter = () => displayedRequests;
 
 	$: if (

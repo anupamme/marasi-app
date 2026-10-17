@@ -283,9 +283,7 @@ func (a *App) OpenProject(name string) (string, error) {
 	}
 	// The drafts belonged to the old project and are gone with it.
 	a.unsavedDrafts.Store(0)
-	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
-		log.Printf("recovering interrupted armory runs: %v", err)
-	}
+	a.prepareOpenedProject()
 	base := filepath.Base(filePath)
 	projectName := strings.TrimSuffix(base, filepath.Ext(base))
 	return projectName, nil
@@ -295,10 +293,19 @@ func (a *App) SetupScratchpad() error {
 	if err := a.projects.Open(context.Background(), scratchPad); err != nil {
 		return err
 	}
+	a.prepareOpenedProject()
+	return nil
+}
+
+// prepareOpenedProject brings a just-opened project up to date with the
+// app. Failures are logged; the project stays usable.
+func (a *App) prepareOpenedProject() {
 	if err := recoverInterruptedArmoryRuns(a.Proxy.Armory.Repo()); err != nil {
 		log.Printf("recovering interrupted armory runs: %v", err)
 	}
-	return nil
+	if err := a.migrateLegacyExclusion(); err != nil {
+		log.Printf("migrating content-type exclusion: %v", err)
+	}
 }
 func (a *App) close(ctx context.Context) {
 	// Like the service's shutdown: end pending launches first, so their
@@ -442,15 +449,6 @@ func (a *App) GetLogs() ([]*domain.Log, error) {
 	}
 	return logs, nil
 }
-func (a *App) GetProxyItems() []*domain.RequestResponseSummary {
-	resultsSlice, err := a.Proxy.TrafficRepo.GetRequestResponseSummary()
-	if err != nil {
-		log.Print(fmt.Errorf("getting proxy items: %w", err))
-		return nil
-	}
-	return resultsSlice
-}
-
 func (a *App) GetRawDetails(id uuid.UUID) *domain.RequestResponseRow {
 	row, err := a.Proxy.TrafficRepo.GetRequestResponseRow(id)
 	if err != nil {
@@ -459,52 +457,36 @@ func (a *App) GetRawDetails(id uuid.UUID) *domain.RequestResponseRow {
 	return row
 }
 
-func (a *App) GetFilters() []string {
-	results, err := a.Proxy.ConfigRepo.GetFilters()
-	if err != nil {
-		log.Print(err)
-		return []string{}
-	}
-	return results
-}
-
-func (a *App) SetFilters(updated []string) error {
-	err := a.Proxy.ConfigRepo.SetFilters(updated)
-	if err != nil {
-		return fmt.Errorf("setting filters : %w", err)
-	}
-	return nil
-}
-
 type ExtensionUI struct {
 	UICode  string
 	Version string
 }
 
 type Dashboard struct {
+	Requests      int
 	Notes         int
 	Launchpads    int
 	Interceptions int
+	// InterceptionsComplete is false while Marasi's intercepted_count job is
+	// still counting the pairs captured before the project kept the count,
+	// so Interceptions can be low; the dashboard shows it as counting.
+	InterceptionsComplete bool
 }
 
+// CountNotes reads the dashboard's four counts in one read.
 func (a *App) CountNotes() (Dashboard, error) {
-	dashboard := Dashboard{}
-	count, err := a.Proxy.StatsRepo.CountNotes()
+	counts, err := a.Proxy.StatsRepo.DashboardCounts()
 	if err != nil {
-		return dashboard, fmt.Errorf("counting notes : %w", err)
+		return Dashboard{}, fmt.Errorf("counting the dashboard : %w", err)
 	}
-	dashboard.Notes = count
-	launchpads, err := a.Proxy.StatsRepo.CountLaunchpads()
-	if err != nil {
-		return dashboard, fmt.Errorf("counting launchpads : %w", err)
-	}
-	dashboard.Launchpads = launchpads
-	intercepted, err := a.Proxy.StatsRepo.CountIntercepted()
-	if err != nil {
-		return dashboard, fmt.Errorf("counting launchpads : %w", err)
-	}
-	dashboard.Interceptions = intercepted
-	return dashboard, nil
+	complete, known := counts.Complete[domain.JobInterceptedCount]
+	return Dashboard{
+		Requests:              counts.Pairs,
+		Notes:                 counts.Notes,
+		Launchpads:            counts.Launchpads,
+		Interceptions:         counts.Intercepted,
+		InterceptionsComplete: complete || !known,
+	}, nil
 }
 func (a *App) StartBrowser(profile string) error {
 	_, err := a.chrome.Start(context.Background(), profile)
@@ -754,24 +736,6 @@ func (a *App) GetScopeRules() map[string]interface{} {
 	}
 }
 
-func (a *App) HighlightRow(id uuid.UUID, colorCode int) error {
-	metadata, err := a.Proxy.TrafficRepo.GetMetadata(id)
-	if err != nil {
-		return fmt.Errorf("getting metadata for request %s : %w", id.String(), err)
-	}
-	switch colorCode {
-	case -1:
-		delete(metadata, "highlight")
-	default:
-		metadata["highlight"] = fmt.Sprintf("#%06X", colorCode)
-	}
-	err = a.Proxy.TrafficRepo.UpdateMetadata(metadata, id)
-	if err != nil {
-		return fmt.Errorf("updating metadata for id %s : %w", id.String(), err)
-	}
-	return nil
-}
-
 func (a *App) GetLaunchpads() []*domain.Launchpad {
 	launchpad, err := a.Proxy.LaunchpadRepo.GetLaunchpads()
 	if err != nil {
@@ -781,7 +745,7 @@ func (a *App) GetLaunchpads() []*domain.Launchpad {
 }
 
 func (a *App) GetLaunchpadRequests(id uuid.UUID) []*domain.RequestResponseSummary {
-	launchpadRequest, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "")
+	launchpadRequest, _, err := a.Proxy.LaunchpadRepo.GetLaunchpadRequests(id, "", nil, "")
 	if err != nil {
 		return nil
 	}

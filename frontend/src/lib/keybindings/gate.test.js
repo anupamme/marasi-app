@@ -97,6 +97,16 @@ test("modified shortcuts keep working in editors, and in fields where they work 
   assert.equal(dispatcher.resolve(save(element("INPUT")), { ...home, route: "/armory" }), null);
 });
 
+test("modified shortcuts run from every Settings field, while plain keys stay with the field", () => {
+  const dispatcher = createDispatcher({ catalog: vimLike, platform: MACOS });
+  const settings = { ...home, route: "/settings" };
+  for (const tag of ["INPUT", "SELECT", "TEXTAREA"]) {
+    const target = element(tag);
+    assert.equal(dispatcher.resolve(keydown("s", "KeyS", { metaKey: true, target }), settings), "global.save", tag);
+    assert.equal(dispatcher.resolve(keydown("j", "KeyJ", { target }), settings), null, tag);
+  }
+});
+
 test("Escape, Tab and plain Enter never run a menu action, so dialogs and the Ledger query keep them", () => {
   const claimed = createCatalog([
     { id: "global.escape", context: "global", label: "Escape", defaults: { [MACOS]: ["escape", "shift+escape"] } },

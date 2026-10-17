@@ -111,8 +111,10 @@ For behavioral actions beyond navigation, use a named sequence of real UI inputs
 
 | Step | Meaning |
 | --- | --- |
-| `{"click": "<css>"}` | Click the one actionable match. Add `"hasText"` to keep matches whose text contains it (for example `{"click":"tbody tr","hasText":"/probe"}`), `"within": "<css>"` to scope, `"nth": n` to pick among several on purpose, `"button": "right"` for a context menu. |
+| `{"click": "<css>"}` | Click the one actionable match. Add `"hasText"` to keep matches whose text contains it (for example `{"click":"tbody tr","hasText":"/probe"}`), `"within": "<css>"` to scope, `"nth": n` (1-based) to pick among several on purpose, `"button": "right"` for a context menu, `"clickCount": 2` for a double-click, `"modifiers": ["cmd", "shift"]` to hold keys during the click (`cmd` is Meta on macOS, Ctrl elsewhere). |
+| `{"drag": "<css>", "to": "<css>"}` | Press on the one actionable match (`hasText`/`within` scope it), move onto the `to` match (`toHasText` scopes it; `within` applies to both) with the button held, and release there. For a sweep across Ledger rows: `{"drag":".ledger-row","hasText":"/a","to":".ledger-row","toHasText":"/c"}`. |
 | `{"text": "<label>"}` | Click the one actionable button, link, switch, tab, label, or summary whose normalized text, `aria-label`, or `title` equals the label. Wrappers around a matching control collapse to the control. `within` and `nth` apply. |
+| `{"hover": "<css>"}` | Move the pointer onto the one actionable match (same rules and `hasText`/`within`/`nth` as `click`), for controls shown only on hover, such as a saved query's Rename, Move and Delete buttons. The pointer stays there until the next click. |
 | `{"key": "cmd+shift+r"}` | Shortcut, same syntax as compare. Also `escape`, `enter`, `tab`, `backspace`, `[`, `]`, `\` (escaped as `\\` in JSON), `down`. A bare character without `cmd`, `ctrl`, or `alt` (for example `{"key":"l"}`) types itself, so a focused `<select>` jumps to the first option that starts with it. |
 | `{"insert": "<text>"}` | Waits for a focused input or editor, inserts, then waits until the text is in that field. |
 | `{"waitText": "…"}`, `{"waitNoText": "…"}` | Visible `innerText` contains or lacks the text. Add `within` to read only matching roots, so text the editor already holds cannot satisfy the wait. |
@@ -168,5 +170,7 @@ Run one verification instance at a time. This repo fixes Vite to port `5173`, so
 ## Helpers
 
 All scripts under `scripts/` are executable and derive the repository root from their own path. Their supported invocations are shown above. `launch.sh`, `doctor.sh`, `reset.sh`, and `drive.sh` call `cdp.mjs`, which resolves targets through `targets.mjs` (`node --test scripts/*.test.mjs` covers the selection rules); call the shell helpers rather than reverse-engineering the CDP protocol. Shortcut compares go through `drive.sh <feature> compare`, not a one-off CDP script.
+
+`bench-seed.sh` and `bench-ledger.sh` benchmark the Ledger against its performance budget; see "Performance budget" in `features/ledger.md`.
 
 Read `features/README.md` before choosing proof coverage. A check of one easy route does not cover the other mapped entry points.

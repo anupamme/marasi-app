@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, Globe, Info, Keyboard, Pencil, Replace, X } from "lucide-svelte";
+	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Search, Wrench, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -32,6 +32,19 @@
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
 	import { chromeError } from "../../lib/globalActions.js";
+	import { toastError } from "../../lib/toasts.js";
+	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import {
+		highlightPalette,
+		resetHighlights,
+		saveHighlights,
+	} from "../../stores/highlightsStore.js";
+	import { ledgerStore } from "../../stores/ledgerStore";
+	import { select } from "../../lib/storeSelect.js";
+	import { groupBuilding, jobLabel, jobsStore, jobStatus } from "../../stores/jobsStore";
+	import {
+		exclusionGroups,
+	} from "../../lib/ledger/contentTypes.js";
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
 
@@ -40,6 +53,9 @@
 		{ id: "listener", name: "Listener", hint: "Default interface and port", icon: Globe },
 		{ id: "waypoints", name: "Waypoints", hint: "Host overrides", icon: Replace },
 		{ id: "browser", name: "Browser", hint: "Chrome paths and profiles", icon: Chrome },
+		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
+		{ id: "content-types", name: "Content Types", hint: "Types the Ledger hides", icon: FileType },
+		{ id: "maintenance", name: "Maintenance", hint: "Background jobs and rebuilds", icon: Wrench },
 		{ id: "about", name: "About", hint: "Version and build", icon: Info },
 	];
 	const syntaxModes = [
@@ -58,10 +74,16 @@
 	let chromePaths = [];
 	let chromeProfiles = [];
 	let buildInfo = null;
+	// Settings → Content Types' one box: it filters the list, and Enter adds
+	// what it holds when that is a new type/subtype or type/*.
+	let contentTypeFind = "";
 
-	$: primary = $modeCurrent
-		? "variant-ghost-primary ring-0 shadow-none"
-		: "variant-filled-primary";
+	// The app default content-type exclusion, which every project follows
+	// until it keeps its own list from the Ledger's Types menu.
+	const defaultExclusion = select(ledgerStore, (state) => state.defaultExclusion ?? []);
+	$: contentTypeList = exclusionGroups($defaultExclusion, contentTypeFind);
+
+	$: primary = primaryVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
 		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
@@ -147,7 +169,65 @@
 			.catch(chromeError(toastStore, "Error deleting profile"));
 	}
 
+	// Each change saves all 8 app highlights, so the form mirrors the file.
+	function saveHighlight(number, change) {
+		const next = $highlightPalette.map((h) => ({ color: h.color, label: h.appLabel ?? "" }));
+		next[number - 1] = { ...next[number - 1], ...change };
+		saveHighlights(next).catch((error) => toastError(toastStore, "Error saving highlights", error));
+	}
+	function confirmResetHighlights() {
+		modalStore.trigger({
+			type: "confirm",
+			title: "Reset highlights?",
+			body: "Restores the default colours and clears every app-wide label. Project labels are kept.",
+			response: (ok) => {
+				if (!ok) return;
+				resetHighlights().catch((error) => toastError(toastStore, "Error resetting highlights", error));
+			},
+		});
+	}
+
+	function saveDefaultExclusion(types) {
+		ledgerStore.saveDefaultExclusion(types).catch((error) => {
+			toastError(toastStore, "Error saving the default content types", error);
+			ledgerStore.loadDefaultExclusion().catch(() => {});
+		});
+	}
+	function addDefaultContentType() {
+		if (!contentTypeList.addable) return;
+		saveDefaultExclusion([...$defaultExclusion, contentTypeList.addable]);
+		contentTypeFind = "";
+	}
+
+	// Rebuilding resets the job and redoes it over every pair; the notices
+	// show until it finishes.
+	const rebuilds = {
+		index: {
+			title: "Rebuild the search index?",
+			body: "Marasi indexes every pair again, which can take a while on a large project. Text matches may be incomplete until it finishes.",
+		},
+		sitemap: {
+			title: "Rebuild the sitemap?",
+			body: "Marasi places every pair in the sitemap again. Sitemap counts may be low until it finishes.",
+		},
+	};
+	function confirmRebuild(group) {
+		modalStore.trigger({
+			type: "confirm",
+			...rebuilds[group],
+			buttonTextConfirm: "Rebuild",
+			response: (ok) => {
+				if (!ok) return;
+				jobsStore.rebuild(group).catch((error) => toastError(toastStore, "Error starting the rebuild", error));
+			},
+		});
+	}
+	$: if (section === "maintenance") jobsStore.refresh();
+
 	onMount(() => {
+		ledgerStore.loadDefaultExclusion().catch((error) => {
+			console.error("Reading the default content types failed:", error);
+		});
 		GetBuildInfo().then((info) => {
 			buildInfo = info;
 		});
@@ -369,6 +449,80 @@
 						</tfoot>
 					</table>
 				</div>
+			{:else if section === "content-types"}
+				<div class="sticky -top-4 z-10 -mt-4 bg-surface-50-900-token pb-3 pt-4">
+					<h3 class="text-xl font-bold">Content Types</h3>
+					<p class="mb-3 text-sm opacity-70">
+						The Ledger hides these types in every project that follows the app default. A project
+						whose list is edited in the Ledger's Types menu keeps its own until it is reset.
+					</p>
+					<div class="flex items-stretch gap-2">
+						<div class="input-group input-group-divider flex-1 grid-cols-[auto_minmax(0,1fr)]">
+							<div class="input-group-shim"><Search size={15} /></div>
+							<input
+								id="settingsNewContentType"
+								type="text"
+								placeholder="Filter, or add a type (text/css or image/*)"
+								class="font-mono text-sm"
+								spellcheck="false"
+								autocomplete="off"
+								bind:value={contentTypeFind}
+								on:keydown={(e) => {
+									if (e.key === "Enter") addDefaultContentType();
+									if (e.key === "Escape") contentTypeFind = "";
+								}}
+							/>
+						</div>
+						<button
+							type="button"
+							class="btn shrink-0 {primary}"
+							disabled={!contentTypeList.addable}
+							on:click={addDefaultContentType}
+							>{contentTypeList.addable ? `Add ${contentTypeList.addable}` : "Add"}</button
+						>
+					</div>
+					<p class="mt-1.5 text-xs opacity-60" id="settingsContentTypeCount">
+						{#if contentTypeList.exists}
+							Already hidden.
+						{:else if contentTypeFind.trim()}
+							{contentTypeList.shown} of {$defaultExclusion.length} match.{contentTypeList.addable
+								? ` Enter adds ${contentTypeList.addable}.`
+								: ""}
+						{:else}
+							{$defaultExclusion.length} types hidden.
+						{/if}
+					</p>
+				</div>
+				<div id="settingsDefaultContentTypes" class="columns-[18rem] gap-x-8">
+					{#each contentTypeList.groups as group (group.label)}
+						<section data-group={group.label} class="mb-4 break-inside-avoid">
+							<h4 class="mb-1 text-xs font-semibold uppercase tracking-wide opacity-60">
+								{group.label} <span class="font-normal">{group.types.length}</span>
+							</h4>
+							<ul>
+								{#each group.types as type (type)}
+									<li
+										data-type={type}
+										class="group flex items-center justify-between gap-2 border-b border-surface-300/60 py-1 pl-1 dark:border-surface-600/60"
+									>
+										<span class="truncate font-mono text-sm" title={type}>{type}</span>
+										<button
+											type="button"
+											class="rounded p-0.5 opacity-40 hover:bg-surface-300 hover:opacity-100 group-hover:opacity-80 dark:hover:bg-surface-600"
+											title="Remove {type}"
+											aria-label="Remove {type}"
+											on:click={() =>
+												saveDefaultExclusion($defaultExclusion.filter((t) => t !== type))}
+											><X size={14} /></button
+										>
+									</li>
+								{/each}
+							</ul>
+						</section>
+					{:else}
+						{#if !contentTypeFind.trim()}<p class="text-sm opacity-60">The Ledger hides no types.</p>{/if}
+					{/each}
+				</div>
 			{:else if section === "browser"}
 				<h3 class="text-xl font-bold">Browser</h3>
 				<p class="mb-4 text-sm opacity-70">Chrome that Marasi starts with the proxy configured.</p>
@@ -470,6 +624,119 @@
 								</td>
 							</tr>
 						</tfoot>
+					</table>
+				</div>
+			{:else if section === "highlights"}
+				<div class="flex items-baseline justify-between gap-4">
+					<h3 class="text-xl font-bold">Highlights</h3>
+					<button
+						type="button"
+						class="btn btn-sm variant-soft"
+						on:click={confirmResetHighlights}>Reset to defaults</button
+					>
+				</div>
+				<p class="text-sm opacity-70">
+					Colours apply to every project. An empty label shows the colour's name. A
+					project can set its own label from the Ledger.
+				</p>
+				{#each $highlightPalette as highlight (highlight.number)}
+					<div class={row} data-highlight={highlight.number}>
+						<div class="flex items-center gap-3">
+							<span
+								class="h-4 w-4 shrink-0 rounded-sm"
+								style="background-color: {highlight.color}"
+							></span>
+							<div>
+								<p>Highlight {highlight.number}</p>
+								<p class="text-sm opacity-70">{highlight.appLabel ?? highlight.name}</p>
+							</div>
+						</div>
+						<div class="{control} items-center gap-2">
+							<input
+								type="color"
+								class="h-9 w-12 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+								aria-label="Highlight {highlight.number} colour"
+								value={highlight.color}
+								on:change={(event) =>
+									saveHighlight(highlight.number, { color: event.currentTarget.value })}
+							/>
+							<input
+								class="input w-full"
+								type="text"
+								aria-label="Highlight {highlight.number} label"
+								placeholder={highlight.name}
+								value={highlight.appLabel ?? ""}
+								on:change={(event) =>
+									saveHighlight(highlight.number, { label: event.currentTarget.value })}
+							/>
+						</div>
+					</div>
+				{/each}
+			{:else if section === "maintenance"}
+				<h3 class="text-xl font-bold">Maintenance</h3>
+				<p class="mb-4 text-sm opacity-70">
+					Marasi keeps the open project's search index and sitemap up to date in the background.
+					After an upgrade it may still be catching up on older pairs.
+				</p>
+				<div class={row} id="settingsRebuildIndex">
+					<div>
+						<p>Search index</p>
+						<p class="text-sm opacity-70">
+							Rebuild when text matches look wrong. This also makes older compressed bodies
+							searchable.
+						</p>
+					</div>
+					<div class={control}>
+						<button
+							type="button"
+							class="btn w-full variant-soft"
+							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "index")}
+							on:click={() => confirmRebuild("index")}
+							>{groupBuilding($jobsStore, "index") ? "Building…" : "Rebuild"}</button
+						>
+					</div>
+				</div>
+				<div class={row} id="settingsRebuildSitemap">
+					<div>
+						<p>Sitemap</p>
+						<p class="text-sm opacity-70">Rebuild when sitemap counts look wrong.</p>
+					</div>
+					<div class={control}>
+						<button
+							type="button"
+							class="btn w-full variant-soft"
+							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "sitemap")}
+							on:click={() => confirmRebuild("sitemap")}
+							>{groupBuilding($jobsStore, "sitemap") ? "Building…" : "Rebuild"}</button
+						>
+					</div>
+				</div>
+				<h4 class="mt-6 mb-2 font-bold">Background jobs</h4>
+				{#if $jobsStore.error}
+					<p class="mb-2 text-sm text-error-500" role="alert">{$jobsStore.error}</p>
+				{/if}
+				<div class="table-container">
+					<table class="table" id="settingsJobs">
+						<thead>
+							<tr>
+								<th class="w-[60%]">Job</th>
+								<th class="w-[40%]">State</th>
+							</tr>
+						</thead>
+						<tbody>
+							{#each $jobsStore.jobs as job (job.Name)}
+								<tr data-job={job.Name}>
+									<td>{jobLabel(job.Name)}</td>
+									<td
+										class={job.Complete
+											? "opacity-70"
+											: "text-warning-800 dark:text-warning-400"}>{jobStatus(job)}</td
+									>
+								</tr>
+							{:else}
+								<tr><td colspan="2" class="opacity-70">{$jobsStore.loaded ? "No jobs" : "Loading…"}</td></tr>
+							{/each}
+						</tbody>
 					</table>
 				</div>
 			{:else}

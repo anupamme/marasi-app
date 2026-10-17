@@ -107,6 +107,9 @@ func newProjectApp(t *testing.T) *App {
 		t.Fatalf("creating proxy: %v", err)
 	}
 	app := newApp(proxy, configDir, manager, io.Discard, logger)
+	if app.Config, err = LoadConfig(configDir); err != nil {
+		t.Fatalf("loading app config: %v", err)
+	}
 	t.Cleanup(func() {
 		if err := app.listener.Shutdown(); err != nil {
 			t.Fatalf("shutting down listener: %v", err)

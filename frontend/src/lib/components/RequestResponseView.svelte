@@ -41,6 +41,7 @@
 	import { findingStore } from "../../stores/findingStore";
 	import { armoryStore } from "../../stores/armoryStore";
 	import { upgradeFromRequest, upgradePresentation } from "../websocket/presentation.js";
+	import { prettifiedBody } from "../prettified.js";
 
 	const modalStore = getModalStore();
 	const drawerStore = getDrawerStore();
@@ -61,8 +62,11 @@
 	let responseBody = "";
 	let selectedRow;
 	let loading = true;
+	// The request and response editors. Heights are matched only between
+	// these two, never other editors on the page (the Ledger's query box).
+	let editorsRoot;
 	function adjustHeights() {
-		const editors = document.querySelectorAll(".cm-editor");
+		const editors = editorsRoot?.querySelectorAll(".cm-editor") ?? [];
 
 		editors.forEach((editor) => {
 			editor.style.height = "auto";
@@ -262,15 +266,11 @@
 			if (requestReadOnly && responseReadOnly) {
 				if ($prettify) {
 					requestBody =
-						selectedRow?.Metadata?.[
-							"prettified-request"
-						] ??
+						prettifiedBody(selectedRow, "request") ??
 						selectedRow?.Request?.Raw ??
 						"";
 					responseBody =
-						selectedRow?.Metadata?.[
-							"prettified-response"
-						] ??
+						prettifiedBody(selectedRow, "response") ??
 						selectedRow?.Response?.Raw ??
 						"";
 				} else {
@@ -284,17 +284,13 @@
 				if (!userEdited) {
 					if ($prettify) {
 						requestBody =
-							selectedRow?.Metadata?.[
-								"prettified-request"
-							] ??
+							prettifiedBody(selectedRow, "request") ??
 							selectedRow?.Request
 								?.Raw ??
 							requestBody;
 
 						responseBody =
-							selectedRow?.Metadata?.[
-								"prettified-response"
-							] ??
+							prettifiedBody(selectedRow, "response") ??
 							selectedRow?.Response
 								?.Raw ??
 							"";
@@ -524,7 +520,7 @@
 	{/if}
 
 	{#if requestBody || responseBody}
-		<div class="flex flex-col sm:flex-row w-full">
+		<div bind:this={editorsRoot} class="flex flex-col sm:flex-row w-full">
 			<div class="flex-1 p-1 overflow-auto">
 				<CodeMirror
 					on:change={(event) => {
@@ -532,10 +528,7 @@
 						if (
 							!safeCompare(
 								text,
-								selectedRow
-									?.Metadata[
-									"prettified-request"
-								],
+								prettifiedBody(selectedRow, "request"),
 							) &&
 							!safeCompare(
 								text,

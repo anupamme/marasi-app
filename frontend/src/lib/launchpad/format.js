@@ -4,11 +4,12 @@
 export const primaryVariant = (lightMode) =>
   lightMode ? "variant-ghost-primary ring-0 shadow-none" : "variant-filled-primary";
 
-/** Text colour class for an HTTP status code; pending (0) is dimmed. */
+/** Text colour class for an HTTP status code; pending (0, or -1 as stored) is dimmed. */
 export function statusClass(code) {
-  if (!code) return "opacity-50";
+  if (!(code > 0)) return "opacity-50";
   if (code < 300) return "text-success-500";
-  if (code < 400) return "text-warning-500";
+  // warning-500 is unreadable on a light surface.
+  if (code < 400) return "text-warning-800 dark:text-warning-500";
   return "text-error-500";
 }
 

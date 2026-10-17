@@ -161,6 +161,7 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	go a.removeUpdateLeftovers()
 	logHandler := NewLogHandler(ctx)
 	if a.attachFrontendLog != nil {
 		a.attachFrontendLog(logHandler.Handler())

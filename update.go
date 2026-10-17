@@ -33,6 +33,10 @@ const (
 	updateAvailableEvent = "update-available"
 )
 
+// errUpdatesUnavailable refuses what a development build never does: check,
+// install, or save an update setting.
+var errUpdatesUnavailable = errors.New("development builds don't check for or install updates")
+
 // UpdateOutcome is how a check for an update ended.
 type UpdateOutcome string
 

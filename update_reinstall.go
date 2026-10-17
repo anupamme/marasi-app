@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 )
@@ -23,7 +22,7 @@ const reinstallAction = "Reinstall latest release"
 // waiting for a restart.
 func (a *App) ReinstallLatestRelease() (UpdateInstall, error) {
 	if a.updateChannel() == "" {
-		return UpdateInstall{}, errors.New("this build does not install updates")
+		return UpdateInstall{}, errUpdatesUnavailable
 	}
 	if err := a.installBusy(); err != nil {
 		return UpdateInstall{}, err

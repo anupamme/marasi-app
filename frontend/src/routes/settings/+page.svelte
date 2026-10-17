@@ -882,7 +882,7 @@
 							name="update-checks"
 							label="Automatic update checks"
 							active="bg-primary-500"
-							disabled={!updateSettings}
+							disabled={!updateSettings?.Channel}
 							bind:checked={automaticChecks}
 							on:change={() => setAutomaticChecks(automaticChecks)}
 						/>

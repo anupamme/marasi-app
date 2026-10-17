@@ -1,7 +1,6 @@
 package main
 
 import (
-	"errors"
 	"fmt"
 	"log"
 
@@ -66,7 +65,7 @@ func (a *App) updateChannel() string {
 func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 	current := a.updateChannel()
 	if current == "" {
-		return ChannelChange{Settings: a.GetUpdateSettings()}, errors.New("this build does not follow a channel")
+		return ChannelChange{Settings: a.GetUpdateSettings()}, errUpdatesUnavailable
 	}
 	switch channel {
 	case channelRelease, channelNightly:

@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bytes"
 	"net/http"
+	"os"
 	"strings"
 	"testing"
 )
@@ -82,6 +84,36 @@ func TestDevelopmentBuildNeverChecks(t *testing.T) {
 	}
 	if len(events.names) != 0 {
 		t.Fatalf("wanted no events, got %v", events.names)
+	}
+}
+
+func TestDevelopmentBuildSavesNoUpdateSettings(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	app, _ := newUpdateApp(t, "dev", "dev", releases)
+	before, err := os.ReadFile(app.Config.path())
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if _, err := app.SetAutomaticUpdateChecks(false); err == nil {
+		t.Errorf("wanted turning automatic checks off refused")
+	}
+	if _, err := app.SetUpdateChannel("nightly"); err == nil {
+		t.Errorf("wanted choosing a channel refused")
+	}
+	if state, err := app.DismissUpdate(); err == nil || state.Status != UpdateStatusUnavailable {
+		t.Errorf("wanted Dismiss refused with updates unavailable, got %+v (%v)", state, err)
+	}
+
+	after, err := os.ReadFile(app.Config.path())
+	if err != nil {
+		t.Fatal(err)
+	}
+	if !bytes.Equal(before, after) {
+		t.Fatalf("wanted the config file untouched, got\n%s", after)
+	}
+	if n := releases.requestCount(); n != 0 {
+		t.Fatalf("wanted no request to GitHub, got %v", releases.requested())
 	}
 }
 

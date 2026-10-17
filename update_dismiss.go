@@ -21,24 +21,34 @@ const dismissedUpdateKey = "dismissed_update"
 // DismissUpdate hides the available update until a newer build is published,
 // and returns the update state without it. With no update available it does
 // nothing. An update downloading or installed cannot be dismissed. On error
-// the update stays as it was.
+// the update stays as it was. A development build dismisses nothing.
 func (a *App) DismissUpdate() (UpdateState, error) {
-	a.updates.mu.Lock()
-	update, status := a.updates.update, a.updates.status
-	a.updates.mu.Unlock()
-	switch {
-	case status == UpdateStatusDownloading:
-		return a.GetUpdateState(), errors.New("the update is downloading; cancel the download first")
-	case status == UpdateStatusRestartPending:
-		return a.GetUpdateState(), errors.New("the update is installed and runs at the next launch")
-	case update == nil:
-		return a.GetUpdateState(), nil
+	if a.updateChannel() == "" {
+		return a.GetUpdateState(), errUpdatesUnavailable
+	}
+	update, err := a.updates.dismissable()
+	if err != nil || update == nil {
+		return a.GetUpdateState(), err
 	}
 	if err := a.Config.setDismissedUpdate(update.identity()); err != nil {
 		return a.GetUpdateState(), fmt.Errorf("dismissing the update: %w", err)
 	}
 	a.setKnownUpdate(nil)
 	return a.GetUpdateState(), nil
+}
+
+// dismissable returns the update Dismiss would hide: nil when none is
+// known, an error when it is downloading or installed.
+func (u *updater) dismissable() (*Update, error) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	switch u.status {
+	case UpdateStatusDownloading:
+		return nil, errors.New("the update is downloading; cancel the download first")
+	case UpdateStatusRestartPending:
+		return nil, errors.New("the update is installed and runs at the next launch")
+	}
+	return u.update, nil
 }
 
 // identity tells builds apart for Dismiss: a release by its tag, a nightly by

@@ -242,7 +242,7 @@ func (a *App) installBusy() error {
 // (a reinstall, which replaces any known update), else the known update.
 func (a *App) startInstall(target *Update) (*Update, context.Context, error) {
 	if a.updateChannel() == "" {
-		return nil, nil, errors.New("this build does not install updates")
+		return nil, nil, errUpdatesUnavailable
 	}
 	a.updates.mu.Lock()
 	defer a.updates.mu.Unlock()

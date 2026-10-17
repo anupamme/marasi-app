@@ -38,8 +38,11 @@ func (a *App) GetUpdateSettings() UpdateSettings {
 // SetAutomaticUpdateChecks turns automatic checks on or off and saves the
 // choice. Off takes effect from the next due check; turning them back on
 // checks right away. "Check for updates…" works either way. On error the
-// setting is unchanged.
+// setting is unchanged; a development build saves nothing.
 func (a *App) SetAutomaticUpdateChecks(on bool) (UpdateSettings, error) {
+	if a.updateChannel() == "" {
+		return a.GetUpdateSettings(), errUpdatesUnavailable
+	}
 	turnedOn, err := a.Config.setAutomaticUpdateChecks(on)
 	if err != nil {
 		return a.GetUpdateSettings(), fmt.Errorf("saving automatic checks: %w", err)

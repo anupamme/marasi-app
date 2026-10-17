@@ -63,6 +63,9 @@ type App struct {
 	// updateClient replaces the client update requests use; nil uses
 	// updateHTTPClient's.
 	updateClient *http.Client
+	// systemProxy finds the system proxy for an update request; nil reads
+	// the environment and the OS proxy settings. Tests point it at a proxy.
+	systemProxy func(*http.Request) (*url.URL, error)
 	// updates is the known update state.
 	updates updater
 	// signingKey is the Marasi signing key updates must be signed with (ADR

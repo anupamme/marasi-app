@@ -1,11 +1,12 @@
 <script>
 	// The update details panel: the running version, the update's version and
-	// its release notes, opened from the update indicator or by "Check for
+	// its release notes (a release) or a "changes since your build" compare
+	// link (a nightly), opened from the update indicator or by "Check for
 	// updates…" when it finds an update. From here the researcher installs the
 	// update (with progress and Cancel), then chooses Restart now or Later. A
 	// failed install says what failed; where Marasi cannot replace itself the
-	// panel offers only the release page. Dismiss and the nightly compare link
-	// are added by later work on updates.
+	// panel offers only the release page. Dismiss is added by later work on
+	// updates.
 	import { getModalStore, ProgressBar } from "@skeletonlabs/skeleton";
 	import { Download, ExternalLink, RotateCw, X } from "lucide-svelte";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
@@ -113,15 +114,29 @@
 					</p>
 				</aside>
 			{/if}
-			<section class="space-y-2">
-				<h3 class="h5">Release notes</h3>
-				{#if update.Notes}
-					<pre
-						class="whitespace-pre-wrap break-words text-sm p-3 rounded-container-token bg-surface-100-800-token max-h-80 overflow-auto font-sans">{update.Notes}</pre>
-				{:else}
-					<p class="text-sm opacity-70">This release has no notes.</p>
-				{/if}
-			</section>
+			{#if update.CompareURL}
+				<section class="space-y-2">
+					<h3 class="h5">Changes since your build</h3>
+					<button
+						type="button"
+						class="anchor text-sm inline-flex items-center gap-1"
+						on:click={() => BrowserOpenURL(update.CompareURL)}
+					>
+						<span>Compare your build with this nightly on GitHub</span>
+						<ExternalLink size={14} />
+					</button>
+				</section>
+			{:else}
+				<section class="space-y-2">
+					<h3 class="h5">Release notes</h3>
+					{#if update.Notes}
+						<pre
+							class="whitespace-pre-wrap break-words text-sm p-3 rounded-container-token bg-surface-100-800-token max-h-80 overflow-auto font-sans">{update.Notes}</pre>
+					{:else}
+						<p class="text-sm opacity-70">This release has no notes.</p>
+					{/if}
+				</section>
+			{/if}
 		{/if}
 
 		<footer class="flex justify-end gap-2">

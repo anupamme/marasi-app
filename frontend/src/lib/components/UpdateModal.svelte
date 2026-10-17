@@ -1,12 +1,21 @@
 <script>
 	// The update details panel: the running version, the update's version and
 	// its release notes, opened from the update indicator or by "Check for
-	// updates…" when it finds an update. Install, Dismiss and the nightly
-	// compare link are added by later work on updates.
-	import { getModalStore } from "@skeletonlabs/skeleton";
-	import { ExternalLink, X } from "lucide-svelte";
+	// updates…" when it finds an update. From here the researcher installs the
+	// update (with progress and Cancel), then chooses Restart now or Later. A
+	// failed install says what failed; where Marasi cannot replace itself the
+	// panel offers only the release page. Dismiss and the nightly compare link
+	// are added by later work on updates.
+	import { getModalStore, ProgressBar } from "@skeletonlabs/skeleton";
+	import { Download, ExternalLink, RotateCw, X } from "lucide-svelte";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
-	import { updateState } from "../../stores/updateStore";
+	import {
+		cancelUpdateDownload,
+		installUpdate,
+		restartToUpdate,
+		updateState,
+	} from "../../stores/updateStore";
+	import { installFailureMessage, progressPercent } from "../updates.js";
 
 	export let parent;
 
@@ -14,6 +23,28 @@
 
 	$: update = $updateState.Update;
 	$: running = $updateState.Running;
+	$: status = $updateState.Status;
+	$: percent = progressPercent($updateState.Progress);
+	$: canInstall =
+		$updateState.CanInstall && (status === "available" || status === "failed");
+
+	let restartError = "";
+
+	function restart() {
+		restartError = "";
+		restartToUpdate().catch((err) => {
+			restartError = String(err);
+		});
+	}
+
+	$: heading =
+		status === "restart-pending"
+			? "Update installed"
+			: status === "downloading"
+				? "Installing update"
+				: update
+					? "Update available"
+					: "No update available";
 </script>
 
 {#if $modalStore[0]}
@@ -21,9 +52,7 @@
 		class="card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token"
 	>
 		<header class="flex items-center justify-between">
-			<h2 class="h3">
-				{update ? "Update available" : "No update available"}
-			</h2>
+			<h2 class="h3">{heading}</h2>
 			<button
 				type="button"
 				class="btn-icon btn-icon-sm"
@@ -45,7 +74,45 @@
 			{/if}
 		</dl>
 
-		{#if update}
+		{#if status === "downloading"}
+			<section class="space-y-2" aria-live="polite">
+				<ProgressBar
+					value={percent ?? undefined}
+					max={100}
+					height="h-2"
+				/>
+				<p class="text-sm opacity-70">
+					{percent === null
+						? "Downloading and verifying…"
+						: `Downloading… ${percent}%`}
+				</p>
+			</section>
+		{:else if status === "restart-pending"}
+			<p class="text-sm">
+				Marasi {update?.Version} is installed. Restart now to run it, or
+				later: the next launch runs it either way.
+			</p>
+			{#if restartError}
+				<p class="text-sm text-error-500">{restartError}</p>
+			{/if}
+		{:else if update}
+			{#if status === "failed" && $updateState.Failure}
+				<aside class="alert variant-soft-error text-sm" role="alert">
+					<p>
+						{installFailureMessage($updateState.Failure)}. Your installed
+						Marasi was left as it was; you can install the update by hand
+						from the release page.
+					</p>
+				</aside>
+			{/if}
+			{#if !$updateState.CanInstall}
+				<aside class="alert variant-soft-warning text-sm">
+					<p>
+						{$updateState.CannotInstallReason}. Install the update from
+						the release page.
+					</p>
+				</aside>
+			{/if}
 			<section class="space-y-2">
 				<h3 class="h5">Release notes</h3>
 				{#if update.Notes}
@@ -68,11 +135,43 @@
 					<span>Release page</span>
 				</button>
 			{/if}
-			<button
-				type="button"
-				class="btn variant-filled btn-sm"
-				on:click={parent.onClose}>Close</button
-			>
+			{#if status === "downloading"}
+				<button
+					type="button"
+					class="btn variant-ghost-surface btn-sm"
+					on:click={cancelUpdateDownload}>Cancel</button
+				>
+			{:else if status === "restart-pending"}
+				<button
+					type="button"
+					class="btn variant-ghost-surface btn-sm"
+					on:click={parent.onClose}>Later</button
+				>
+				<button
+					type="button"
+					class="btn variant-filled-primary btn-sm"
+					on:click={restart}
+				>
+					<RotateCw size={14} />
+					<span>Restart now</span>
+				</button>
+			{:else}
+				{#if canInstall}
+					<button
+						type="button"
+						class="btn variant-filled-primary btn-sm"
+						on:click={installUpdate}
+					>
+						<Download size={14} />
+						<span>{status === "failed" ? "Try again" : "Install"}</span>
+					</button>
+				{/if}
+				<button
+					type="button"
+					class="btn variant-filled btn-sm"
+					on:click={parent.onClose}>Close</button
+				>
+			{/if}
 		</footer>
 	</div>
 {/if}

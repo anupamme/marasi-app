@@ -10,6 +10,7 @@
 	import { vim } from "@replit/codemirror-vim";
 	import { modeCurrent } from "@skeletonlabs/skeleton";
 	import { marasiConfig } from "../../stores";
+	import { clearSelectionOnBlur } from "./leaveEditor.js";
 
 	export let value = "";
 	/** A CodeMirror language, or "http" for a request or response. */
@@ -37,7 +38,7 @@
 	bind:value
 	lang={lang === "http" ? httpLanguage : lang}
 	theme={$modeCurrent ? githubLight : oneDark}
-	extensions={$marasiConfig.VimEnabled ? [vim()] : []}
+	extensions={$marasiConfig.VimEnabled ? [vim(), clearSelectionOnBlur] : [clearSelectionOnBlur]}
 	{readonly}
 	lineWrapping={wrap}
 	{placeholder}

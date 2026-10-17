@@ -14,6 +14,7 @@
 	import { HighlightStyle, StreamLanguage, syntaxHighlighting } from "@codemirror/language";
 	import { tags } from "@lezer/highlight";
 	import { explicitCompletion, fieldNamed, queryErrorRange, querySuggestions } from "../ledgerQueryEditor";
+	import { clearSelectionOnBlur } from "./leaveEditor.js";
 
 	export let value = "";
 	/** Marasi's error for `value`: { position (1-based), message }, or null. */
@@ -51,7 +52,7 @@
 	// A click anywhere else leaves the box, rows included (they keep focus
 	// where it is so a drag doesn't select text).
 	function onWindowPointerDown(event) {
-		if (view?.hasFocus && parent && !parent.contains(event.target)) view.contentDOM.blur();
+		if (view && document.activeElement === view.contentDOM && parent && !parent.contains(event.target)) view.contentDOM.blur();
 	}
 
 	const queryLanguage = StreamLanguage.define({
@@ -184,6 +185,7 @@
 					// After the suggestion keymap, so Enter acts on an open
 					// suggestion list first.
 					Prec.high(keymap.of([{ key: "Enter", run: () => (dispatch("run"), true) }])),
+					clearSelectionOnBlur,
 					EditorView.domEventHandlers({
 						focus: (_event, v) => {
 							if (!v.state.doc.length) setTimeout(() => requestCompletion(v));

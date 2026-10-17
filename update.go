@@ -164,16 +164,21 @@ func (a *App) GetUpdateState() UpdateState {
 		return state
 	}
 	state.CanInstall, state.CannotInstallReason = a.installability()
-	a.updates.mu.Lock()
-	defer a.updates.mu.Unlock()
-	state.Status = a.updates.status
+	a.updates.fill(&state)
+	return state
+}
+
+// fill copies the update state into state.
+func (u *updater) fill(state *UpdateState) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	state.Status = u.status
 	if state.Status == "" {
 		state.Status = UpdateStatusIdle
 	}
-	state.Update = a.updates.update
-	state.Progress = a.updates.progress
-	state.Failure = a.updates.failure
-	return state
+	state.Update = u.update
+	state.Progress = u.progress
+	state.Failure = u.failure
 }
 
 func (a *App) checkForUpdate(ctx context.Context, kind checkKind) UpdateCheck {

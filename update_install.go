@@ -177,9 +177,14 @@ func (a *App) InstallUpdate() (UpdateInstall, error) {
 // available. It does nothing when no download is running, or once the
 // download is done and the build is being verified or swapped in.
 func (a *App) CancelUpdateDownload() {
-	a.updates.mu.Lock()
-	cancel := a.updates.cancelDownload
-	a.updates.mu.Unlock()
+	a.updates.cancel()
+}
+
+// cancel aborts the running download, if any.
+func (u *updater) cancel() {
+	u.mu.Lock()
+	cancel := u.cancelDownload
+	u.mu.Unlock()
 	if cancel != nil {
 		cancel()
 	}
@@ -191,10 +196,7 @@ func (a *App) CancelUpdateDownload() {
 // relaunches the installed build. It reports whether Marasi is restarting:
 // false when the researcher cancelled, which leaves the restart pending.
 func (a *App) RestartToUpdate() (bool, error) {
-	a.updates.mu.Lock()
-	pending := a.updates.status == UpdateStatusRestartPending
-	a.updates.mu.Unlock()
-	if !pending {
+	if !a.updates.is(UpdateStatusRestartPending) {
 		return false, errors.New("no installed update is waiting for a restart")
 	}
 	confirmed, err := a.confirmLosingWork("Restart Marasi")
@@ -216,6 +218,13 @@ func (a *App) relaunchIfRestarting() {
 	if err := a.relaunch(a.installLocation); err != nil {
 		log.Printf("relaunching the installed update: %v", err)
 	}
+}
+
+// is reports whether the update state is status.
+func (u *updater) is(status UpdateStatus) bool {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	return u.status == status
 }
 
 // busy reports why no install can start now: one is running or waits for a
@@ -477,12 +486,17 @@ func downloadError(ctx context.Context, asset releaseAsset, err error) error {
 
 // reportProgress records and emits how far the download has got.
 func (a *App) reportProgress(progress UpdateProgress) {
-	a.updates.mu.Lock()
-	if a.updates.status == UpdateStatusDownloading {
-		a.updates.progress = &progress
-	}
-	a.updates.mu.Unlock()
+	a.updates.setProgress(progress)
 	a.emitEvent(updateProgressEvent, progress)
+}
+
+// setProgress records how far the download has got, while one runs.
+func (u *updater) setProgress(progress UpdateProgress) {
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	if u.status == UpdateStatusDownloading {
+		u.progress = &progress
+	}
 }
 
 // installability reports whether the panel can offer Install, and why not.

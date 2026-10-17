@@ -5,7 +5,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { createLedgerStore, focusedPair, selectedPairs } from "./createLedgerStore.js";
+import { createLedgerStore, focusedPair, rowMenuTarget, selectedPairs } from "./createLedgerStore.js";
 
 function fakeApi({ liveView = [], exclusion = [], results = {}, fail = new Set() } = {}) {
   const calls = [];
@@ -172,15 +172,24 @@ test("⌘A shows every row the table lists as selected", async () => {
   assert.equal(get(store).selection.focus, "c", "the focus is the top row");
 });
 
-test("right-clicking a selected row keeps the selection and focuses it; another row replaces it", async () => {
+test("right-clicking a selected row targets the selection; another row targets itself; neither moves the drawer", async () => {
   const { store } = await storeWith();
   store.clickRow("a", plain);
   store.clickRow("c", range);
-  store.contextRow("b");
-  assert.deepEqual(selected(store), ["a", "b", "c"]);
-  assert.equal(focusedPair(get(store))?.ID, "b", "the drawer shows the row right-clicked");
-  store.contextRow("e");
-  assert.deepEqual(selected(store), ["e"]);
+  const inside = rowMenuTarget(get(store), "b");
+  assert.deepEqual(inside.pairs.map((pair) => pair.ID).sort(), ["a", "b", "c"]);
+  const outside = rowMenuTarget(get(store), "e");
+  assert.deepEqual(outside.pairs.map((pair) => pair.ID), ["e"]);
+  assert.deepEqual(outside.selection, { ids: ["e"] });
+  assert.deepEqual(selected(store), ["a", "b", "c"], "the selection is unchanged");
+  assert.equal(focusedPair(get(store))?.ID, "c", "the drawer keeps its pair");
+});
+
+test("right-clicking with nothing selected targets the row and opens no drawer", async () => {
+  const { store } = await storeWith();
+  assert.deepEqual(rowMenuTarget(get(store), "b").pairs.map((pair) => pair.ID), ["b"]);
+  assert.equal(focusedPair(get(store)), undefined);
+  assert.deepEqual(selected(store), []);
 });
 
 test("focusing a selected pair shows it in the drawer and keeps the selection", async () => {

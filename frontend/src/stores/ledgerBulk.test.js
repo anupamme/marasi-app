@@ -8,6 +8,7 @@ import {
   allSelectedLabel,
   createLedgerStore,
   isAllSelected,
+  rowMenuTarget,
   selectionSize,
   selectionSpec,
   tableRows,
@@ -187,13 +188,14 @@ test("a click after ⌘A goes back to listed ids", async () => {
   assert.deepEqual(selectionSpec(get(store)), { ids: [idOf(4), idOf(3), idOf(1)] }, "⌘-click leaves out that row");
 });
 
-test("focusing a pair or right-clicking keeps a ⌘A selection", async () => {
+test("focusing a pair keeps a ⌘A selection, and right-clicking a row targets all of it", async () => {
   const { store } = await storeWith();
   store.selectAll();
   store.focusPair(idOf(2));
-  store.contextRow(idOf(3));
+  const target = rowMenuTarget(get(store), idOf(3));
   assert.equal(isAllSelected(get(store)), true);
-  assert.equal(get(store).selection.focus, idOf(3), "the right-clicked row takes the focus");
+  assert.equal(target.all, true, "the menu acts on the whole query");
+  assert.equal(get(store).selection.focus, idOf(2), "the right-clicked row doesn't take the focus");
 });
 
 test("running another query ends a ⌘A selection", async () => {

@@ -337,6 +337,33 @@ export function selectedPairs(state) {
   return rows;
 }
 
+/**
+ * What an action runs on: the loaded selected pairs, the selection in
+ * Marasi's shape (listed ids, or after ⌘A the query, exclusion and as_of),
+ * whether it is ⌘A, and how many pairs it holds (null while a ⌘A selection
+ * is counted).
+ */
+export function selectionTarget(state) {
+  return {
+    pairs: selectedPairs(state),
+    selection: selectionSpec(state),
+    all: isAllSelected(state),
+    count: selectionSize(state),
+  };
+}
+
+/**
+ * What the row menu acts on when this row is right-clicked: the selection
+ * when the row is in it, else the row alone. The selection and the drawer
+ * stay as they are.
+ */
+export function rowMenuTarget(state, id) {
+  if (isSelected(state, id)) return selectionTarget(state);
+  const pair = tableRows(state).find((row) => sameID(row.ID, id));
+  if (!pair) return { pairs: [], selection: null, all: false, count: 0 };
+  return { pairs: [pair], selection: { ids: [String(pair.ID)] }, all: false, count: 1 };
+}
+
 // The IDs of the rows from `a` to `b` in table order, both included; just
 // [b] when either has left the table.
 function rowRange(rows, a, b) {
@@ -1427,15 +1454,6 @@ export function createLedgerStore(api) {
     if (query) setSelection({ ...current.selection, query });
   }
 
-  /**
-   * Right-click on a row: a selected row keeps the selection, so the menu
-   * acts on all of it, and takes the focus, so the drawer shows it; any
-   * other row is selected alone.
-   */
-  function contextRow(id) {
-    focusPair(id);
-  }
-
   // A drag across rows: the row it started on, or null when none is under way.
   let sweepFrom = null;
 
@@ -1620,7 +1638,6 @@ export function createLedgerStore(api) {
     goToNumberEnd,
     selectAll,
     selectIDs: selectListed,
-    contextRow,
     focusPair,
     startSweep,
     sweepTo,

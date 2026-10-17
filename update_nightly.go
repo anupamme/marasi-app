@@ -46,7 +46,7 @@ func (a *App) findNightlyUpdate(ctx context.Context) (*Update, error) {
 		return nil, nil
 	}
 	return &Update{
-		Channel:     channelNightly,
+		Channel:     string(channelNightly),
 		Version:     release.Name,
 		Notes:       release.Notes,
 		ReleasePage: release.Page,

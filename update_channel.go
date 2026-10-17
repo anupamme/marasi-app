@@ -24,28 +24,39 @@ type ChannelChange struct {
 	Check *UpdateCheck
 }
 
+// Channel is a channel a build can follow (GLOSSARY "Channel"). The bound
+// API carries it as a plain string; a development build has none ("").
+type Channel string
+
+const (
+	channelRelease Channel = "release"
+	channelNightly Channel = "nightly"
+)
+
+// valid reports whether c is a channel a build can follow.
+func (c Channel) valid() bool {
+	return c == channelRelease || c == channelNightly
+}
+
 // parseUpdateChannel reads the saved Channel; anything but a known channel
 // counts as none saved.
-func parseUpdateChannel(node *yaml.Node) string {
+func parseUpdateChannel(node *yaml.Node) Channel {
 	if node == nil {
 		return ""
 	}
-	switch node.Value {
-	case channelRelease, channelNightly:
-		return node.Value
-	default:
-		log.Printf("[!] %s %q is not a channel, following the build channel", updateChannelKey, node.Value)
-		return ""
+	if channel := Channel(node.Value); channel.valid() {
+		return channel
 	}
+	log.Printf("[!] %s %q is not a channel, following the build channel", updateChannelKey, node.Value)
+	return ""
 }
 
 // updateChannel is the channel the app follows: the saved Channel, or the
 // channel of the running build when none is saved. "" means the app never
 // checks, as for a development build whatever is saved.
-func (a *App) updateChannel() string {
-	switch a.build.Channel {
-	case channelRelease, channelNightly:
-	default:
+func (a *App) updateChannel() Channel {
+	build := Channel(a.build.Channel)
+	if !build.valid() {
 		return ""
 	}
 	if a.Config != nil {
@@ -56,21 +67,20 @@ func (a *App) updateChannel() string {
 			return saved
 		}
 	}
-	return a.build.Channel
+	return build
 }
 
 // SetUpdateChannel saves the Channel the app follows. Switching to nightly
 // checks for the nightly right away. An update found on the other channel
 // is forgotten, unless it is being installed or waits for a restart.
-func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
+func (a *App) SetUpdateChannel(name string) (ChannelChange, error) {
 	current := a.updateChannel()
 	if current == "" {
 		return ChannelChange{Settings: a.GetUpdateSettings()}, errUpdatesUnavailable
 	}
-	switch channel {
-	case channelRelease, channelNightly:
-	default:
-		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("%q is not a channel; choose release or nightly", channel)
+	channel := Channel(name)
+	if !channel.valid() {
+		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("%q is not a channel; choose release or nightly", name)
 	}
 	if err := a.Config.setUpdateChannel(channel); err != nil {
 		return ChannelChange{Settings: a.GetUpdateSettings()}, fmt.Errorf("saving the channel: %w", err)
@@ -88,7 +98,7 @@ func (a *App) SetUpdateChannel(channel string) (ChannelChange, error) {
 }
 
 // setUpdateChannel saves the Channel the app follows.
-func (cfg *Config) setUpdateChannel(channel string) error {
+func (cfg *Config) setUpdateChannel(channel Channel) error {
 	cfg.mu.Lock()
 	defer cfg.mu.Unlock()
 	if err := writeConfigKeys(cfg.path(), map[string]any{updateChannelKey: channel}); err != nil {

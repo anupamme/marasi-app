@@ -159,7 +159,7 @@ const (
 // GetUpdateState reports the current update state.
 func (a *App) GetUpdateState() UpdateState {
 	channel := a.updateChannel()
-	state := UpdateState{Channel: channel, Running: a.build, Status: UpdateStatusUnavailable}
+	state := UpdateState{Channel: string(channel), Running: a.build, Status: UpdateStatusUnavailable}
 	if channel == "" {
 		return state
 	}
@@ -178,7 +178,7 @@ func (a *App) GetUpdateState() UpdateState {
 
 func (a *App) checkForUpdate(ctx context.Context, kind checkKind) UpdateCheck {
 	channel := a.updateChannel()
-	check := UpdateCheck{Channel: channel, Running: a.build}
+	check := UpdateCheck{Channel: string(channel), Running: a.build}
 	if channel == "" {
 		check.Outcome = UpdateOutcomeUnavailable
 		return check
@@ -222,7 +222,7 @@ func withUpdateCheckTimeout(ctx context.Context) (context.Context, context.Cance
 
 // findUpdate returns the update on channel, or nil when the running build is
 // the newest.
-func (a *App) findUpdate(ctx context.Context, channel string) (*Update, error) {
+func (a *App) findUpdate(ctx context.Context, channel Channel) (*Update, error) {
 	switch channel {
 	case channelRelease:
 		return a.findReleaseUpdate(ctx)
@@ -274,7 +274,7 @@ func (a *App) latestRelease(ctx context.Context) (githubRelease, releaseVersion,
 // releaseUpdate is release offered as an Update.
 func releaseUpdate(release githubRelease) *Update {
 	return &Update{
-		Channel:     channelRelease,
+		Channel:     string(channelRelease),
 		Version:     release.Tag,
 		Notes:       release.Notes,
 		ReleasePage: release.Page,
@@ -305,12 +305,6 @@ func (u *updater) setKnown(update *Update) bool {
 	}
 	return true
 }
-
-// Channels a build can follow. A development build has none.
-const (
-	channelRelease = "release"
-	channelNightly = "nightly"
-)
 
 // releases is the release source update requests read from.
 func (a *App) releases() releaseSource {

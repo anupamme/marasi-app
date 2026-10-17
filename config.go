@@ -71,7 +71,7 @@ type Config struct {
 	// updateChannel is the saved Channel ("release" or "nightly"), or ""
 	// when none is saved and the app follows its build channel
 	// (update_channel.go). It is never written as a default.
-	updateChannel string
+	updateChannel Channel
 	// dismissedUpdate is the identity of the dismissed update, "" for none
 	// (update_dismiss.go).
 	dismissedUpdate string

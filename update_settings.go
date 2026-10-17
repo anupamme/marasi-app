@@ -31,7 +31,7 @@ func (a *App) GetUpdateSettings() UpdateSettings {
 	cfg.mu.Lock()
 	settings := cfg.updateSettings
 	cfg.mu.Unlock()
-	settings.Channel = a.updateChannel()
+	settings.Channel = string(a.updateChannel())
 	return settings
 }
 

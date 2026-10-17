@@ -54,7 +54,7 @@ func (u *updater) dismissable() (*Update, error) {
 // identity tells builds apart for Dismiss: a release by its tag, a nightly by
 // its commit, since every nightly is tagged "nightly".
 func (u Update) identity() string {
-	if u.Channel == channelNightly && u.Commit != "" {
+	if Channel(u.Channel) == channelNightly && u.Commit != "" {
 		return u.Commit
 	}
 	return u.Version

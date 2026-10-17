@@ -33,8 +33,10 @@ function initialState(scope = "all") {
     scope,
     context: emptyContext(),
     // Loaded levels by node name, "" for the origins:
-    // { children, cursor, shown, loading, failed }. `cursor` is the next
-    // page's, null when every child is loaded.
+    // { children, cursor, shown, loading, failed, stale }. `cursor` is the
+    // next page's, null when every child is loaded. `stale` is true while a
+    // reload has yet to read the level again: its children's counts are
+    // from before the query or scope changed.
     levels: {},
     // Open node names.
     open: {},
@@ -58,12 +60,14 @@ export function hostCountLabel(state) {
 
 /**
  * The dock's rows, top to bottom:
- *   { kind: "node", node, depth, open, loading, matching, dimmed }
+ *   { kind: "node", node, depth, parent, open, loading, matching, dimmed, stale }
  *   { kind: "more", parent, depth, hidden, partial }  (partial: more pages follow)
  *   { kind: "loading", depth } / { kind: "failed", parent, depth }
  * `matching` is the node's matching count in All traffic with a query,
  * else null; a node without matches is dimmed. With `find`, only nodes
  * whose name contains it show, with the loaded nodes leading to them open.
+ * `stale` marks a node whose counts are from before a reload that hasn't
+ * read its level yet.
  */
 export function sitemapRows(state, find = "") {
   const needle = find.trim().toLowerCase();
@@ -91,7 +95,17 @@ export function sitemapRows(state, find = "") {
       const open = !!state.open[node.Name] || (filtering && !named);
       const matching = withMatching ? (node.Matching ?? null) : null;
       const childLevel = state.levels[node.Name];
-      rows.push({ kind: "node", node, depth, open, loading: !!childLevel?.loading, matching, dimmed: matching === 0 });
+      rows.push({
+        kind: "node",
+        node,
+        depth,
+        parent,
+        open,
+        loading: !!childLevel?.loading,
+        matching,
+        dimmed: matching === 0,
+        stale: !!level.stale,
+      });
       if (!open || !node.HasChildren) continue;
       if (!childLevel || (childLevel.loading && childLevel.children.length === 0)) {
         rows.push({ kind: "loading", depth: depth + 1 });
@@ -205,6 +219,7 @@ export function createSitemapStore(api) {
                   cursor: page?.NextCursor ?? null,
                   loading: false,
                   failed: false,
+                  stale: false,
                 },
               },
             };
@@ -213,24 +228,53 @@ export function createSitemapStore(api) {
         .catch((err) => {
           if (gen !== generation) return;
           console.error(`Reading the sitemap under ${node || "the origins"} failed:`, err);
-          updateLevel(node, (level) => ({ ...level, loading: false, failed: true }));
+          updateLevel(node, (level) => ({ ...level, loading: false, failed: true, stale: false }));
         }),
     );
   }
 
+  // The levels whose rows the dock shows on screen (setVisible).
+  let visible = [];
+
+  // A level's depth: 0 for the origins, 1 for a host, then one per segment.
+  const depthOf = (name) => (name === "" ? 0 : name.replace(/^[a-z]+:\/\//i, "").split("/").length);
+  const deepestFirst = (names) =>
+    names.map((name, i) => [name, i]).sort((a, b) => depthOf(b[0]) - depthOf(a[0]) || a[1] - b[1]).map(([n]) => n);
+
   /**
    * Reads the origins and every open level again, keeping how many each
-   * shows. Closed levels are dropped and read when they next open.
+   * shows; their counts show as stale until read. Marasi answers one call
+   * at a time, so the reads go one by one in an order the researcher
+   * sees: the levels in view first, then the rest, deepest first in each
+   * (the counts read most closely), and a newer reload skips the ones not
+   * yet sent. Closed levels are dropped and read when they next open.
    */
   function reload() {
-    generation++;
+    const gen = ++generation;
     const { ready, query, asOf } = current.context;
     const names = ["", ...Object.keys(current.levels).filter((name) => name !== "" && current.open[name])];
     const levels = {};
-    for (const name of names) if (current.levels[name]) levels[name] = current.levels[name];
+    for (const name of names) {
+      const level = current.levels[name];
+      if (level) levels[name] = level.children.length ? { ...level, stale: true } : level;
+    }
     update((state) => ({ ...state, levels }));
     if (!ready || (query && !asOf)) return Promise.resolve();
-    return Promise.all(names.map((name) => fetchLevel(name)));
+    const seen = new Set(visible.filter((name) => names.includes(name)));
+    const order = [...deepestFirst([...seen]), ...deepestFirst(names.filter((name) => !seen.has(name)))];
+    return track(
+      (async () => {
+        for (const name of order) {
+          if (gen !== generation) return;
+          await fetchLevel(name);
+        }
+      })(),
+    );
+  }
+
+  /** The dock's levels whose rows are on screen, to read first. */
+  function setVisible(names) {
+    visible = [...names];
   }
 
   function sameContext(a, b) {
@@ -369,6 +413,7 @@ export function createSitemapStore(api) {
     subscribe,
     setContext,
     setScope,
+    setVisible,
     reload,
     toggle,
     showMore,

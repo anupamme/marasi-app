@@ -231,7 +231,8 @@ test("the open levels reload when the query, its as_of or the exclusion changes,
   store.setContext({ ...LIVE, asOf: "pair-4" });
   store.setContext({ ...LIVE, asOf: "pair-5" });
   await store.settled();
-  assert.deepEqual(api.calls.slice(before).map((call) => call.Node), ["", API]);
+  // Deepest first: an open level's counts before its parent's.
+  assert.deepEqual(api.calls.slice(before).map((call) => call.Node), [API, ""]);
 
   store.setContext({ ...LIVE, asOf: "pair-6" });
   await store.settled();
@@ -244,7 +245,7 @@ test("the open levels reload when the query, its as_of or the exclusion changes,
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-6", exclusion: ["image/*"] });
   store.setContext({ ...LIVE, query: "note:*", asOf: "pair-7", exclusion: ["image/*"] });
   await store.settled();
-  assert.deepEqual(api.calls.slice(-2).map((call) => [call.Node, call.AsOf]), [["", "pair-7"], [API, "pair-7"]]);
+  assert.deepEqual(api.calls.slice(-2).map((call) => [call.Node, call.AsOf]), [[API, "pair-7"], ["", "pair-7"]]);
 });
 
 test("the header warns while Marasi's sitemap is still building", async () => {
@@ -344,4 +345,102 @@ test("a reload reads only the open levels; a closed one reads again when it next
   await store.settled();
   assert.equal(api.calls.at(-1).Node, API);
   assert.deepEqual(nodeRows(get(store)), [API, "  v2"]);
+});
+
+// Holds each read until the test releases it, recording the most reads in
+// flight at once.
+function gatedApi(base) {
+  const waiting = [];
+  let inFlight = 0;
+  const api = {
+    calls: base.calls,
+    maxInFlight: 0,
+    waiting,
+    listSitemapChildren: (request) =>
+      new Promise((resolve) => {
+        inFlight++;
+        api.maxInFlight = Math.max(api.maxInFlight, inFlight);
+        waiting.push(() => {
+          inFlight--;
+          resolve(base.listSitemapChildren(request));
+        });
+      }),
+    async releaseAll() {
+      while (waiting.length) {
+        waiting.shift()();
+        await new Promise((r) => setTimeout(r, 0));
+      }
+    },
+  };
+  return api;
+}
+
+const TREE = {
+  "": [child(API, 5, { hasChildren: true })],
+  [API]: [child(V2, 5, { hasChildren: true }), child(`${API}/v1`, 3, { hasChildren: true })],
+  [V2]: [child(`${V2}/users`, 4)],
+  [`${API}/v1`]: [child(`${API}/v1/items`, 3)],
+};
+
+async function openTree(api) {
+  const store = createSitemapStore(api);
+  store.setContext(LIVE);
+  await api.releaseAll();
+  for (const name of [API, V2, `${API}/v1`]) {
+    store.toggle(name);
+    await api.releaseAll();
+  }
+  return store;
+}
+
+test("a reload shows each level's old counts as stale until its own read lands", async () => {
+  const api = gatedApi(fakeApi({ tree: TREE }));
+  const store = await openTree(api);
+  store.setContext({ ...LIVE, query: "note:*", asOf: "pair-9" });
+  const stale = () => sitemapRows(get(store)).filter((r) => r.kind === "node" && r.stale).map((r) => r.node.Segment);
+  assert.deepEqual(stale(), [API, "v2", "users", "v1", "items"], "every loaded count is stale at first");
+  api.waiting.shift()();
+  await new Promise((r) => setTimeout(r, 0));
+  assert.equal(stale().length, 4, "one level's counts are fresh once its read lands");
+  await api.releaseAll();
+  assert.deepEqual(stale(), []);
+});
+
+test("showing more of a level doesn't mark its counts stale", async () => {
+  const api = fakeApi({ tree: { "": [child(API, 5, { hasChildren: true })], [API]: many(API, FETCH_SIZE + 20) } });
+  const store = await loadedStore(api);
+  store.toggle(API);
+  await store.settled();
+  for (let i = 0; i < Math.ceil(FETCH_SIZE / STEP); i++) store.showMore(API);
+  assert.ok(sitemapRows(get(store)).every((r) => !r.stale));
+  await store.settled();
+});
+
+test("a reload reads one level at a time, the levels in view first and deepest first", async () => {
+  const api = gatedApi(fakeApi({ tree: TREE }));
+  const store = await openTree(api);
+  const before = api.calls.length;
+  api.maxInFlight = 0;
+  store.setVisible([`${API}/v1`, ""]);
+  store.setContext({ ...LIVE, query: "note:*", asOf: "pair-9" });
+  await api.releaseAll();
+  assert.equal(api.maxInFlight, 1, "one read at a time");
+  assert.deepEqual(
+    api.calls.slice(before).map((c) => c.Node),
+    [`${API}/v1`, "", V2, API],
+    "in view first, deepest first, then the rest deepest first",
+  );
+});
+
+test("a newer reload skips the older one's reads that haven't started", async () => {
+  const api = gatedApi(fakeApi({ tree: TREE }));
+  const store = await openTree(api);
+  const before = api.calls.length;
+  store.setContext({ ...LIVE, query: "a:*", asOf: "pair-9" });
+  store.setContext({ ...LIVE, query: "b:*", asOf: "pair-9" });
+  await api.releaseAll();
+  const queries = api.calls.slice(before).map((c) => c.Query);
+  assert.equal(queries.filter((q) => q === "a:*").length, 1, "only the read already sent for a:*");
+  assert.equal(queries.filter((q) => q === "b:*").length, 4);
+  assert.deepEqual(sitemapRows(get(store)).filter((r) => r.stale), []);
 });

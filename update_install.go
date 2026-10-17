@@ -106,6 +106,9 @@ const (
 	UpdateFailureSignature UpdateFailureKind = "signature"
 	// UpdateFailureChecksum: the build does not match its signed checksum.
 	UpdateFailureChecksum UpdateFailureKind = "checksum"
+	// UpdateFailureTeam: the new macOS app is not signed by the same Apple
+	// developer team as the running one.
+	UpdateFailureTeam UpdateFailureKind = "team"
 	// UpdateFailurePermissions: the app cannot write to its install location.
 	UpdateFailurePermissions UpdateFailureKind = "permissions"
 	// UpdateFailureInstall: staging or swapping in the new build failed.

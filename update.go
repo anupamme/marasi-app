@@ -137,8 +137,20 @@ type updater struct {
 // updates…" menu action does. It emits updateAvailableEvent when it finds
 // one. A development build never checks.
 func (a *App) CheckForUpdate() UpdateCheck {
-	return a.checkForUpdate(a.updateContext())
+	return a.checkForUpdate(a.updateContext(), checkManual)
 }
+
+// checkKind is who asked for a check.
+type checkKind int
+
+const (
+	// checkManual: the researcher asked. It clears any dismissal and its
+	// outcome is shown.
+	checkManual checkKind = iota
+	// checkAutomatic: the startup or 6-hourly check (update_schedule.go). It
+	// skips a dismissed build and never hides a known update.
+	checkAutomatic
+)
 
 // GetUpdateState reports the current update state.
 func (a *App) GetUpdateState() UpdateState {
@@ -160,27 +172,38 @@ func (a *App) GetUpdateState() UpdateState {
 	return state
 }
 
-func (a *App) checkForUpdate(ctx context.Context) UpdateCheck {
+func (a *App) checkForUpdate(ctx context.Context, kind checkKind) UpdateCheck {
 	channel := a.updateChannel()
 	check := UpdateCheck{Channel: channel, Running: a.build}
 	if channel == "" {
 		check.Outcome = UpdateOutcomeUnavailable
 		return check
 	}
+	if kind == checkManual {
+		a.clearDismissal()
+	}
 	ctx, cancel := context.WithTimeout(ctx, updateCheckTimeout)
 	defer cancel()
 
 	update, err := a.findUpdate(ctx, channel)
 	switch {
+	case kind == checkAutomatic && errors.Is(err, errNoNightlyPublished):
+		// Most likely mid-publish: nothing to report until the next check.
+		check.Outcome = UpdateOutcomeNone
 	case err != nil:
 		check.Outcome = UpdateOutcomeFailed
 		check.Reason = err.Error()
 	case update == nil:
 		check.Outcome = UpdateOutcomeNone
-		a.setKnownUpdate(nil)
+		if kind == checkManual {
+			a.setKnownUpdate(nil)
+		}
 	default:
 		check.Outcome = UpdateOutcomeAvailable
 		check.Update = update
+		if kind == checkAutomatic && a.isDismissed(update) {
+			return check
+		}
 		a.setKnownUpdate(update)
 		a.emitEvent(updateAvailableEvent, *update)
 	}

@@ -3,24 +3,33 @@
 	// its release notes (a release) or a "changes since your build" compare
 	// link (a nightly), opened from the update indicator or by "Check for
 	// updates…" when it finds an update. From here the researcher installs the
-	// update (with progress and Cancel), then chooses Restart now or Later. A
-	// failed install says what failed; where Marasi cannot replace itself the
-	// panel offers only the release page. Dismiss is added by later work on
-	// updates.
-	import { getModalStore, ProgressBar } from "@skeletonlabs/skeleton";
+	// update (with progress and Cancel), then chooses Restart now or Later, or
+	// dismisses it until a newer build is published. A failed install says
+	// what failed; where Marasi cannot replace itself the panel offers only the
+	// release page.
+	import { getModalStore, getToastStore, ProgressBar } from "@skeletonlabs/skeleton";
 	import { Download, ExternalLink, RotateCw, X } from "lucide-svelte";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 	import {
 		cancelUpdateDownload,
+		dismissUpdate,
 		installUpdate,
 		restartToUpdate,
 		updateState,
 	} from "../../stores/updateStore";
 	import { installFailureMessage, progressPercent } from "../updates.js";
+	import { toastError } from "../toasts";
 
 	export let parent;
 
 	const modalStore = getModalStore();
+	const toastStore = getToastStore();
+
+	function dismiss() {
+		dismissUpdate()
+			.then(() => parent.onClose())
+			.catch((err) => toastError(toastStore, "Could not dismiss the update", err));
+	}
 
 	$: update = $updateState.Update;
 	$: running = $updateState.Running;
@@ -171,6 +180,14 @@
 					<span>Restart now</span>
 				</button>
 			{:else}
+				{#if update}
+					<button
+						type="button"
+						class="btn variant-ghost-surface btn-sm"
+						title="Hide this update until a newer build is published"
+						on:click={dismiss}>Dismiss</button
+					>
+				{/if}
 				{#if canInstall}
 					<button
 						type="button"

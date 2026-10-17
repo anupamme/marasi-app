@@ -66,6 +66,11 @@ type Config struct {
 	// and the hidden built-in ids (saved_queries.go).
 	savedQueries         []SavedQuery
 	hiddenBuiltinQueries []string
+	// updateSettings are the update settings (update_settings.go).
+	updateSettings UpdateSettings
+	// dismissedUpdate is the identity of the dismissed update, "" for none
+	// (update_dismiss.go).
+	dismissedUpdate string
 }
 
 const appConfigName = "marasi_appconfig"
@@ -207,6 +212,8 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 	config.highlights = parseHighlights(documentValue(doc, highlightsKey))
 	config.savedQueries = parseSavedQueries(documentValue(doc, savedQueriesKey))
 	config.hiddenBuiltinQueries = parseHiddenBuiltins(documentValue(doc, hiddenBuiltinQueriesKey))
+	config.updateSettings = parseUpdateSettings(doc)
+	config.dismissedUpdate = parseDismissedUpdate(documentValue(doc, dismissedUpdateKey))
 
 	if err := loadTestCases(appConfigDir, config); err != nil {
 		return nil, fmt.Errorf("loading test cases: %w", err)

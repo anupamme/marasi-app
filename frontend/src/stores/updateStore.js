@@ -1,6 +1,7 @@
 import { writable } from "svelte/store";
 import {
   CancelUpdateDownload,
+  DismissUpdate,
   GetUpdateState,
   InstallUpdate,
   RestartToUpdate,
@@ -33,6 +34,17 @@ export function refreshUpdateState() {
   return GetUpdateState()
     .then((state) => updateState.set(state))
     .catch((err) => console.error("Reading the update state failed:", err));
+}
+
+/**
+ * Hides the available update until a newer build is published. Resolves with
+ * the new state; rejects when the dismissal could not be saved.
+ */
+export function dismissUpdate() {
+  return DismissUpdate().then((state) => {
+    updateState.set(state);
+    return state;
+  });
 }
 
 /** Records an update found by a check (the update-available event). */

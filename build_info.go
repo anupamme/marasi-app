@@ -1,6 +1,10 @@
 package main
 
-import "aead.dev/minisign"
+import (
+	"log"
+
+	"aead.dev/minisign"
+)
 
 // Set at build time with -ldflags "-X main.buildChannel=... -X 'main.version=...'",
 // using the same version format as the marasi CLI: the tag for releases,
@@ -34,4 +38,18 @@ func embeddedSigningPublicKey() (key minisign.PublicKey, ok bool, err error) {
 		return key, false, err
 	}
 	return key, true, nil
+}
+
+// loadSigningKey is the key App.signingKey starts with: the embedded key, or
+// nil when the build has none or it is malformed, so the build cannot
+// install updates.
+func loadSigningKey() *minisign.PublicKey {
+	key, ok, err := embeddedSigningPublicKey()
+	if err != nil {
+		log.Printf("the Marasi signing key built into this app is malformed, so it cannot install updates: %v", err)
+	}
+	if !ok {
+		return nil
+	}
+	return &key
 }

@@ -48,8 +48,7 @@ const (
 )
 
 // UpdateStatus is where the app stands with updates, so a reloaded frontend
-// can show the right thing. Later statuses (downloading, installed and
-// pending restart) are added by the install pipeline.
+// can show the right thing.
 type UpdateStatus string
 
 const (
@@ -59,6 +58,15 @@ const (
 	UpdateStatusIdle UpdateStatus = "idle"
 	// UpdateStatusAvailable: an update was found and not yet installed.
 	UpdateStatusAvailable UpdateStatus = "available"
+	// UpdateStatusDownloading: the update is being downloaded and installed;
+	// UpdateState.Progress says how far.
+	UpdateStatusDownloading UpdateStatus = "downloading"
+	// UpdateStatusRestartPending: the update is installed on disk and runs
+	// after a restart.
+	UpdateStatusRestartPending UpdateStatus = "restart-pending"
+	// UpdateStatusFailed: installing the update failed and left the install
+	// as it was; UpdateState.Failure says why. Install can be retried.
+	UpdateStatusFailed UpdateStatus = "failed"
 )
 
 // Update is a build on the app's channel newer than the running one.
@@ -101,8 +109,17 @@ type UpdateState struct {
 	Status  UpdateStatus
 	Channel string
 	Running BuildInfo
-	// Update is the known update, set when Status is available.
+	// Update is the known update, set from Status available on.
 	Update *Update
+	// CanInstall is whether the panel can offer Install. When it cannot,
+	// CannotInstallReason says why and the panel offers only the release
+	// page.
+	CanInstall          bool
+	CannotInstallReason string
+	// Progress is set while Status is downloading.
+	Progress *UpdateProgress
+	// Failure is set when Status is failed.
+	Failure *UpdateFailure
 }
 
 // updater is the update state App holds. Its zero value is ready to use.
@@ -110,6 +127,10 @@ type updater struct {
 	mu     sync.Mutex
 	status UpdateStatus
 	update *Update
+	// cancelDownload aborts the running install; nil when none runs.
+	cancelDownload func()
+	progress       *UpdateProgress
+	failure        *UpdateFailure
 }
 
 // CheckForUpdate checks the app's channel for an update, as the "Check for
@@ -138,6 +159,7 @@ func (a *App) GetUpdateState() UpdateState {
 	if channel == "" {
 		return state
 	}
+	state.CanInstall, state.CannotInstallReason = a.installability()
 	a.updates.mu.Lock()
 	defer a.updates.mu.Unlock()
 	state.Status = a.updates.status
@@ -145,6 +167,8 @@ func (a *App) GetUpdateState() UpdateState {
 		state.Status = UpdateStatusIdle
 	}
 	state.Update = a.updates.update
+	state.Progress = a.updates.progress
+	state.Failure = a.updates.failure
 	return state
 }
 
@@ -228,10 +252,16 @@ func (a *App) findReleaseUpdate(ctx context.Context) (*Update, error) {
 	}, nil
 }
 
-// setKnownUpdate records the update the latest check found, or none.
+// setKnownUpdate records the update the latest check found, or none. While
+// an install runs or waits for a restart, the update being installed stays.
 func (a *App) setKnownUpdate(update *Update) {
 	a.updates.mu.Lock()
 	defer a.updates.mu.Unlock()
+	switch a.updates.status {
+	case UpdateStatusDownloading, UpdateStatusRestartPending:
+		return
+	}
+	a.updates.failure = nil
 	a.updates.update = update
 	if update == nil {
 		a.updates.status = UpdateStatusIdle

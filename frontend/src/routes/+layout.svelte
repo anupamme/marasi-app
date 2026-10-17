@@ -87,13 +87,20 @@
 	import KeybindingsModal from "../lib/components/Keybindings/KeybindingsModal.svelte";
 	import GlobalMenu from "../lib/components/MarasiMenu/GlobalMenu.svelte";
 	import UpdateModal from "../lib/components/UpdateModal.svelte";
-	import { ArrowUpCircle } from "lucide-svelte";
+	import { ArrowUpCircle, RotateCw } from "lucide-svelte";
 	import {
 		updateState,
 		refreshUpdateState,
 		onUpdateAvailable,
+		onUpdateProgress,
+		onUpdateInstalled,
+		onUpdateFailed,
 	} from "../stores/updateStore";
-	import { showsUpdateIndicator, updatePanelModal } from "../lib/updates.js";
+	import {
+		showsUpdateIndicator,
+		updateIndicatorLabel,
+		updatePanelModal,
+	} from "../lib/updates.js";
 	import { get } from "svelte/store";
 	import {
 		installMenuShortcuts,
@@ -218,6 +225,9 @@
 	onMount(() => {
 		const stopReportingDrafts = reportUnsavedDrafts();
 		EventsOn("update-available", onUpdateAvailable);
+		EventsOn("update-progress", onUpdateProgress);
+		EventsOn("update-installed", onUpdateInstalled);
+		EventsOn("update-failed", onUpdateFailed);
 		refreshUpdateState();
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
@@ -445,6 +455,9 @@
 			EventsOff("intercepted");
 			EventsOff("log");
 			EventsOff("update-available");
+			EventsOff("update-progress");
+			EventsOff("update-installed");
+			EventsOff("update-failed");
 			EventsOff("extension_gui_render");
 			EventsOff("extension_state_update");
 		};
@@ -744,13 +757,16 @@
 							<button
 								type="button"
 								class="btn-icon btn-icon-sm variant-soft-primary"
-								title="Update available: {$updateState.Update
-									.Version}"
-								aria-label="Update available"
+								title={updateIndicatorLabel($updateState)}
+								aria-label={updateIndicatorLabel($updateState)}
 								on:click={() =>
 									modalStore.trigger(updatePanelModal())}
 							>
-								<ArrowUpCircle size={18} />
+								{#if $updateState.Status === "restart-pending"}
+									<RotateCw size={18} />
+								{:else}
+									<ArrowUpCircle size={18} />
+								{/if}
 							</button>
 						</div>
 					{/if}

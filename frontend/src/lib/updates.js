@@ -38,7 +38,82 @@ export function updatePanelModal() {
   };
 }
 
+// Statuses in which an update is known, from found until the restart.
+const updateStatuses = new Set(["available", "downloading", "failed", "restart-pending"]);
+
 /** Whether the update indicator shows in the app chrome for state. */
 export function showsUpdateIndicator(state) {
-  return state?.Status === "available" && Boolean(state.Update);
+  return updateStatuses.has(state?.Status) && Boolean(state.Update);
+}
+
+/** The indicator's tooltip and label for state. */
+export function updateIndicatorLabel(state) {
+  const version = state?.Update?.Version ?? "";
+  switch (state?.Status) {
+    case "downloading":
+      return `Downloading update ${version}`;
+    case "failed":
+      return `Update ${version} failed to install`;
+    case "restart-pending":
+      return `Restart Marasi to run ${version}`;
+    default:
+      return `Update available: ${version}`;
+  }
+}
+
+/** How much of the build has downloaded, in whole percent, or null when its size is unknown. */
+export function progressPercent(progress) {
+  if (!progress?.Total) {
+    return null;
+  }
+  return Math.floor((progress.Received * 100) / progress.Total);
+}
+
+const failureTitles = {
+  network: "Download failed",
+  signature: "Signature check failed",
+  checksum: "Checksum check failed",
+  permissions: "Marasi cannot replace itself",
+  install: "Install failed",
+};
+
+/** What the panel says about a failed install (an UpdateFailure). */
+export function installFailureMessage(failure) {
+  const title = failureTitles[failure?.Kind] ?? "Install failed";
+  return `${title}: ${failure?.Reason || "unknown error"}`;
+}
+
+/** The state once the researcher chose Install, before any progress. */
+export function withInstallStarted(state) {
+  return { ...state, Status: "downloading", Progress: null, Failure: null };
+}
+
+/** The state after an update-progress event; ignored unless downloading. */
+export function withProgress(state, progress) {
+  if (state?.Status !== "downloading") {
+    return state;
+  }
+  return { ...state, Progress: progress };
+}
+
+/** The state after an update-installed event: installed, waiting for a restart. */
+export function withInstalled(state, update) {
+  return { ...state, Status: "restart-pending", Update: update, Progress: null, Failure: null };
+}
+
+/** The state after an update-failed event. */
+export function withFailure(state, failure) {
+  return { ...state, Status: "failed", Progress: null, Failure: failure };
+}
+
+/** The state once InstallUpdate returns its UpdateInstall result. */
+export function withInstallResult(state, result) {
+  switch (result?.Outcome) {
+    case "installed":
+      return withInstalled(state, result.Update ?? state.Update);
+    case "failed":
+      return withFailure(state, result.Failure);
+    default:
+      return { ...state, Status: "available", Progress: null };
+  }
 }

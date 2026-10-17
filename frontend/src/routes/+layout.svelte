@@ -86,6 +86,14 @@
 	import WebSocketModal from "../lib/components/WebSocketModal.svelte";
 	import KeybindingsModal from "../lib/components/Keybindings/KeybindingsModal.svelte";
 	import GlobalMenu from "../lib/components/MarasiMenu/GlobalMenu.svelte";
+	import UpdateModal from "../lib/components/UpdateModal.svelte";
+	import { ArrowUpCircle } from "lucide-svelte";
+	import {
+		updateState,
+		refreshUpdateState,
+		onUpdateAvailable,
+	} from "../stores/updateStore";
+	import { showsUpdateIndicator, updatePanelModal } from "../lib/updates.js";
 	import { get } from "svelte/store";
 	import {
 		installMenuShortcuts,
@@ -156,6 +164,7 @@
 		SelectWordlist: { ref: SelectWordlistModal },
 		"extension-modal": { ref: ModalWrapper },
 		Keybindings: { ref: KeybindingsModal },
+		Update: { ref: UpdateModal },
 	};
 	const StartupRoutine2 = new Promise((resolve) => {
 		readConfig().then(() => {
@@ -208,6 +217,8 @@
 	let removeMenuShortcuts = () => {};
 	onMount(() => {
 		const stopReportingDrafts = reportUnsavedDrafts();
+		EventsOn("update-available", onUpdateAvailable);
+		refreshUpdateState();
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
 			if (message) {
@@ -433,6 +444,7 @@
 			EventsOff("ws-state");
 			EventsOff("intercepted");
 			EventsOff("log");
+			EventsOff("update-available");
 			EventsOff("extension_gui_render");
 			EventsOff("extension_state_update");
 		};
@@ -725,6 +737,23 @@
 					{/if}
 				{/each}
 				<svelte:fragment slot="trail">
+					{#if showsUpdateIndicator($updateState)}
+						<div
+							class="flex justify-center items-center w-full py-2"
+						>
+							<button
+								type="button"
+								class="btn-icon btn-icon-sm variant-soft-primary"
+								title="Update available: {$updateState.Update
+									.Version}"
+								aria-label="Update available"
+								on:click={() =>
+									modalStore.trigger(updatePanelModal())}
+							>
+								<ArrowUpCircle size={18} />
+							</button>
+						</div>
+					{/if}
 					<div
 						class="flex justify-center items-center w-full py-2"
 					>

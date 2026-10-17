@@ -47,6 +47,14 @@ test("the palette order of global actions is preserved", () => {
   assert.equal(ids.at(-1), "global.toggle-intercept");
 });
 
+test("Check for updates… is a global Marasi menu action bound to ⌘⇧U and Ctrl+Shift+U", () => {
+  const action = buildCatalog().get("global.check-for-updates");
+  assert.ok(action);
+  assert.equal(action.label, "Check for updates…");
+  assert.equal(action.context, "global");
+  assert.deepEqual(action.defaults, { [MACOS]: ["meta+shift+u"], [WINDOWS_LINUX]: ["ctrl+shift+u"] });
+});
+
 test("an unknown action id has no catalog entry", () => {
   assert.equal(buildCatalog().get("global.does-not-exist"), undefined);
 });

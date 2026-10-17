@@ -18,6 +18,7 @@
 	import { ChromeIcon, ToolIcon } from "svelte-feather-icons";
 	import {
 		AnchorIcon,
+		ArrowUpCircle,
 		Binoculars,
 		BookIcon,
 		BookOpenCheckIcon,
@@ -36,10 +37,14 @@
 	import MarasiKeys from "./MarasiKeys.svelte";
 	import ExtensionUI from "../../extensions/ExtensionUI.svelte";
 	import {
+		CheckForUpdate,
 		StartBrowser,
 		ToggleFlag,
 		ToggleIntercept,
 	} from "../../wailsjs/go/main/App";
+	import { checkResultNotice, updatePanelModal } from "../../updates.js";
+	import { onUpdateAvailable } from "../../../stores/updateStore";
+	import { toastError } from "../../toasts.js";
 	import {
 		extensions,
 		extensions_ui,
@@ -113,9 +118,29 @@
 			setModeUserPrefers(next);
 			setModeCurrent(next);
 		},
+		"global.check-for-updates": checkForUpdates,
 		"global.toggle-intercept": () =>
 			ToggleIntercept().then((flag) => interceptFlag.set(flag)),
 	};
+
+	// "Check for updates…": an update opens the details panel; otherwise a
+	// toast says the build is the latest on its channel, or why the check
+	// failed.
+	function checkForUpdates() {
+		return CheckForUpdate()
+			.then((check) => {
+				const notice = checkResultNotice(check);
+				if (notice) {
+					toastStore.trigger(notice);
+					return;
+				}
+				onUpdateAvailable(check.Update);
+				toggleModal(updatePanelModal());
+			})
+			.catch((err) =>
+				toastError(toastStore, "Could not check for updates", err),
+			);
+	}
 
 	const icons = {
 		"global.go-home": AnchorIcon,
@@ -135,6 +160,7 @@
 		"global.setup-listener": Binoculars,
 		"global.toggle-vim": ToggleLeft,
 		"global.toggle-light-mode": Sun,
+		"global.check-for-updates": ArrowUpCircle,
 		"global.toggle-intercept": ToggleLeft,
 	};
 

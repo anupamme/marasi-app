@@ -74,9 +74,13 @@ export const FACTORY_ACTIONS = [
     ["focus-query", "Search", "Jump to search input", "search", primary("s")],
     ["focus-exclusion", "Filter", "Open the Types menu and jump to its filter input", "filter, types, content type", primary("f")],
     ["open-request", "Open", "Open a request by its number", "open, number, go to", primary("shift+o")],
-    ["next-request", "Next Request", "Jump to the next item in the table", "next", primary("shift+]")],
+    // By number across the project, whether the results hold the request or
+    // not; ⌘[ / ⌘] go back to the results' first or last request.
+    ["next-request", "Next Request", "Open the request with the next number, in the results or not", "next, number", primary("shift+]")],
+    ["first-result", "First Result", "Open the first request of the results", "first, top, start, beginning, results", primary("[")],
+    ["last-result", "Last Result", "Open the last request of the results", "last, bottom, end, results", primary("]")],
     ["send-to-armory", "Send to Armory", "Create an Armory template from each selected request", "armory template request", primary("shift+a")],
-    ["previous-request", "Previous Request", "Jump to the previous item in the table", "previous", primary("shift+[")],
+    ["previous-request", "Previous Request", "Open the request with the previous number, in the results or not", "previous, number", primary("shift+[")],
     ["send-to-launchpad", "Send to Launchpad", "Send the selected requests to a new launchpad", "launchpad", primary("l")],
     ["create-test-case", "Create Test Case", "Create a new test case from the selected requests", "create,test,case", primary("shift+t")],
     ["link-test-case", "Link to Test Case", "Attach request to an existing test case", "link,attach,existing", primary("shift+b")],

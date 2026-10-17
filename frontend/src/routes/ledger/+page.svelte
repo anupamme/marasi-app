@@ -15,6 +15,8 @@
 		FilterIcon,
 		ArrowRightIcon,
 		ArrowLeftIcon,
+		ArrowUpToLineIcon,
+		ArrowDownToLineIcon,
 		SquareArrowUpRightIcon,
 		PenIcon,
 		SendIcon,
@@ -781,6 +783,13 @@
 		},
 	});
 
+	// ⌘[ / ⌘]: back to the results' first or last request, with the table
+	// scrolled to it.
+	function goToEdge(end) {
+		modalStore.close();
+		ledgerStore.goToEdge(end).then(({ pair }) => pair && selectAndReveal(pair.ID));
+	}
+
 	let ledgerMenu = [
 		{
 			actionId: "ledger.drawer-closed.toggle-settings",
@@ -817,8 +826,18 @@
 			icon: ArrowRightIcon,
 			handler: whenOpen(() => {
 				modalStore.close();
-				ledgerStore.stepSelection(1);
+				ledgerStore.stepNumber(1);
 			}),
+		},
+		{
+			actionId: "ledger.drawer-open.first-result",
+			icon: ArrowUpToLineIcon,
+			handler: whenOpen(() => goToEdge(false)),
+		},
+		{
+			actionId: "ledger.drawer-open.last-result",
+			icon: ArrowDownToLineIcon,
+			handler: whenOpen(() => goToEdge(true)),
 		},
 		{
 			actionId: "ledger.drawer-open.send-to-armory",
@@ -830,7 +849,7 @@
 			icon: ArrowLeftIcon,
 			handler: whenOpen(() => {
 				modalStore.close();
-				ledgerStore.stepSelection(-1);
+				ledgerStore.stepNumber(-1);
 			}),
 		},
 		{

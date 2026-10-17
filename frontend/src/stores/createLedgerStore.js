@@ -1240,6 +1240,99 @@ export function createLedgerStore(api) {
   }
 
   /**
+   * ⌘⇧] / ⌘⇧[: the pair with the next higher (`step` > 0) or lower number
+   * in the project, whether the results hold it or not, past the query, the
+   * type exclusion and the results' as_of. A loaded pair is selected in the
+   * table; any other opens on its own. Returns { pair }, null at either end
+   * of the project or when the focus moved on before the pair arrived.
+   */
+  async function stepNumber(step) {
+    const from = current.selection.focus;
+    if (from == null) return { pair: null };
+    const number = pairNumber(from);
+    if (number === "?") return { pair: null };
+    let pair = shownPairAtNumber(number + Math.sign(step)) ?? null;
+    if (!pair) {
+      try {
+        const page = await api.queryTraffic({
+          ...pageRequest(`number ${step > 0 ? ">" : "<"} ${number}`, current.sort, { Limit: 1 }),
+          OrderBy: step > 0 ? "number" : "number desc",
+          IgnoreExclusion: true,
+        });
+        pair = page.QueryError ? null : (page.Items?.[0] ?? null);
+      } catch (err) {
+        console.error("Reading traffic failed:", err);
+      }
+    }
+    if (!pair || !sameID(current.selection.focus, from)) return { pair: null };
+    const shown = findShownPair(pair.ID);
+    if (shown) selectPair(shown.ID);
+    else focusOutside(pair);
+    return { pair: shown ?? pair };
+  }
+
+  /**
+   * ⌘[ / ⌘]: the results' first or (`end`) last pair, selected alone. A
+   * window that holds that edge selects it there; else the edge's page is
+   * read into a fresh window (the last one backward from the end) under the
+   * as_of the table shows. Returns { pair }, null when the results are empty.
+   */
+  async function goToEdge(end) {
+    const r = current.results;
+    if (end ? !r.hasAfter : !r.hasBefore) {
+      const rows = tableRows(current);
+      const pair = (end ? rows.at(-1) : rows[0]) ?? null;
+      if (pair) selectPair(pair.ID);
+      return { pair };
+    }
+    const gen = ++generation;
+    loadingForward = loadingBackward = false;
+    reading = true;
+    let page;
+    try {
+      page = await api.queryTraffic(
+        pageRequest(current.query.ranQuery, current.sort, {
+          AsOf: r.shownAsOf ?? r.asOf ?? "",
+          Direction: end ? "backward" : "forward",
+        }),
+      );
+      if (page.QueryError) throw new Error(page.QueryError.Message);
+    } catch (err) {
+      console.error("Reading traffic failed:", err);
+      if (gen === generation) reading = false;
+      return { pair: null };
+    }
+    if (gen !== generation) return { pair: null };
+    reading = false;
+    const items = page.Items ?? [];
+    viewport = { first: 0, last: 0, atTop: !end };
+    updateResults((prev) => {
+      const total = prev.count && !prev.count.capped ? prev.count.count : null;
+      return {
+        ...resultsFromPage(page, ""),
+        chunks: [
+          end
+            ? { items, first: page.PrevCursor ?? null, last: null }
+            : { items, first: null, last: page.NextCursor ?? null },
+        ],
+        hasBefore: end && page.PrevCursor != null,
+        hasAfter: !end && page.NextCursor != null,
+        start: end ? (total == null ? null : total - items.length) : 0,
+        asOf: page.AsOf ?? prev.shownAsOf ?? prev.asOf,
+        shownAsOf: page.AsOf ?? prev.shownAsOf,
+        count: prev.count,
+        hidden: prev.hidden,
+        newCount: prev.newCount,
+        newCapped: prev.newCapped,
+        reset: ++resets,
+      };
+    });
+    const pair = (end ? items.at(-1) : items[0]) ?? null;
+    if (pair) selectPair(pair.ID);
+    return { pair };
+  }
+
+  /**
    * ⌘A: selects the whole query, not just the loaded rows: its text, the
    * exclusion and the newest pair shown as its as_of, so new matches stay
    * out. The top row is focused. The selection's count arrives after.
@@ -1489,6 +1582,8 @@ export function createLedgerStore(api) {
     clickRow,
     clearSelection,
     stepSelection,
+    stepNumber,
+    goToEdge,
     selectAll,
     selectIDs: selectListed,
     contextRow,

@@ -623,6 +623,58 @@ test("next and previous go on from a request that isn't loaded, by #, back into 
   assert.equal(focusedPair(get(store))?.Number, 199, "and steps by the table's order from there");
 });
 
+test("⌘⇧] and ⌘⇧[ step by # through the project, past the query and the type filter", async () => {
+  const api = fakeApi({
+    traffic: pairs(50, (n) => (n === 12 ? { ContentType: "image/png" } : {})),
+    exclusion: ["image/png"],
+    queries: { odd: (p) => p.Number % 2 === 1 },
+  });
+  const store = createLedgerStore(api);
+  await store.populate();
+  store.setQueryText("odd");
+  await store.runQuery();
+  const rows = tableRows(get(store));
+  store.selectPair(idOf(11));
+  assert.equal((await store.stepNumber(1)).pair.Number, 12);
+  let state = get(store);
+  assert.equal(focusedPair(state)?.Number, 12, "the next # opens, though the query and the filter leave it out");
+  assert.equal(tableRows(state), rows, "the table is as it was");
+  await store.stepNumber(1);
+  state = get(store);
+  assert.equal(focusedPair(state)?.Number, 13);
+  assert.ok(tableRows(state).some((row) => row.ID === idOf(13)), "a loaded one is selected in the table");
+  await store.stepNumber(-1);
+  await store.stepNumber(-1);
+  assert.equal(focusedPair(get(store))?.Number, 11, "previous goes down by #");
+  store.selectPair(idOf(49));
+  await store.stepNumber(1);
+  assert.equal(focusedPair(get(store))?.Number, 50);
+  assert.deepEqual(await store.stepNumber(1), { pair: null }, "nothing past the newest pair");
+  assert.equal(focusedPair(get(store))?.Number, 50, "the focus stays");
+});
+
+test("⌘[ and ⌘] open the results' first and last pairs, reading their page when it isn't loaded", async () => {
+  const api = fakeApi({ traffic: pairs(1000) });
+  const store = createLedgerStore(api);
+  await store.populate();
+  store.selectPair(idOf(990));
+  assert.equal((await store.goToEdge(true)).pair.Number, 1);
+  let state = get(store);
+  assert.equal(focusedPair(state)?.Number, 1, "the last pair of the newest-first results");
+  assert.equal(tableRows(state).at(-1).Number, 1, "the table ends with it");
+  assert.equal(state.results.hasAfter, false);
+  assert.equal(state.results.start, 1000 - tableRows(state).length, "its rows' place in the results is known");
+  await scrollTo(store, 0, 30);
+  assert.ok(tableRows(get(store))[0].Number > tableRows(state)[0].Number, "pages above it load as the table scrolls up");
+  assert.equal((await store.goToEdge(false)).pair.Number, 1000);
+  state = get(store);
+  assert.equal(tableRows(state)[0].Number, 1000, "back at the top");
+  assert.equal(state.results.start, 0);
+  const reads = pageCalls(api).length;
+  assert.equal((await store.goToEdge(false)).pair.Number, 1000);
+  assert.equal(pageCalls(api).length, reads, "an edge the window holds needs no read");
+});
+
 test("back to the live view clears the query and the sort and reads newest first from the top", async () => {
   const api = fakeApi({ traffic: pairs(3), queries: { one: (p) => p.ID !== idOf(2) } });
   const store = createLedgerStore(api);

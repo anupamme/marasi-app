@@ -33,6 +33,9 @@
 		modeCurrent,
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
+	import { page } from "$app/stores";
+	import { channelSwitchNotice, updatePanelModal } from "../../lib/updates.js";
+	import { reinstallLatestRelease, setUpdateChannel } from "../../stores/updateStore";
 	import { chromeError } from "../../lib/globalActions.js";
 	import { toastError } from "../../lib/toasts.js";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
@@ -65,7 +68,15 @@
 		["auto", "Auto"],
 		["enabled", "Enabled"],
 	];
+	const channels = [
+		["release", "Release"],
+		["nightly", "Nightly"],
+	];
 	let section = "editing";
+	// ?section=<id> opens a section, as the update panel's link to the
+	// Channel setting does.
+	$: requestedSection = $page.url.searchParams.get("section");
+	$: if (sections.some((entry) => entry.id === requestedSection)) section = requestedSection;
 
 	let targetHost = "";
 	let override = "";
@@ -240,6 +251,42 @@
 				automaticChecks = !on;
 				toastError(toastStore, "Error saving automatic update checks", error);
 			});
+	}
+
+	// Switches the Channel. Switching to nightly checks at once: an update
+	// opens the details panel, anything else is a toast.
+	let switchingChannel = false;
+	function chooseChannel(channel) {
+		if (switchingChannel || updateSettings?.Channel === channel) return;
+		switchingChannel = true;
+		setUpdateChannel(channel)
+			.then((change) => {
+				updateSettings = change.Settings;
+				const notice = channelSwitchNotice(change, buildInfo);
+				if (notice) {
+					toastStore.trigger(notice);
+				} else {
+					modalStore.trigger(updatePanelModal());
+				}
+			})
+			.catch((error) => toastError(toastStore, "Error switching channel", error))
+			.finally(() => (switchingChannel = false));
+	}
+
+	// "Reinstall latest release": Go shows the warning about newer projects,
+	// then installs; the panel opens to offer Restart now, or the failure.
+	let reinstalling = false;
+	function reinstall() {
+		if (reinstalling) return;
+		reinstalling = true;
+		reinstallLatestRelease()
+			.then((result) => {
+				if (result.Outcome === "installed" || result.Outcome === "failed") {
+					modalStore.trigger(updatePanelModal());
+				}
+			})
+			.catch((error) => toastError(toastStore, "Could not reinstall the latest release", error))
+			.finally(() => (reinstalling = false));
 	}
 
 	onMount(() => {
@@ -770,10 +817,49 @@
 					<p class="{control} font-mono text-sm">{buildInfo?.Version ?? "…"}</p>
 				</div>
 				<div class={row}>
-					<p>Channel</p>
+					<p>Build channel</p>
 					<p class="{control} font-mono text-sm">{buildInfo?.Channel ?? "…"}</p>
 				</div>
-				<!-- Update settings: the Channel choice belongs beside this switch. -->
+				{#if updateSettings?.Channel}
+					<div class={row}>
+						<div>
+							<p>Channel</p>
+							<p class="text-sm opacity-70">
+								Nightly checks right away. Back on release, you keep your nightly until a newer release is published.
+							</p>
+						</div>
+						<div class="{control} grid grid-cols-2" role="radiogroup" aria-label="Channel">
+							{#each channels as [value, label]}
+								<button
+									type="button"
+									role="radio"
+									aria-checked={updateSettings.Channel === value}
+									disabled={switchingChannel}
+									class="btn !border-0 !ring-0 {updateSettings.Channel === value
+										? 'variant-filled-primary'
+										: 'variant-soft-primary !text-surface-900 dark:!text-surface-50'}"
+									on:click={() => chooseChannel(value)}>{label}</button
+								>
+							{/each}
+						</div>
+					</div>
+					<div class={row}>
+						<div>
+							<p>Reinstall latest release</p>
+							<p class="text-sm opacity-70">
+								Go back to the latest release now. Projects opened in a newer build may not open in it.
+							</p>
+						</div>
+						<div class="{control} justify-end">
+							<button
+								type="button"
+								class="btn btn-sm variant-ghost-surface"
+								disabled={reinstalling}
+								on:click={reinstall}>{reinstalling ? "Reinstalling…" : "Reinstall…"}</button
+							>
+						</div>
+					</div>
+				{/if}
 				<div class={row}>
 					<div>
 						<p>Automatic update checks</p>

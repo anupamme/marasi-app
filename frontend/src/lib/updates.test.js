@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
+  channelSettingPath,
+  channelSwitchNotice,
   checkResultNotice,
   installFailureMessage,
   progressPercent,
@@ -127,4 +129,36 @@ test("a cancelled install makes the update available again", () => {
 
   assert.equal(cancelled.Status, "available");
   assert.equal(cancelled.Progress, null);
+});
+
+test("switching to nightly shows what the immediate check found, or opens the panel for an update", () => {
+  const none = channelSwitchNotice(
+    { Settings: { Channel: "nightly" }, Check: { Outcome: "none", Channel: "nightly" } },
+    running,
+  );
+  assert.equal(none.message, "You're on the latest nightly build");
+  assert.equal(
+    channelSwitchNotice(
+      { Settings: { Channel: "nightly" }, Check: { Outcome: "available", Channel: "nightly" } },
+      running,
+    ),
+    null,
+  );
+});
+
+test("switching a nightly to release says the nightly stays until a newer release", () => {
+  const nightly = { Channel: "nightly", Version: "17.10.2026 (nightly abc1234)" };
+
+  assert.deepEqual(channelSwitchNotice({ Settings: { Channel: "release" }, Check: null }, nightly), {
+    message: "Switched to release. You keep this nightly until a newer release is published; Reinstall latest release goes back now.",
+    background: "variant-filled-success",
+  });
+  assert.equal(
+    channelSwitchNotice({ Settings: { Channel: "release" }, Check: null }, running).message,
+    "Switched to release",
+  );
+});
+
+test("the details panel links to the Channel setting in Settings → About", () => {
+  assert.equal(channelSettingPath, "/settings?section=about");
 });

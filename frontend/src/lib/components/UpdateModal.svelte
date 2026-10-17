@@ -6,9 +6,10 @@
 	// update (with progress and Cancel), then chooses Restart now or Later, or
 	// dismisses it until a newer build is published. A failed install says
 	// what failed; where Marasi cannot replace itself the panel offers only the
-	// release page.
+	// release page. A link opens the Channel setting.
 	import { getModalStore, getToastStore, ProgressBar } from "@skeletonlabs/skeleton";
-	import { Download, ExternalLink, RotateCw, X } from "lucide-svelte";
+	import { Download, ExternalLink, RotateCw, Settings, X } from "lucide-svelte";
+	import { goto } from "$app/navigation";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 	import {
 		cancelUpdateDownload,
@@ -17,13 +18,19 @@
 		restartToUpdate,
 		updateState,
 	} from "../../stores/updateStore";
-	import { installFailureMessage, progressPercent } from "../updates.js";
+	import { channelSettingPath, installFailureMessage, progressPercent } from "../updates.js";
 	import { toastError } from "../toasts";
 
 	export let parent;
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
+
+	// The Channel setting lives in Settings → About.
+	function openChannelSetting() {
+		parent.onClose();
+		goto(channelSettingPath);
+	}
 
 	function dismiss() {
 		dismissUpdate()
@@ -83,6 +90,14 @@
 				<dd class="capitalize">{update.Channel}</dd>
 			{/if}
 		</dl>
+		<button
+			type="button"
+			class="anchor text-sm inline-flex items-center gap-1"
+			on:click={openChannelSetting}
+		>
+			<Settings size={14} />
+			<span>Channel setting</span>
+		</button>
 
 		{#if status === "downloading"}
 			<section class="space-y-2" aria-live="polite">

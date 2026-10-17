@@ -1,10 +1,12 @@
-import { writable } from "svelte/store";
+import { get, writable } from "svelte/store";
 import {
   CancelUpdateDownload,
   DismissUpdate,
   GetUpdateState,
   InstallUpdate,
+  ReinstallLatestRelease,
   RestartToUpdate,
+  SetUpdateChannel,
 } from "../lib/wailsjs/go/main/App";
 import {
   withFailure,
@@ -52,8 +54,16 @@ export function onUpdateAvailable(update) {
   updateState.update((state) => ({ ...state, Status: "available", Update: update, Failure: null }));
 }
 
-/** Records download progress (the update-progress event). */
+/**
+ * Records download progress (the update-progress event). Progress for an
+ * install this frontend did not start (a reinstall, which Go begins only after
+ * its warning) reads the state from Go, so the panel shows what is installing.
+ */
 export function onUpdateProgress(progress) {
+  if (get(updateState).Status !== "downloading") {
+    refreshUpdateState();
+    return;
+  }
   updateState.update((state) => withProgress(state, progress));
 }
 
@@ -81,6 +91,25 @@ export function installUpdate() {
 /** Aborts the running download. */
 export function cancelUpdateDownload() {
   return CancelUpdateDownload();
+}
+
+/**
+ * Saves the Channel ("release" or "nightly"). Resolves with the ChannelChange
+ * (its Check is set when switching to nightly checked right away) once the
+ * update state is read again, since the switch forgets an update found on the
+ * other channel.
+ */
+export function setUpdateChannel(channel) {
+  return SetUpdateChannel(channel).then((change) => refreshUpdateState().then(() => change));
+}
+
+/**
+ * "Reinstall latest release": Go warns about newer projects first, then
+ * installs like an update. Progress arrives as events; resolves with the
+ * UpdateInstall result once the state is read again.
+ */
+export function reinstallLatestRelease() {
+  return ReinstallLatestRelease().then((result) => refreshUpdateState().then(() => result));
 }
 
 /** "Restart now": resolves to whether Marasi is restarting. */

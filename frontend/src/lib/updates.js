@@ -28,6 +28,30 @@ export function checkResultNotice(check) {
   }
 }
 
+/** Where the details panel's link to the Channel setting goes. */
+export const channelSettingPath = "/settings?section=about";
+
+/**
+ * The toast after the Channel setting changes (a ChannelChange), or null when
+ * the check a switch to nightly runs found an update and the panel opens
+ * instead. A nightly switched to release keeps running (ADR 0006), so the
+ * toast says so and points to the reinstall.
+ */
+export function channelSwitchNotice(change, running) {
+  if (change?.Check) {
+    return checkResultNotice(change.Check);
+  }
+  const channel = change?.Settings?.Channel ?? "";
+  if (channel === "release" && running?.Channel === "nightly") {
+    return {
+      message:
+        "Switched to release. You keep this nightly until a newer release is published; Reinstall latest release goes back now.",
+      background: "variant-filled-success",
+    };
+  }
+  return { message: `Switched to ${channel}`, background: "variant-filled-success" };
+}
+
 /** The modal settings that open the update details panel. */
 export function updatePanelModal() {
   return {

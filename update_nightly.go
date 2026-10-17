@@ -22,9 +22,9 @@ var errNoNightlyPublished = errors.New("no nightly is published right now; a new
 
 // findNightlyUpdate compares the published nightly with the running nightly.
 func (a *App) findNightlyUpdate(ctx context.Context) (*Update, error) {
-	running, ok := parseNightlyVersion(a.build.Version)
+	running, from, ok := runningAsNightly(a.build.Version)
 	if !ok {
-		return nil, fmt.Errorf("the running version %q is not a nightly version", a.build.Version)
+		return nil, fmt.Errorf("the running version %q is neither a nightly nor a release version", a.build.Version)
 	}
 	release, err := a.releases().releaseByTag(ctx, nightlyTag)
 	if errors.Is(err, errReleaseNotFound) {
@@ -51,9 +51,24 @@ func (a *App) findNightlyUpdate(ctx context.Context) (*Update, error) {
 		Notes:       release.Notes,
 		ReleasePage: release.Page,
 		Commit:      commit,
-		CompareURL:  compareURL(release.Page, running.commit, commit),
+		CompareURL:  compareURL(release.Page, from, commit),
 		release:     release,
 	}, nil
+}
+
+// runningAsNightly is the running build as the nightly ordering sees it,
+// with the ref a compare link starts from. A nightly is itself, from its
+// commit. A release that switched to nightly is its date with no commit, so
+// any nightly dated that day or later is offered, and the compare link
+// starts from its tag.
+func runningAsNightly(version string) (running nightlyVersion, from string, ok bool) {
+	if nightly, ok := parseNightlyVersion(version); ok {
+		return nightly, nightly.commit, true
+	}
+	if release, ok := parseReleaseVersion(version); ok {
+		return nightlyVersion{date: release.date}, version, true
+	}
+	return nightlyVersion{}, "", false
 }
 
 // nightlyCommit reads the commit from the "Commit: <sha>" line of a nightly's

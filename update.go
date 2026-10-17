@@ -200,33 +200,53 @@ func (a *App) findUpdate(ctx context.Context, channel string) (*Update, error) {
 	}
 }
 
-// findReleaseUpdate compares the latest release with the running release.
+// findReleaseUpdate compares the latest release with the running build: a
+// running release by its tag, a running nightly (switched to release) by
+// its date alone, so the switch never downgrades (ADR 0006).
 func (a *App) findReleaseUpdate(ctx context.Context) (*Update, error) {
-	running, ok := parseReleaseVersion(a.build.Version)
-	if !ok {
-		return nil, fmt.Errorf("the running version %q is not a release version", a.build.Version)
+	var isUpdate func(releaseVersion) bool
+	if running, ok := parseReleaseVersion(a.build.Version); ok {
+		isUpdate = func(latest releaseVersion) bool { return latest.newerThan(running) }
+	} else if running, ok := parseNightlyVersion(a.build.Version); ok {
+		isUpdate = func(latest releaseVersion) bool { return latest.isUpdateForNightly(running) }
+	} else {
+		return nil, fmt.Errorf("the running version %q is neither a release nor a nightly version", a.build.Version)
 	}
-	release, err := a.releases().latestRelease(ctx)
-	if errors.Is(err, errReleaseNotFound) {
-		return nil, errors.New("no release is published on GitHub")
-	}
+	release, latest, err := a.latestRelease(ctx)
 	if err != nil {
 		return nil, err
 	}
-	latest, ok := parseReleaseVersion(release.Tag)
-	if !ok {
-		return nil, fmt.Errorf("the latest release %q is not a release version", release.Tag)
-	}
-	if !latest.newerThan(running) {
+	if !isUpdate(latest) {
 		return nil, nil
 	}
+	return releaseUpdate(release), nil
+}
+
+// latestRelease fetches the latest release and parses its tag.
+func (a *App) latestRelease(ctx context.Context) (githubRelease, releaseVersion, error) {
+	release, err := a.releases().latestRelease(ctx)
+	if errors.Is(err, errReleaseNotFound) {
+		return githubRelease{}, releaseVersion{}, errors.New("no release is published on GitHub")
+	}
+	if err != nil {
+		return githubRelease{}, releaseVersion{}, err
+	}
+	latest, ok := parseReleaseVersion(release.Tag)
+	if !ok {
+		return githubRelease{}, releaseVersion{}, fmt.Errorf("the latest release %q is not a release version", release.Tag)
+	}
+	return release, latest, nil
+}
+
+// releaseUpdate is release offered as an Update.
+func releaseUpdate(release githubRelease) *Update {
 	return &Update{
 		Channel:     channelRelease,
 		Version:     release.Tag,
 		Notes:       release.Notes,
 		ReleasePage: release.Page,
 		release:     release,
-	}, nil
+	}
 }
 
 // setKnownUpdate records the update the latest check found, or none. While
@@ -252,17 +272,6 @@ const (
 	channelRelease = "release"
 	channelNightly = "nightly"
 )
-
-// updateChannel is the channel the app follows: for now the channel of the
-// build that is running. "" means the app never checks.
-func (a *App) updateChannel() string {
-	switch a.build.Channel {
-	case channelRelease, channelNightly:
-		return a.build.Channel
-	default:
-		return ""
-	}
-}
 
 // releases is the release source update requests read from.
 func (a *App) releases() releaseSource {

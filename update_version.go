@@ -160,7 +160,19 @@ func sameCommit(a, b string) bool {
 
 // isUpdateFor reports whether the published nightly v is an update for the
 // running nightly: built from another commit, and dated the same day as the
-// running build or later. The same commit is never an update.
+// running build or later. The same commit is never an update. A running
+// build with no commit (a release switched to nightly) is ordered by date
+// alone.
 func (v nightlyVersion) isUpdateFor(running nightlyVersion) bool {
-	return !sameCommit(v.commit, running.commit) && !v.date.Before(running.date)
+	if running.commit != "" && sameCommit(v.commit, running.commit) {
+		return false
+	}
+	return !v.date.Before(running.date)
+}
+
+// isUpdateForNightly reports whether release r is an update for the
+// running nightly: only when it is dated after the nightly (ADR 0006), so
+// switching from nightly to release never downgrades.
+func (r releaseVersion) isUpdateForNightly(running nightlyVersion) bool {
+	return r.date.After(running.date)
 }

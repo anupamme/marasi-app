@@ -66,6 +66,10 @@ type Config struct {
 	// and the hidden built-in ids (saved_queries.go).
 	savedQueries         []SavedQuery
 	hiddenBuiltinQueries []string
+	// updateChannel is the saved Channel ("release" or "nightly"), or ""
+	// when none is saved and the app follows its build channel
+	// (update_channel.go). It is never written as a default.
+	updateChannel string
 }
 
 const appConfigName = "marasi_appconfig"
@@ -207,6 +211,7 @@ func LoadConfig(appConfigDir string) (*Config, error) {
 	config.highlights = parseHighlights(documentValue(doc, highlightsKey))
 	config.savedQueries = parseSavedQueries(documentValue(doc, savedQueriesKey))
 	config.hiddenBuiltinQueries = parseHiddenBuiltins(documentValue(doc, hiddenBuiltinQueriesKey))
+	config.updateChannel = parseUpdateChannel(documentValue(doc, updateChannelKey))
 
 	if err := loadTestCases(appConfigDir, config); err != nil {
 		return nil, fmt.Errorf("loading test cases: %w", err)

@@ -1,16 +1,25 @@
 <script>
 	// The update details panel: the running version, the update's version and
 	// its release notes, opened from the update indicator or by "Check for
-	// updates…" when it finds an update. Install, Dismiss and the nightly
-	// compare link are added by later work on updates.
-	import { getModalStore } from "@skeletonlabs/skeleton";
+	// updates…" when it finds an update. Dismiss hides the update until a
+	// newer build is published. Install and the nightly compare link are
+	// added by later work on updates.
+	import { getModalStore, getToastStore } from "@skeletonlabs/skeleton";
 	import { ExternalLink, X } from "lucide-svelte";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
-	import { updateState } from "../../stores/updateStore";
+	import { dismissUpdate, updateState } from "../../stores/updateStore";
+	import { toastError } from "../toasts";
 
 	export let parent;
 
 	const modalStore = getModalStore();
+	const toastStore = getToastStore();
+
+	function dismiss() {
+		dismissUpdate()
+			.then(() => parent.onClose())
+			.catch((err) => toastError(toastStore, "Could not dismiss the update", err));
+	}
 
 	$: update = $updateState.Update;
 	$: running = $updateState.Running;
@@ -67,6 +76,14 @@
 					<ExternalLink size={14} />
 					<span>Release page</span>
 				</button>
+			{/if}
+			{#if update}
+				<button
+					type="button"
+					class="btn variant-ghost-surface btn-sm"
+					title="Hide this update until a newer build is published"
+					on:click={dismiss}>Dismiss</button
+				>
 			{/if}
 			<button
 				type="button"

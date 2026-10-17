@@ -17,6 +17,8 @@
 		AddChromeProfile,
 		DeleteChromeProfile,
 		GetBuildInfo,
+		GetUpdateSettings,
+		SetAutomaticUpdateChecks,
 	} from "../../lib/wailsjs/go/main/App";
 	import {
 		keybindingState,
@@ -56,7 +58,7 @@
 		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
 		{ id: "content-types", name: "Content Types", hint: "Types the Ledger hides", icon: FileType },
 		{ id: "maintenance", name: "Maintenance", hint: "Background jobs and rebuilds", icon: Wrench },
-		{ id: "about", name: "About", hint: "Version and build", icon: Info },
+		{ id: "about", name: "About", hint: "Version, build and updates", icon: Info },
 	];
 	const syntaxModes = [
 		["disabled", "Disabled"],
@@ -74,6 +76,9 @@
 	let chromePaths = [];
 	let chromeProfiles = [];
 	let buildInfo = null;
+	// The update settings (Go UpdateSettings), null until read.
+	let updateSettings = null;
+	let automaticChecks = true;
 	// Settings → Content Types' one box: it filters the list, and Enter adds
 	// what it holds when that is a new type/subtype or type/*.
 	let contentTypeFind = "";
@@ -224,6 +229,19 @@
 	}
 	$: if (section === "maintenance") jobsStore.refresh();
 
+	// Turns automatic update checks on or off; on failure the switch goes back.
+	function setAutomaticChecks(on) {
+		SetAutomaticUpdateChecks(on)
+			.then((settings) => {
+				updateSettings = settings;
+				automaticChecks = settings.AutomaticChecks;
+			})
+			.catch((error) => {
+				automaticChecks = !on;
+				toastError(toastStore, "Error saving automatic update checks", error);
+			});
+	}
+
 	onMount(() => {
 		ledgerStore.loadDefaultExclusion().catch((error) => {
 			console.error("Reading the default content types failed:", error);
@@ -231,6 +249,12 @@
 		GetBuildInfo().then((info) => {
 			buildInfo = info;
 		});
+		GetUpdateSettings()
+			.then((settings) => {
+				updateSettings = settings;
+				automaticChecks = settings.AutomaticChecks;
+			})
+			.catch((error) => toastError(toastStore, "Error reading the update settings", error));
 		GetChromePaths()
 			.then((paths) => {
 				chromePaths = paths;
@@ -748,6 +772,25 @@
 				<div class={row}>
 					<p>Channel</p>
 					<p class="{control} font-mono text-sm">{buildInfo?.Channel ?? "…"}</p>
+				</div>
+				<!-- Update settings: the Channel choice belongs beside this switch. -->
+				<div class={row}>
+					<div>
+						<p>Automatic update checks</p>
+						<p class="text-sm opacity-70">
+							Check for an update at launch and every 6 hours. "Check for updates…" works either way.
+						</p>
+					</div>
+					<div class="{control} justify-end">
+						<SlideToggle
+							name="update-checks"
+							label="Automatic update checks"
+							active="bg-primary-500"
+							disabled={!updateSettings}
+							bind:checked={automaticChecks}
+							on:change={() => setAutomaticChecks(automaticChecks)}
+						/>
+					</div>
 				</div>
 			{/if}
 		</section>

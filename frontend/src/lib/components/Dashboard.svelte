@@ -49,6 +49,7 @@
 		refreshDashboard();
 	}
 
+	// Figures use the reader's locale ("100,000"), as the Ledger's counts do.
 	// While a figure is read its card shows a ghost bar instead; a newer
 	// refresh (a project switch) wins over a slower older one.
 	let countsLoading = true;
@@ -125,7 +126,7 @@
 							Total Requests
 						</p>
 						<p class="text-3xl font-bold">
-							{#if countsLoading}<span class={ghost}></span>{:else}{totalRequests}{/if}
+							{#if countsLoading}<span class={ghost}></span>{:else}{totalRequests.toLocaleString()}{/if}
 						</p>
 					</div>
 				</div>
@@ -150,7 +151,7 @@
 							Notes
 						</p>
 						<p class="text-3xl font-bold">
-							{#if countsLoading}<span class={ghost}></span>{:else}{notes}{/if}
+							{#if countsLoading}<span class={ghost}></span>{:else}{notes.toLocaleString()}{/if}
 						</p>
 					</div>
 				</div>
@@ -175,7 +176,7 @@
 							Launchpads
 						</p>
 						<p class="text-3xl font-bold">
-							{#if countsLoading}<span class={ghost}></span>{:else}{launchpads}{/if}
+							{#if countsLoading}<span class={ghost}></span>{:else}{launchpads.toLocaleString()}{/if}
 						</p>
 					</div>
 				</div>
@@ -200,7 +201,7 @@
 							Intercepted
 						</p>
 						<p class="text-3xl font-bold">
-							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted}{#if !interceptedComplete}<span
+							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted.toLocaleString()}{#if !interceptedComplete}<span
 										class="dashboard-counting ml-2 align-middle text-sm font-normal opacity-60"
 										title="Marasi is still counting intercepted requests from before this version"
 										>counting…</span
@@ -231,7 +232,7 @@
 							Test Cases
 						</p>
 						<p class="text-3xl font-bold">
-							{testCasesCount}
+							{testCasesCount.toLocaleString()}
 						</p>
 					</div>
 				</div>
@@ -255,7 +256,7 @@
 							Findings
 						</p>
 						<p class="text-3xl font-bold">
-							{findingsCount}
+							{findingsCount.toLocaleString()}
 						</p>
 					</div>
 				</div>
@@ -314,7 +315,7 @@
 							Include Rules
 						</p>
 						<p class="text-3xl font-bold">
-							{#if scopeLoading}<span class={ghost}></span>{:else}{includeRulesCount}{/if}
+							{#if scopeLoading}<span class={ghost}></span>{:else}{includeRulesCount.toLocaleString()}{/if}
 						</p>
 					</div>
 				</div>
@@ -339,7 +340,7 @@
 							Exclude Rules
 						</p>
 						<p class="text-3xl font-bold">
-							{#if scopeLoading}<span class={ghost}></span>{:else}{excludeRulesCount}{/if}
+							{#if scopeLoading}<span class={ghost}></span>{:else}{excludeRulesCount.toLocaleString()}{/if}
 						</p>
 					</div>
 				</div>

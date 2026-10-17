@@ -19,6 +19,8 @@ type updateScheduler struct {
 	mu     sync.Mutex
 	cancel context.CancelFunc
 	done   chan struct{}
+	// wake asks the running checks for a check now; nil while stopped.
+	wake chan struct{}
 }
 
 // startUpdateChecks starts the automatic checks under ctx. Startup calls it;
@@ -32,7 +34,8 @@ func (a *App) startUpdateChecks(ctx context.Context) {
 	}
 	ctx, s.cancel = context.WithCancel(ctx)
 	s.done = make(chan struct{})
-	go func(done chan struct{}) {
+	s.wake = make(chan struct{}, 1)
+	go func(done, wake chan struct{}) {
 		defer close(done)
 		a.automaticCheck(ctx)
 		ticks, stopTicks := a.newUpdateTicker(updateCheckInterval)
@@ -43,9 +46,27 @@ func (a *App) startUpdateChecks(ctx context.Context) {
 				return
 			case <-ticks:
 				a.automaticCheck(ctx)
+			case <-wake:
+				a.automaticCheck(ctx)
 			}
 		}
-	}(s.done)
+	}(s.done, s.wake)
+}
+
+// checkSoon asks the running automatic checks for a check now, as turning
+// them back on does. It returns at once, and does nothing while they are
+// stopped.
+func (a *App) checkSoon() {
+	s := &a.updateSchedule
+	s.mu.Lock()
+	defer s.mu.Unlock()
+	if s.wake == nil {
+		return
+	}
+	select {
+	case s.wake <- struct{}{}:
+	default: // a check is already asked for
+	}
 }
 
 // stopUpdateChecks stops the automatic checks and waits for a running one to
@@ -54,7 +75,7 @@ func (a *App) stopUpdateChecks() {
 	s := &a.updateSchedule
 	s.mu.Lock()
 	cancel, done := s.cancel, s.done
-	s.cancel, s.done = nil, nil
+	s.cancel, s.done, s.wake = nil, nil, nil
 	s.mu.Unlock()
 	if cancel == nil {
 		return

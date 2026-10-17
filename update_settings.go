@@ -36,20 +36,31 @@ func (a *App) GetUpdateSettings() UpdateSettings {
 }
 
 // SetAutomaticUpdateChecks turns automatic checks on or off and saves the
-// choice. Off takes effect from the next due check; "Check for updates…"
-// works either way. On error the setting is unchanged.
+// choice. Off takes effect from the next due check; turning them back on
+// checks right away. "Check for updates…" works either way. On error the
+// setting is unchanged.
 func (a *App) SetAutomaticUpdateChecks(on bool) (UpdateSettings, error) {
-	cfg := a.Config
-	cfg.mu.Lock()
-	err := writeConfigKeys(cfg.path(), map[string]any{updateChecksKey: on})
-	if err == nil {
-		cfg.updateSettings.AutomaticChecks = on
-	}
-	cfg.mu.Unlock()
+	turnedOn, err := a.Config.setAutomaticUpdateChecks(on)
 	if err != nil {
 		return a.GetUpdateSettings(), fmt.Errorf("saving automatic checks: %w", err)
 	}
+	if turnedOn {
+		a.checkSoon()
+	}
 	return a.GetUpdateSettings(), nil
+}
+
+// setAutomaticUpdateChecks saves whether automatic checks are on, and
+// reports whether they were off and now are on.
+func (cfg *Config) setAutomaticUpdateChecks(on bool) (turnedOn bool, err error) {
+	cfg.mu.Lock()
+	defer cfg.mu.Unlock()
+	if err := writeConfigKeys(cfg.path(), map[string]any{updateChecksKey: on}); err != nil {
+		return false, err
+	}
+	turnedOn = on && !cfg.updateSettings.AutomaticChecks
+	cfg.updateSettings.AutomaticChecks = on
+	return turnedOn, nil
 }
 
 // automaticChecksOn reports whether automatic checks are on.

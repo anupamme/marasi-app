@@ -165,6 +165,49 @@ func TestTurningAutomaticChecksOffWhileRunningStopsTheNextCheck(t *testing.T) {
 	}
 }
 
+func TestTurningAutomaticChecksBackOnChecksRightAway(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	releases.publishRelease("17.10.2026", "")
+	app, events := newUpdateApp(t, "release", "16.10.2026", releases)
+	if _, err := app.SetAutomaticUpdateChecks(false); err != nil {
+		t.Fatal(err)
+	}
+	ticker := withFakeUpdateTicker(app)
+	startAutomaticChecks(t, app)
+	ticker.waitForStartupCheck(t)
+	if n := releases.requestCount(); n != 0 {
+		t.Fatalf("wanted no startup check with automatic checks off, got %v", releases.requested())
+	}
+
+	if settings, err := app.SetAutomaticUpdateChecks(true); err != nil || !settings.AutomaticChecks {
+		t.Fatalf("wanted automatic checks on, got %+v (%v)", settings, err)
+	}
+
+	waitFor(t, "the check turning automatic checks on runs", func() bool { return events.has(updateAvailableEvent) })
+	if n := releases.requestCount(); n != 1 {
+		t.Fatalf("wanted one check, got %v", releases.requested())
+	}
+}
+
+func TestTurningAutomaticChecksOnWhenAlreadyOnDoesNotCheck(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	releases.publishRelease("16.10.2026", "")
+	app, _ := newUpdateApp(t, "release", "16.10.2026", releases)
+	ticker := withFakeUpdateTicker(app)
+	startAutomaticChecks(t, app)
+	ticker.waitForStartupCheck(t)
+
+	if _, err := app.SetAutomaticUpdateChecks(true); err != nil {
+		t.Fatal(err)
+	}
+	ticker.tick(t)
+	ticker.tick(t) // returns once anything queued before it was handled
+
+	if n := releases.requestCount(); n != 2 {
+		t.Fatalf("wanted the startup check and one due check, got %v", releases.requested())
+	}
+}
+
 func TestAutomaticChecksSettingIsKeptAcrossRestarts(t *testing.T) {
 	app, _ := newUpdateApp(t, "release", "16.10.2026", newFakeReleaseServer(t))
 	if _, err := app.SetAutomaticUpdateChecks(false); err != nil {

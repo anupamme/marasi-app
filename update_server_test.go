@@ -27,6 +27,7 @@ type fakeReleaseServer struct {
 	releases map[string]*fakeRelease // by tag
 	latest   string                  // tag of the latest non-prerelease
 	assets   map[string][]byte       // "tag/name" -> bytes
+	stalled  map[string]bool         // "tag/name" of assets whose download hangs
 	failWith int                     // status answered to every request, 0 for none
 	requests []string                // "METHOD path" in arrival order
 }
@@ -46,6 +47,7 @@ func newFakeReleaseServer(t *testing.T) *fakeReleaseServer {
 		t:        t,
 		releases: map[string]*fakeRelease{},
 		assets:   map[string][]byte{},
+		stalled:  map[string]bool{},
 	}
 	f.server = httptest.NewServer(http.HandlerFunc(f.serve))
 	t.Cleanup(f.server.Close)
@@ -95,6 +97,14 @@ func (f *fakeReleaseServer) addAsset(tag, name string, data []byte) {
 	f.assets[tag+"/"+name] = data
 }
 
+// stall makes downloads of an asset send half its bytes and then hang until
+// the client gives up, like a download on a slow link.
+func (f *fakeReleaseServer) stall(tag, name string) {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	f.stalled[tag+"/"+name] = true
+}
+
 // fail makes every later request answer status; 0 serves normally again.
 func (f *fakeReleaseServer) fail(status int) {
 	f.mu.Lock()
@@ -131,13 +141,24 @@ func (f *fakeReleaseServer) serve(w http.ResponseWriter, r *http.Request) {
 	case strings.HasPrefix(path, "/releases/tags/"):
 		f.writeRelease(w, f.releases[strings.TrimPrefix(path, "/releases/tags/")])
 	case strings.HasPrefix(path, "/download/"):
-		data, ok := f.assets[strings.TrimPrefix(path, "/download/")]
+		key := strings.TrimPrefix(path, "/download/")
+		data, ok := f.assets[key]
 		if !ok {
 			http.NotFound(w, r)
 			return
 		}
 		w.Header().Set("Content-Length", fmt.Sprint(len(data)))
-		_, _ = w.Write(data)
+		if !f.stalled[key] {
+			_, _ = w.Write(data)
+			return
+		}
+		// Send half, then hang until the client gives up, without holding
+		// the server's lock.
+		_, _ = w.Write(data[:len(data)/2])
+		w.(http.Flusher).Flush()
+		f.mu.Unlock()
+		<-r.Context().Done()
+		f.mu.Lock()
 	default:
 		http.NotFound(w, r)
 	}

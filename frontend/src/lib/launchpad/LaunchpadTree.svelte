@@ -5,7 +5,7 @@
 
 <script>
 	// The Launchpad file tree: one scroll container, sticky launchpad rows,
-	// each list windowed to its original entry plus the latest entries.
+	// each list in entry order, windowed to its last entries.
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate, tick } from "svelte";
@@ -16,7 +16,6 @@
 	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
 	import { launchEndText, primaryVariant, shortTime, statusClass } from "./format.js";
-	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
 	export let pickLaunchpad;
@@ -93,7 +92,7 @@
 	const rowKey = (row) =>
 		row.kind === "entry" ? row.entry.ID : row.kind === "group" ? row.id : `more:${row.list}`;
 
-	// Floating "Latest in …": measured after every render and on scroll.
+	// Floating "End of …": measured after every render and on scroll.
 	// Synchronous on purpose: scroll events already arrive once per frame,
 	// and requestAnimationFrame never fires while the window is hidden.
 	let scroller;
@@ -346,7 +345,7 @@
 											? 'hover:bg-primary-500/15'
 											: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
 									data-compare={side ? COMPARE_SIDES[side].label : undefined}
-									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
+									title="#{row.index + 1} · pair #{entry.Number} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
 										? ` · ${endText}`
 										: ''}"
 									data-launch={launch?.Status}
@@ -362,7 +361,6 @@
 									<span class="absolute bottom-0 left-[1.15rem] top-0 border-l border-surface-500/30"></span>
 									{#if row.depth === 2}<span class="absolute bottom-0 left-[2.4rem] top-0 border-l border-surface-500/30"></span>{/if}
 									<span class="flex w-9 flex-none items-center justify-end gap-1 opacity-60">
-										{#if row.index === 0}<OriginIcon size={12} class="text-primary-500" />{/if}
 										{row.index + 1}
 									</span>
 									<span class="w-11 flex-none opacity-60">{entry.Method}</span>
@@ -403,9 +401,9 @@
 		{#if jump}
 			<!-- Opaque backing: the light-mode ghost variant is translucent. -->
 			<div class="absolute bottom-3 left-1/2 z-20 max-w-[90%] -translate-x-1/2 bg-surface-50 shadow-lg dark:bg-surface-900">
-				<button class="btn btn-sm {primary} w-full" title="Jump to the latest entry in {jump.label}" on:click={jumpToLatest}>
+				<button class="btn btn-sm {primary} w-full" title="Jump to the end of {jump.label}" on:click={jumpToLatest}>
 					<ArrowDown size={14} />
-					<span class="truncate">Latest in {jump.label}</span>
+					<span class="truncate">End of {jump.label}</span>
 				</button>
 			</div>
 		{/if}

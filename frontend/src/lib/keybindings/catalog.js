@@ -141,7 +141,7 @@ export const FACTORY_ACTIONS = [
     ["toggle-compare", "Compare Entries", "Compare two entries of the open launchpad, or stop comparing", "compare, diff", primary("shift+c")],
     ["toggle-compare-view", "Switch Compare Request/Response", "Show the request or the response diff while comparing", "compare, diff, request, response", primary("shift+r")],
     ["swap-compare", "Swap Compared Entries", "Swap the A and B entries while comparing", "compare, swap", primary("shift+x")],
-    ["jump-to-latest", "Jump to Latest Entry", "Select the newest entry and scroll the sidebar to it", "latest, newest, bottom, jump, scroll, select", primary("shift+down"), { yieldsToEditors: true }],
+    ["jump-to-latest", "Jump to Last Entry", "Select the last entry in entry order and scroll the sidebar to it", "last, end, latest, bottom, jump, scroll, select", primary("shift+down"), { yieldsToEditors: true }],
   ]),
   ...pageActions("checkpoint", [
     ["toggle-settings", "Toggle Checkpoint Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],

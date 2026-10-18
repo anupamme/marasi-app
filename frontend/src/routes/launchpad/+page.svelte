@@ -34,7 +34,7 @@
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
     import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
-    import { latestEntry } from "../../lib/launchpad/jumpTarget.js";
+    import { lastEntry } from "../../lib/launchpad/jumpTarget.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
@@ -107,15 +107,15 @@
         );
     }
 
-    // ⌘⇧↓ selects the open launchpad's newest entry through the usual
+    // ⌘⇧↓ selects the open launchpad's last entry through the usual
     // draft guard. While that launchpad is compared, it only scrolls, so A
     // and B stay as picked.
     async function jumpToLatest() {
         const state = get(launchpadStore);
-        const latest = latestEntry(state);
-        if (!latest) return;
-        if (state.compare?.launchpadId !== latest.launchpadId) await pickEntry(latest.launchpadId, latest.entryId);
-        await tree?.showEntry(latest.launchpadId, latest.entryId);
+        const last = lastEntry(state);
+        if (!last) return;
+        if (state.compare?.launchpadId !== last.launchpadId) await pickEntry(last.launchpadId, last.entryId);
+        await tree?.showEntry(last.launchpadId, last.entryId);
     }
 
     // Esc cancels a chip re-pick, then closes compare. Editors, inputs and

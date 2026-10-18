@@ -388,11 +388,14 @@ export function createLaunchpadStore(api) {
       details = await ensureDetails(launchId);
       if (version !== projectStateVersion) return;
     }
+    const sent = sentRaw(launchId, details);
     if (!awaitingEntry.delete(launchId)) return;
-    update((state) =>
-      selectLaunched(state, launchpadId, launchId, details?.Request?.Raw ?? raw, raw),
-    );
+    update((state) => selectLaunched(state, launchpadId, launchId, sent, raw));
   }
+
+  // The request an entry sent, from its details `row`. A launch from this
+  // store whose request Marasi has not stored yet sent the draft it launched.
+  const sentRaw = (entryId, row) => row?.Request?.Raw ?? awaitingEntry.get(entryId)?.raw;
 
   // Replaces the pending launches with Marasi's list. A launch this store
   // still thinks pending but Marasi no longer lists ended unseen; read it.
@@ -460,7 +463,7 @@ export function createLaunchpadStore(api) {
       },
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: makeDraft(row?.Request?.Raw ?? "", entryId, previous),
+        [launchpadId]: makeDraft(sentRaw(entryId, row) ?? "", entryId, previous),
       },
     }));
   }

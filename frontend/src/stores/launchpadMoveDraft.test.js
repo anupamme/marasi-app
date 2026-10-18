@@ -76,6 +76,19 @@ test("a source whose last entry is still launching reseeds from the request as s
   assert.deepEqual(draftOf(store, "lp1"), { raw: "GET /sent HTTP/1.1\n\n", seededFrom: "L", useHttps: false });
 });
 
+// Marasi has no request to read for a launch whose request event has not
+// come yet, so the reseeded draft is the request as launched.
+test("a source whose last entry is launching and not yet sent reseeds from the launched request", async () => {
+  const fake = fakeMarasi();
+  const getRawDetails = fake.api.getRawDetails;
+  fake.api.getRawDetails = async (id) => (id === "L" ? null : getRawDetails(id));
+  const { store } = await editingB(fake);
+  await store.launch("lp1");
+  await store.selectEntry("lp1", "b", { force: true });
+  await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["b"] });
+  assert.deepEqual(draftOf(store, "lp1"), { raw: EDITED_B, seededFrom: "L", useHttps: false });
+});
+
 test("a source left empty gets a blank draft", async () => {
   const { store } = await editingB();
   await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["a", "b", "c", "d", "e"] });

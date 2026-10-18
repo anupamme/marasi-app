@@ -22,6 +22,7 @@ import (
 	"sync/atomic"
 	"time"
 
+	"aead.dev/minisign"
 	"github.com/tfkr-ae/marasi/chrome"
 	"github.com/tfkr-ae/marasi/domain"
 	"github.com/tfkr-ae/marasi/extensions"
@@ -52,6 +53,45 @@ type App struct {
 	// unsavedDrafts is the number of launchpads with a dirty Launchpad
 	// draft, reported by the frontend, which holds drafts in memory only.
 	unsavedDrafts atomic.Int64
+
+	// Updates (update.go). build is the running build, from the build-time
+	// buildChannel and version; tests set their own.
+	build BuildInfo
+	// releaseSource is the base URL of the GitHub releases API releases are
+	// read from (defaultReleaseSource); tests point it at a fake server.
+	releaseSource string
+	// updateClient replaces the client update requests use; nil uses
+	// updateHTTPClient's.
+	updateClient *http.Client
+	// systemProxy finds the system proxy for an update request; nil reads
+	// the environment and the OS proxy settings. Tests point it at a proxy.
+	systemProxy func(*http.Request) (*url.URL, error)
+	// updates is the known update state.
+	updates updater
+	// updateSchedule runs the automatic checks (update_schedule.go).
+	updateSchedule updateScheduler
+	// updateTicker replaces the ticker automatic checks follow; nil uses a
+	// time.Ticker. Tests tick by hand.
+	updateTicker func(interval time.Duration) (<-chan time.Time, func())
+	// signingKey is the Marasi signing key updates must be signed with (ADR
+	// 0005), from the key built into the app; nil when the build has none,
+	// and then it cannot install updates.
+	signingKey *minisign.PublicKey
+	// installer is the platform's part of installing an update
+	// (update_platform_<goos>.go); nil where the app cannot replace itself.
+	installer platformInstaller
+	// installLocation is the file or bundle an install replaces, resolved
+	// from the running executable; "" when it could not be found.
+	installLocation string
+	// relaunch starts the build at installLocation while the app shuts down
+	// after "Restart now". Tests record the call.
+	relaunch func(location string) error
+	// quitApp quits through the normal shutdown, beforeClose included.
+	quitApp func()
+	// restarting is set once the researcher confirmed "Restart now", so
+	// beforeClose does not ask about losing work a second time and close
+	// relaunches.
+	restarting atomic.Bool
 }
 
 // NewApp creates a new App application struct
@@ -93,8 +133,22 @@ func NewApp() *App {
 // bound to the listener so listener shutdown interrupts project Lua before
 // draining the requests it may be holding.
 func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, logWriter io.Writer, logger *slog.Logger) *App {
-	app := &App{Proxy: proxy}
+	app := &App{
+		Proxy:         proxy,
+		build:         BuildInfo{Channel: buildChannel, Version: version},
+		releaseSource: defaultReleaseSource,
+	}
 	app.emitEvent = app.emit
+	app.signingKey = loadSigningKey()
+	app.installer = defaultInstaller()
+	app.installLocation = resolveInstallLocation(app.installer)
+	app.relaunch = func(location string) error {
+		if app.installer == nil {
+			return errors.New("Marasi cannot relaunch itself on this platform")
+		}
+		return app.installer.relaunch(location)
+	}
+	app.quitApp = func() { runtime.Quit(app.ctx) }
 	app.messageDialog = func(options runtime.MessageDialogOptions) (string, error) {
 		return runtime.MessageDialog(app.ctx, options)
 	}
@@ -112,6 +166,7 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 // so we can call the runtime methods
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
+	go a.removeUpdateLeftovers()
 	logHandler := NewLogHandler(ctx)
 	if a.attachFrontendLog != nil {
 		a.attachFrontendLog(logHandler.Handler())
@@ -135,6 +190,7 @@ func (a *App) startup(ctx context.Context) {
 		}),
 		marasi.WithLogger(logHandler),
 	)
+	a.startUpdateChecks(ctx)
 }
 func (a *App) ToggleFlag(name string) (*Config, error) {
 	err := a.Config.ToggleFlag(name)
@@ -308,6 +364,8 @@ func (a *App) prepareOpenedProject() {
 	}
 }
 func (a *App) close(ctx context.Context) {
+	a.stopUpdateChecks()
+	a.CancelUpdateDownload()
 	// Like the service's shutdown: end pending launches first, so their
 	// outcomes are written to the open project before the listener goes.
 	a.Proxy.InterruptLaunches()
@@ -317,9 +375,14 @@ func (a *App) close(ctx context.Context) {
 			log.Printf("releasing open project: %v", err)
 		}
 	}
+	a.relaunchIfRestarting()
 }
 
 func (a *App) beforeClose(ctx context.Context) bool {
+	// "Restart now" has already warned about losing work.
+	if a.restarting.Load() {
+		return false
+	}
 	confirmed, err := a.confirmLosingWork("Close Marasi")
 	if err != nil {
 		log.Printf("cancelling active Armory runs: %v", err)

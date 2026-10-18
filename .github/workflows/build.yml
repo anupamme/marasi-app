@@ -87,9 +87,16 @@ jobs:
           TAGS: ${{ matrix.tags }}
           CHANNEL: ${{ inputs.channel }}
           VERSION: ${{ inputs.version }}
+          # The public half of the Marasi signing key (ADR 0005), the base64
+          # line of minisign.pub. The app verifies updates against it.
+          SIGNING_PUBLIC_KEY: ${{ vars.MARASI_SIGNING_PUBLIC_KEY }}
         run: |
+          if [ -z "$SIGNING_PUBLIC_KEY" ]; then
+            echo "::error::repository variable MARASI_SIGNING_PUBLIC_KEY is not set"
+            exit 1
+          fi
           args=(-platform "$PLATFORM" -webview2 download -o "$OUTPUT"
-            -ldflags "-X main.buildChannel=$CHANNEL -X 'main.version=$VERSION'")
+            -ldflags "-X main.buildChannel=$CHANNEL -X 'main.version=$VERSION' -X main.signingPublicKey=$SIGNING_PUBLIC_KEY")
           if [ -n "$TAGS" ]; then
             args+=(-tags "$TAGS")
           fi

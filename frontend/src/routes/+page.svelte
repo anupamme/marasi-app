@@ -20,6 +20,7 @@
 		listenerModal,
 		projectModal,
 	} from "../lib/globalActions.js";
+	import { neutralVariant } from "../lib/launchpad/format.js";
 	import { onMount } from "svelte";
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
@@ -50,7 +51,7 @@
 				<div class="btn-group {$modeCurrent ? 'light-ghost-group' : 'variant-filled'}">
 					<button
 						type="button"
-						class="btn items-center flex {$modeCurrent ? 'variant-ghost border-0 ring-0' : 'variant-filled'}"
+						class="btn items-center flex {neutralVariant($modeCurrent)}"
 						on:click={() => {
 							if (!$modalStore[0]) modalStore.trigger(listenerModal(toastStore));
 						}}
@@ -69,7 +70,7 @@
 					</button>
 					<button
 						type="button"
-						class="btn flex items-center {$modeCurrent ? 'variant-ghost border-0 ring-0' : 'variant-filled'}"
+						class="btn flex items-center {neutralVariant($modeCurrent)}"
 						on:click={() => {
 							if (!$modalStore[0]) modalStore.trigger(projectModal(toastStore));
 						}}

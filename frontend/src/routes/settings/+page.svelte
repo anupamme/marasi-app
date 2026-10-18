@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Search, Wrench, X } from "lucide-svelte";
+	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, RefreshCw, Replace, Search, Wrench, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -17,6 +17,8 @@
 		AddChromeProfile,
 		DeleteChromeProfile,
 		GetBuildInfo,
+		GetUpdateSettings,
+		SetAutomaticUpdateChecks,
 	} from "../../lib/wailsjs/go/main/App";
 	import {
 		keybindingState,
@@ -31,9 +33,23 @@
 		modeCurrent,
 	} from "@skeletonlabs/skeleton";
 	import { onMount } from "svelte";
+	import { page } from "$app/stores";
+	import { goto } from "$app/navigation";
+	import {
+		channelSwitchNotice,
+		showsUpdateIndicator,
+		updatePanelModal,
+		updateStatusLine,
+	} from "../../lib/updates.js";
+	import {
+		checkForUpdatesAndShowResult,
+		reinstallLatestRelease,
+		setUpdateChannel,
+		updateState,
+	} from "../../stores/updateStore";
 	import { chromeError } from "../../lib/globalActions.js";
 	import { toastError } from "../../lib/toasts.js";
-	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import { neutralVariant, primaryVariant } from "../../lib/launchpad/format.js";
 	import {
 		highlightPalette,
 		resetHighlights,
@@ -56,6 +72,7 @@
 		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
 		{ id: "content-types", name: "Content Types", hint: "Types the Ledger hides", icon: FileType },
 		{ id: "maintenance", name: "Maintenance", hint: "Background jobs and rebuilds", icon: Wrench },
+		{ id: "updates", name: "Updates", hint: "Channel and checks", icon: RefreshCw },
 		{ id: "about", name: "About", hint: "Version and build", icon: Info },
 	];
 	const syntaxModes = [
@@ -63,7 +80,20 @@
 		["auto", "Auto"],
 		["enabled", "Enabled"],
 	];
+	const channels = [
+		["release", "Release"],
+		["nightly", "Nightly"],
+	];
 	let section = "editing";
+	// ?section=<id> opens a section, as the update panel's link to the
+	// Channel setting does. Choosing a section puts it in the URL, so that
+	// link switches section even after the researcher moved to another one.
+	$: requestedSection = $page.url.searchParams.get("section");
+	$: if (sections.some((entry) => entry.id === requestedSection)) section = requestedSection;
+	function selectSection(id) {
+		section = id;
+		goto(`?section=${id}`, { replaceState: true, noScroll: true, keepFocus: true });
+	}
 
 	let targetHost = "";
 	let override = "";
@@ -74,6 +104,9 @@
 	let chromePaths = [];
 	let chromeProfiles = [];
 	let buildInfo = null;
+	// The update settings (Go UpdateSettings), null until read.
+	let updateSettings = null;
+	let automaticChecks = false;
 	// Settings → Content Types' one box: it filters the list, and Enter adds
 	// what it holds when that is a new type/subtype or type/*.
 	let contentTypeFind = "";
@@ -84,6 +117,8 @@
 	$: contentTypeList = exclusionGroups($defaultExclusion, contentTypeFind);
 
 	$: primary = primaryVariant($modeCurrent);
+	// Home's Open Project button: the app's neutral style.
+	$: neutral = neutralVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
 		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
@@ -224,6 +259,70 @@
 	}
 	$: if (section === "maintenance") jobsStore.refresh();
 
+	// Turns automatic update checks on or off; on failure the switch goes back.
+	function setAutomaticChecks(on) {
+		SetAutomaticUpdateChecks(on)
+			.then((settings) => {
+				updateSettings = settings;
+				automaticChecks = settings.AutomaticChecks;
+			})
+			.catch((error) => {
+				automaticChecks = !on;
+				toastError(toastStore, "Error saving automatic update checks", error);
+			});
+	}
+
+	// Switches the Channel. Switching to nightly checks at once: an update
+	// opens the details panel, anything else is a toast.
+	let switchingChannel = false;
+	function chooseChannel(channel) {
+		if (switchingChannel || updateSettings?.Channel === channel) return;
+		switchingChannel = true;
+		setUpdateChannel(channel)
+			.then((change) => {
+				updateSettings = change.Settings;
+				const notice = channelSwitchNotice(change, buildInfo);
+				if (notice) {
+					toastStore.trigger(notice);
+				} else {
+					modalStore.trigger(updatePanelModal());
+				}
+			})
+			.catch((error) => toastError(toastStore, "Error switching channel", error))
+			.finally(() => (switchingChannel = false));
+	}
+
+	// Settings → Updates' Check runs "Check for updates…": an update opens the
+	// details panel; otherwise a toast says why there is none.
+	let checking = false;
+	function checkNow() {
+		if (checking) return;
+		checking = true;
+		checkForUpdatesAndShowResult(toastStore, () => modalStore.trigger(updatePanelModal())).finally(
+			() => (checking = false),
+		);
+	}
+
+	// "Reinstall latest release": Go shows the warning about newer projects,
+	// then installs; the panel opens to offer Restart now, or the failure.
+	let reinstalling = false;
+	function reinstall() {
+		if (reinstalling) return;
+		reinstalling = true;
+		reinstallLatestRelease()
+			.then((result) => {
+				if (result.Outcome === "installed") {
+					// The reinstalled release follows the release channel.
+					GetUpdateSettings().then((settings) => (updateSettings = settings));
+				}
+				if (result.Outcome === "installed" || result.Outcome === "failed") {
+					modalStore.trigger(updatePanelModal());
+				}
+			})
+			.catch((error) => toastError(toastStore, "Could not reinstall the latest release", error))
+			.finally(() => (reinstalling = false));
+	}
+
 	onMount(() => {
 		ledgerStore.loadDefaultExclusion().catch((error) => {
 			console.error("Reading the default content types failed:", error);
@@ -231,6 +330,12 @@
 		GetBuildInfo().then((info) => {
 			buildInfo = info;
 		});
+		GetUpdateSettings()
+			.then((settings) => {
+				updateSettings = settings;
+				automaticChecks = settings.AutomaticChecks;
+			})
+			.catch((error) => toastError(toastStore, "Error reading the update settings", error));
 		GetChromePaths()
 			.then((paths) => {
 				chromePaths = paths;
@@ -272,7 +377,7 @@
 						? 'border-primary-500 bg-surface-200 dark:bg-surface-700'
 						: 'border-transparent'}"
 					aria-current={section === entry.id ? "true" : undefined}
-					on:click={() => (section = entry.id)}
+					on:click={() => selectSection(entry.id)}
 				>
 					<svelte:component this={entry.icon} size={18} class="shrink-0 opacity-80" />
 					<span class="flex flex-col">
@@ -739,6 +844,72 @@
 						</tbody>
 					</table>
 				</div>
+			{:else if section === "updates"}
+				<h3 class="text-xl font-bold">Updates</h3>
+				{#if updateSettings?.Channel}
+					<div class={row}>
+						<p>Channel</p>
+						<!-- Styled as the Ledger sitemap's All / Matching toggle. -->
+						<div class="{control} text-sm" role="radiogroup" aria-label="Channel">
+							{#each channels as [value, label]}
+								<button
+									type="button"
+									role="radio"
+									aria-checked={updateSettings.Channel === value}
+									disabled={switchingChannel}
+									class="flex-1 px-3 py-1.5 {updateSettings.Channel === value
+										? primary
+										: 'bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600'}"
+									on:click={() => chooseChannel(value)}>{label}</button
+								>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				<div class={row}>
+					<div>
+						<p>{updateStatusLine($updateState)}</p>
+						<p class="text-sm opacity-60 font-mono">{buildInfo?.Version ?? "…"}</p>
+					</div>
+					<div class="{control} justify-end gap-2">
+						{#if showsUpdateIndicator($updateState)}
+							<button
+								type="button"
+								class="btn btn-sm {primary}"
+								on:click={() => modalStore.trigger(updatePanelModal())}>View</button
+							>
+						{/if}
+						<button type="button" class="btn btn-sm {neutral}" disabled={checking} on:click={checkNow}
+							><RefreshCw size={14} class={checking ? "animate-spin" : ""} /><span>Check</span></button
+						>
+					</div>
+				</div>
+				<div class={row}>
+					<p>Check automatically</p>
+					<div class="{control} justify-end">
+						<SlideToggle
+							name="update-checks"
+							label="Check automatically"
+							active="bg-primary-500"
+							disabled={!updateSettings?.Channel}
+							bind:checked={automaticChecks}
+							on:change={() => setAutomaticChecks(automaticChecks)}
+						/>
+					</div>
+				</div>
+				{#if updateSettings?.Channel}
+					<div class={row}>
+						<p>Latest release</p>
+						<div class="{control} justify-end">
+							<button
+								type="button"
+								class="btn btn-sm {primary}"
+								disabled={reinstalling}
+								on:click={reinstall}>{reinstalling ? "Reinstalling…" : "Reinstall"}</button
+							>
+						</div>
+					</div>
+				{/if}
 			{:else}
 				<h3 class="text-xl font-bold">About</h3>
 				<div class={row}>
@@ -746,7 +917,7 @@
 					<p class="{control} font-mono text-sm">{buildInfo?.Version ?? "…"}</p>
 				</div>
 				<div class={row}>
-					<p>Channel</p>
+					<p>Build channel</p>
 					<p class="{control} font-mono text-sm">{buildInfo?.Channel ?? "…"}</p>
 				</div>
 			{/if}

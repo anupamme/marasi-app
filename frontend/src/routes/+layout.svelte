@@ -86,6 +86,20 @@
 	import WebSocketModal from "../lib/components/WebSocketModal.svelte";
 	import KeybindingsModal from "../lib/components/Keybindings/KeybindingsModal.svelte";
 	import GlobalMenu from "../lib/components/MarasiMenu/GlobalMenu.svelte";
+	import UpdateModal from "../lib/components/UpdateModal.svelte";
+	import {
+		updateState,
+		refreshUpdateState,
+		onUpdateAvailable,
+		onUpdateProgress,
+		onUpdateInstalled,
+		onUpdateFailed,
+	} from "../stores/updateStore";
+	import {
+		settingsIconIndicator,
+		settingsPath,
+		updateIndicatorLabel,
+	} from "../lib/updates.js";
 	import { get } from "svelte/store";
 	import {
 		installMenuShortcuts,
@@ -132,6 +146,16 @@
 	};
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
+	// The Settings icon's update indicator (see settingsIconIndicator).
+	$: settingsIndicator = settingsIconIndicator($updateState);
+	// Full class names, so Tailwind keeps them.
+	const dotTones = {
+		success: { dot: "bg-success-500", ping: "bg-success-400" },
+		error: { dot: "bg-error-500", ping: "bg-error-400" },
+		tertiary: { dot: "bg-tertiary-500", ping: "bg-tertiary-400" },
+	};
+	const ringRadius = 17;
+	const ringLength = 2 * Math.PI * ringRadius;
 	const drawerStore = getDrawerStore();
 	storePopup.set({
 		computePosition,
@@ -156,6 +180,7 @@
 		SelectWordlist: { ref: SelectWordlistModal },
 		"extension-modal": { ref: ModalWrapper },
 		Keybindings: { ref: KeybindingsModal },
+		Update: { ref: UpdateModal },
 	};
 	const StartupRoutine2 = new Promise((resolve) => {
 		readConfig().then(() => {
@@ -208,6 +233,11 @@
 	let removeMenuShortcuts = () => {};
 	onMount(() => {
 		const stopReportingDrafts = reportUnsavedDrafts();
+		EventsOn("update-available", onUpdateAvailable);
+		EventsOn("update-progress", onUpdateProgress);
+		EventsOn("update-installed", onUpdateInstalled);
+		EventsOn("update-failed", onUpdateFailed);
+		refreshUpdateState();
 		EventsOn("log", (log) => {
 			const message = projectOpenMessage(log);
 			if (message) {
@@ -433,6 +463,10 @@
 			EventsOff("ws-state");
 			EventsOff("intercepted");
 			EventsOff("log");
+			EventsOff("update-available");
+			EventsOff("update-progress");
+			EventsOff("update-installed");
+			EventsOff("update-failed");
 			EventsOff("extension_gui_render");
 			EventsOff("extension_state_update");
 		};
@@ -739,21 +773,82 @@
 							class="outline-none focus:outline-none focus-visible:outline-none"
 						/>
 					</div>
+					<!-- The Settings icon carries the update indicator: a dot for
+					     an update waiting (green when available, red after a
+					     failure, tertiary and pulsing for a restart), a ring filling with its download. While an
+					     update waits, the icon opens Settings → Updates. -->
 					<AppRailAnchor
 						selected={$page.url.pathname ===
 							"/settings"}
 						on:click={() => {
-							goto("/settings");
+							goto(settingsPath($updateState));
 						}}
 						bind:group={currentTile}
 						name="Settings"
 						value={appRailIndex++}
-						title="Settings"
+						title={settingsIndicator
+							? `Settings · ${updateIndicatorLabel($updateState)}`
+							: "Settings"}
 					>
 						<div
-							class="flex justify-center items-center w-full"
+							class="relative flex justify-center items-center w-full"
 						>
 							<SettingsIcon />
+							{#if settingsIndicator?.kind === "ring"}
+								<svg
+									class="pointer-events-none absolute h-10 w-10 -rotate-90 {settingsIndicator.spinning
+										? 'animate-spin'
+										: ''}"
+									viewBox="0 0 40 40"
+									aria-hidden="true"
+								>
+									<circle
+										cx="20"
+										cy="20"
+										r={ringRadius}
+										fill="none"
+										stroke-width="3"
+										class={settingsIndicator.spinning
+											? "stroke-primary-500"
+											: "stroke-surface-300 dark:stroke-surface-600"}
+									/>
+									<!-- Downloading: the arc is the progress. Verifying and
+									     installing: the ring is full, and a brighter quarter
+									     arc spins round it. -->
+									<circle
+										cx="20"
+										cy="20"
+										r={ringRadius}
+										fill="none"
+										stroke-width="3"
+										stroke-linecap="round"
+										class="{settingsIndicator.spinning
+											? 'stroke-primary-200'
+											: 'stroke-primary-500'} transition-all"
+										stroke-dasharray={ringLength}
+										stroke-dashoffset={settingsIndicator.spinning
+											? ringLength * 0.75
+											: ringLength *
+												(1 -
+													settingsIndicator.percent /
+														100)}
+									/>
+								</svg>
+							{:else if settingsIndicator?.kind === "dot"}
+								<span
+									class="pointer-events-none absolute right-5 -top-1 flex h-3 w-3"
+									aria-hidden="true"
+								>
+									{#if settingsIndicator.pulse}
+										<span
+											class="absolute inline-flex h-full w-full animate-ping rounded-full {dotTones[settingsIndicator.tone].ping} opacity-75"
+										></span>
+									{/if}
+									<span
+										class="relative inline-flex h-3 w-3 rounded-full ring-2 ring-surface-50 dark:ring-surface-800 {dotTones[settingsIndicator.tone].dot}"
+									></span>
+								</span>
+							{/if}
 						</div>
 					</AppRailAnchor>
 				</svelte:fragment>

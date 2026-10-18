@@ -3,6 +3,7 @@ module github.com/tfkr-ae/marasi-app
 go 1.26.0
 
 require (
+	aead.dev/minisign v0.3.0
 	github.com/google/martian v2.1.0+incompatible
 	github.com/spf13/viper v1.21.0
 	github.com/wailsapp/wails/v2 v2.10.1
@@ -72,6 +73,6 @@ require (
 	golang.org/x/crypto v0.43.0 // indirect
 	golang.org/x/exp v0.0.0-20251023183803-a4bb9ffd2546 // indirect
 	golang.org/x/net v0.46.0 // indirect
-	golang.org/x/sys v0.47.0 // indirect
+	golang.org/x/sys v0.47.0
 	golang.org/x/text v0.30.0 // indirect
 )

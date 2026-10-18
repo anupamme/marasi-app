@@ -18,6 +18,7 @@
 	import { ChromeIcon, ToolIcon } from "svelte-feather-icons";
 	import {
 		AnchorIcon,
+		ArrowUpCircle,
 		Binoculars,
 		BookIcon,
 		BookOpenCheckIcon,
@@ -40,6 +41,8 @@
 		ToggleFlag,
 		ToggleIntercept,
 	} from "../../wailsjs/go/main/App";
+	import { updatePanelModal } from "../../updates.js";
+	import { checkForUpdatesAndShowResult } from "../../../stores/updateStore";
 	import {
 		extensions,
 		extensions_ui,
@@ -113,9 +116,18 @@
 			setModeUserPrefers(next);
 			setModeCurrent(next);
 		},
+		"global.check-for-updates": checkForUpdates,
 		"global.toggle-intercept": () =>
 			ToggleIntercept().then((flag) => interceptFlag.set(flag)),
 	};
+
+	// "Check for updates…": an update opens the details panel; otherwise a
+	// toast says why there is none.
+	function checkForUpdates() {
+		return checkForUpdatesAndShowResult(toastStore, () =>
+			toggleModal(updatePanelModal()),
+		);
+	}
 
 	const icons = {
 		"global.go-home": AnchorIcon,
@@ -135,6 +147,7 @@
 		"global.setup-listener": Binoculars,
 		"global.toggle-vim": ToggleLeft,
 		"global.toggle-light-mode": Sun,
+		"global.check-for-updates": ArrowUpCircle,
 		"global.toggle-intercept": ToggleLeft,
 	};
 

@@ -190,6 +190,7 @@ function without(map, key) {
 function entryFromRequest(request) {
   return {
     ID: request.ID,
+    Number: request.Number,
     Scheme: request.Scheme,
     Method: request.Method,
     Host: request.Host,

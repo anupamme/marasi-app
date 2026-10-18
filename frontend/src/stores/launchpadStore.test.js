@@ -775,6 +775,19 @@ test("a response to an older entry leaves the last status to the newest", async 
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: 500 });
 });
 
+test("a launched entry keeps its pair number and is the newest by capture", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.getEntries = async () => [{ ...entry("c"), Number: 7, StatusCode: 404 }];
+  await store.loadEntries("lp2");
+  store.onLaunchStarted(launchState("d", "lp2", "pending"));
+  store.onRequest({ ...launched("d", "GET /d HTTP/1.1\r\n\r\n"), Number: 8 });
+  const arrived = get(store).entriesByLaunchpad.lp2.find((item) => item.ID === "d");
+  assert.equal(arrived.Number, 8);
+  assert.equal(newestEntryOf(get(store), "lp2")?.ID, "d");
+});
+
 test("a repeated request event does not count twice", async () => {
   const store = createLaunchpadStore(summarised());
   await store.populate();

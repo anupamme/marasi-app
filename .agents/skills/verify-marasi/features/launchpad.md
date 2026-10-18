@@ -3,7 +3,9 @@
 ## Sub-features
 
 - Launchpad dock: drag to resize, snap-collapse to a strip, auto-hide while editing
-- Launchpad file tree: Launchpad entries windowed to the original plus the last 10, Group by status, Expand all / Collapse all, Latest-in button
+- Launchpad file tree: Launchpad entries in entry order, numbered by position and windowed to the last 10, Group by status, Expand all / Collapse all, the floating `End of …` button
+- Entry selection (click, ⌘-click, ⇧-click, ⌘A, Esc), drag to reorder or move entries to another launchpad, the entry context menu (Move to launchpad, Order, Remove from launchpad) and ⌥↑/⌥↓ moves
+- Moves and deletes refused while a launch is pending, a pair is already in the target, or the tree is grouped or searching; the Launchpad draft follows its entry when it moves
 - Search (names locally; entry heads and bodies through Marasi), create empty launchpad, rename and description
 - Per-launchpad entry count and last status from Marasi's launchpad summary, updated live by launches
 - Launchpad draft editor, HTTPS toggle, Launch, response display, unsaved-draft prompts
@@ -14,9 +16,9 @@
 
 Select the rail item titled `Launchpad` or press `Command+5`. The left dock holds the tree: a `Launchpads N` header with `Expand all` (`.lp-expand-all`), `Collapse all` (`.lp-collapse-all`) and `New launchpad` (+) buttons, a `Search launchpads` input, and a `Group by status` SlideToggle. A fresh project shows `No launchpads yet` in the tree and `No launchpad selected` in the workspace. Users add a launchpad from a Ledger request with `Send to Launchpad`: the row menu's `Send to Launchpad › New launchpad`, or `⌘⇧L` with a row selected. Both show `Sent 1 request to a new launchpad` (`Sent N requests …` for a multi-selection, which makes one launchpad named `N requests`) with a `Jump to Launchpad` action, or create an empty one with +.
 
-Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count (`[title="Entries"]`), and its last status (`[title="Last status"]`, `…` while the newest entry awaits its response). Count and status come from `GetLaunchpads` (Marasi's `EntryCount`/`LastStatusCode`), so they show for launchpads that were never expanded; the page loads a launchpad's entries only when it opens (selected, expanded, Expand all, or listed by a search). A launch updates its launchpad's count and last status live. Under an open launchpad, entry rows (`.lp-entry`) show number, method, path, status and length; the first carries the original-entry icon. Lists longer than 11 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the request editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side. The editor title (`.lp-request-title`) reads `Request`, and `Request draft` with the unsaved dot only while the draft is dirty. Expand all opens every launchpad (and every status folder while grouping); Collapse all closes them all, and the selected launchpad stays closed.
+Each launchpad row shows its name, a warning dot (`title="Unsaved draft"`) for a dirty Launchpad draft, a `+N` unseen badge for entries that arrived while it was not open, its entry count (`[title="Entries"]`), and its last status (`[title="Last status"]`, `…` while the newest entry awaits its response). Count and status come from `GetLaunchpads` (Marasi's `EntryCount`/`LastStatusCode`), so they show for launchpads that were never expanded; the page loads a launchpad's entries only when it opens (selected, expanded, Expand all, or listed by a search). A launch updates its launchpad's count and last status live. Under an open launchpad, entry rows (`.lp-entry`) list the entries in entry order (Marasi's `launchpad_request.position`; every new entry goes last) and show their position (`1`, `2`, …, so a reorder renumbers them), method, path, status and length. There is no original entry. The tooltip reads `#<position> · pair #<number> · METHOD host/path · time`; the pair number is the stable identity. Lists longer than 10 show `N earlier entries` with `Show N more` and, past 50 hidden, `Show all`. The workspace top bar shows the name with a `Rename launchpad` pencil, `entry X of N`, `Revert draft` while dirty, the `HTTPS` toggle, `Launch`, and `Delete launchpad`. Below it, the request editor (`.lp-editor`) and the `Response` pane (`.lp-response`) sit side by side. The editor title (`.lp-request-title`) reads `Request`, and `Request draft` with the unsaved dot only while the draft is dirty. Expand all opens every launchpad (and every status folder while grouping); Collapse all closes them all, and the selected launchpad stays closed.
 
-Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. Factory keys: `⌘⇧S` search (expands the dock and focuses the search box), `⌘⇧A` new launchpad, `⌘R` rename (id `launchpad.toggle-settings`), `⌘\` toggle the dock, `⌘⇧G` Group by status, `⌘⇧↓` jump to latest, `⌘⇧C` start or close compare, `⌘⇧R` switch the compare Request/Response view (`launchpad.toggle-compare-view`), `⌘⇧X` swap A and B, `⌘]`/`⌘[` next/previous launchpad (ids `launchpad.next-tab`/`previous-tab`), `⌘⇧]`/`⌘⇧[` next/previous entry (moves B while comparing), `⌘⇧E` focus the request editor, `⌘⇧T` toggle HTTPS, `⌘⇧N` entry notes and `⌘⇧M` entry metadata (each opens `Entry N Notes`/`Entry N Metadata` and closes it again), `⌘⇧D` delete launchpad (`launchpad.delete-tab`), `⌘⇧L` launch, `⌘⇧.` cancel the pending launch (`launchpad.cancel-launch`; the driver sends `cmd+shift+.`). Like the Ledger, `/launchpad` lets modified shortcuts fire from its text fields: `⌘K` opens and closes the Marasi menu from the search box, the rename name and description inputs, and the create input (the create input stays open while the menu borrows focus, and focus returns to it on close). Fields keep Escape and Enter, and `⌘⇧↓` yields to a focused field or editor, so click `.lp-topbar` before it. The driver sends `cmd+\\` and `cmd+shift+down`.
+Shortcuts: every menu shortcut for this feature is a catalog action in context `launchpad` in `frontend/src/lib/keybindings/catalog.js`; the Marasi menu (`⌘K`) on the page lists them with their current keys. Factory keys: `⌘⇧S` search (expands the dock and focuses the search box), `⌘⇧A` new launchpad, `⌘R` rename (id `launchpad.toggle-settings`), `⌘\` toggle the dock, `⌘⇧G` Group by status, `⌘⇧↓` select the last entry (id `launchpad.jump-to-latest`), `⌘⇧C` start or close compare, `⌘⇧R` switch the compare Request/Response view (`launchpad.toggle-compare-view`), `⌘⇧X` swap A and B, `⌘]`/`⌘[` next/previous launchpad (ids `launchpad.next-tab`/`previous-tab`), `⌘⇧]`/`⌘⇧[` next/previous entry (moves B while comparing), `⌘⇧E` focus the request editor, `⌘⇧T` toggle HTTPS, `⌘⇧N` entry notes and `⌘⇧M` entry metadata (each opens `Entry N Notes`/`Entry N Metadata` and closes it again), `⌘⇧D` delete launchpad (`launchpad.delete-tab`), `⌘⇧L` launch, `⌘⇧.` cancel the pending launch (`launchpad.cancel-launch`; the driver sends `cmd+shift+.`). With focus in the tree (`[data-launchpad-tree]`, context `launchpad.tree`; a click on an entry focuses it): `⌘A` selects every entry of the focused launchpad, and `⌥↑`/`⌥↓`/`⌥⇧↑`/`⌥⇧↓` move the entry selection up, down, to the top or to the bottom (`launchpad.tree.move-entries-up|down|top|bottom`; the driver sends `alt+up`, `alt+shift+down`). Esc is a reserved key, so the tree handles it itself: with two or more entries selected it collapses the selection to its anchor. Like the Ledger, `/launchpad` lets modified shortcuts fire from its text fields: `⌘K` opens and closes the Marasi menu from the search box, the rename name and description inputs, and the create input (the create input stays open while the menu borrows focus, and focus returns to it on close). Fields keep Escape and Enter, and `⌘⇧↓` yields to a focused field or editor, so click `.lp-topbar` before it. The driver sends `cmd+\\` and `cmd+shift+down`.
 
 ```json
 {"name":"shortcuts","steps":[
@@ -27,7 +29,7 @@ Shortcuts: every menu shortcut for this feature is a catalog action in context `
  {"click":".lp-topbar"},{"key":"cmd+r"},{"waitSelector":"input[aria-label=\"Launchpad name\"]"},{"key":"escape"}]}
 ```
 
-`⌘⇧↓` always selects the open launchpad's newest entry, even in a short list, through the same path as a click (a dirty draft asks `Discard the draft?`), then opens its launchpad and status folder and scrolls it into view: with entry 1 of 3 selected, wait for `entry 3 of 3`. While that launchpad is being compared it only scrolls; A and B stay as picked. The floating `Latest in …` button only scrolls and never changes the selection. With two or more entries, `⌘⇧C` shows `click any entry in the sidebar`; after a quick pick, `⌘⇧R` flips `.lp-compare-strip button[aria-pressed="true"]` and `⌘⇧X` moves the A entry's number into `.lp-chip[data-side="right"]`. The tree scrolls smoothly; in headless Chrome the `Latest in …` button can stay in the DOM after the scroll, so check the screenshot rather than waiting for the text to go.
+`⌘⇧↓` always selects the open launchpad's last entry in entry order, even in a short list, through the same path as a click (a dirty draft asks `Discard the draft?`), then opens its launchpad and status folder and scrolls it into view: with entry 1 of 3 selected, wait for `entry 3 of 3`. While that launchpad is being compared it only scrolls; A and B stay as picked. The floating `End of …` button only scrolls and never changes the selection. With two or more entries, `⌘⇧C` shows `click any entry in the sidebar`; after a quick pick, `⌘⇧R` flips `.lp-compare-strip button[aria-pressed="true"]` and `⌘⇧X` moves the A entry's number into `.lp-chip[data-side="right"]`. The tree scrolls smoothly; in headless Chrome the `End of …` button can stay in the DOM after the scroll, so check the screenshot rather than waiting for the text to go.
 
 Seed a short launchpad without the Ledger: create it, turn HTTPS off, and Launch the draft once per entry (wait for `entry N of N` between launches). Marasi PR #28 removed the `x-launchpad-id` header, so proxied traffic with it no longer links to a launchpad.
 
@@ -106,7 +108,7 @@ Compare, with three entries and entry 3 selected (`Compare` stays disabled below
  {"key":"escape"},{"waitNoSelector":".lp-compare-strip"},{"waitNoSelector":"[data-compare]"}]}
 ```
 
-Search. The `Search launchpads` box matches launchpad names and descriptions locally on every keystroke; a match lists the whole launchpad. For entries it asks Marasi 250 ms after the last keystroke, only for 3 or more characters (shorter text shows `Type 3 or more characters to search entries.`), through the `SearchLaunchpadEntries` binding: the text, trimmed, becomes one quoted literal searched in `request_head` (request line plus headers, so method, path and host match), `request_body`, `response_head` and `response_body`, case-insensitively. Each launchpad with matches lists `N matching entries` (`.lp-match-count`) and only those entries, original linked pairs included. `Searching entries…` shows while a query is in flight; an invalid query or failed search shows its message in `.lp-search-error` under the box. Quotes, backslashes, `OR`, `)`, `NEAR(` and `launchpad = "x"` in the text match literally. Seed a term that appears only in a response body with a copy of the endpoint that appends a fixed word to the body (not the URL), proxy one request with it through the Ledger and `Send to Launchpad`, and launch another from a second launchpad. Proven, with `zebracorn` only in the bodies of `/orig-one?withsecret=1` (Request 1's original) and `/launched-b?withsecret=1` (Request 3's second entry):
+Search. The `Search launchpads` box matches launchpad names and descriptions locally on every keystroke; a match lists the whole launchpad. For entries it asks Marasi 250 ms after the last keystroke, only for 3 or more characters (shorter text shows `Type 3 or more characters to search entries.`), through the `SearchLaunchpadEntries` binding: the text, trimmed, becomes one quoted literal searched in `request_head` (request line plus headers, so method, path and host match), `request_body`, `response_head` and `response_body`, case-insensitively. Each launchpad with matches lists `N matching entries` (`.lp-match-count`) and only those entries, Ledger-linked pairs included. `Searching entries…` shows while a query is in flight; an invalid query or failed search shows its message in `.lp-search-error` under the box. Quotes, backslashes, `OR`, `)`, `NEAR(` and `launchpad = "x"` in the text match literally. Seed a term that appears only in a response body with a copy of the endpoint that appends a fixed word to the body (not the URL), proxy one request with it through the Ledger and `Send to Launchpad`, and launch another from a second launchpad. Proven, with `zebracorn` only in the bodies of `/orig-one?withsecret=1` (Request 1's first entry, sent from the Ledger) and `/launched-b?withsecret=1` (Request 3's second entry):
 
 ```json
 {"name":"search-body","steps":[
@@ -131,14 +133,93 @@ Tree, prompts and dock:
  {"text":"Collapse sidebar"},{"waitSelector":".lp-strip"},{"text":"Show launchpads"},{"waitSelector":".lp-dock"}]}
 ```
 
-`Latest in <launchpad>` appears at the bottom of the tree once the list at the top of the tree has its last entry cut off; collapse other launchpads and `Show N more` until the tree overflows. Drag-resize with `{"drag":".lp-resize","to":"<css>"}`: dropping on a control to the right widens the dock, and dropping on the rail (`[title="Ledger"]`) collapses it. `.lp-resize` takes no layout width: it is an 8px grab area drawn over the dock's border, so hovering it changes only that strip's colour.
+`End of <launchpad>` appears at the bottom of the tree while the list holding the row at the top of the tree (under the sticky launchpad row) has its last entry cut off, so it needs one list longer than the tree (about 24 rows at 1600x900). The tree measures this after each render and on `scroll`, but the hidden headless page never fires `scroll` events (they run on animation frames), so after scrolling with `wheel`, cause a render, for example by clicking a visible entry. Proven with a 26-entry launchpad `22 requests` (Ledger ⌘A, `⌘⇧L`, then four launches), every other launchpad collapsed:
 
-Prove linkage with `select l.name, r.path, r.status_code from launchpad l join launchpad_request lr on lr.launchpad_id=l.id join request r on r.id=lr.request_id`. Proxied traffic can no longer be tagged for a launchpad (Marasi PR #28 removed `x-launchpad-id`), so the `+1` unseen badge needs a launch whose request arrives after another launchpad is opened; the store tests cover it, and no driver sequence for it is proven yet.
+```json
+{"name":"end-of","steps":[
+ {"wheel":"[data-launchpad-tree]","deltaY":-40},
+ {"click":".lp-entry","hasText":"/a5","within":"[data-launchpad-tree]"},{"waitText":"entry 5 of 26"},
+ {"waitText":"End of 22 requests"},
+ {"click":"button[title=\"Jump to the end of 22 requests\"]"}]}
+``` Drag-resize with `{"drag":".lp-resize","to":"<css>"}`: dropping on a control to the right widens the dock, and dropping on the rail (`[title="Ledger"]`) collapses it. `.lp-resize` takes no layout width: it is an 8px grab area drawn over the dock's border, so hovering it changes only that strip's colour.
+
+Prove linkage and entry order with `select l.name, r.path, r.status_code, lr.position from launchpad l join launchpad_request lr on lr.launchpad_id=l.id join request r on r.id=lr.request_id order by l.name, lr.position`. `position` is Marasi's fractional order key (text such as `a0`, `a3G`, `Zz`): order by it, never by the pair. Proxied traffic can no longer be tagged for a launchpad (Marasi PR #28 removed `x-launchpad-id`), so the `+1` unseen badge needs a launch whose request arrives after another launchpad is opened; the store tests cover it, and no driver sequence for it is proven yet.
+
+## Entry selection, moves and the entry menu
+
+Seed two or more launchpads with a few launched entries each (`Alpha` with `/a1`…`/a5`, `Beta` with `/b1`…`/b3`), and a launchpad that shares pairs with them (Ledger ⌘A, then `⌘⇧L`) for the `already in` refusal. The recipes below ran in that order on one project. Expand the launchpads you drag between first (`Collapse all`, then `{"text":"Expand Alpha"}`); an open launchpad with the same paths makes `hasText` ambiguous.
+
+**Entry selection.** A plain click selects one entry, opens its launchpad and seeds the draft (a dirty draft asks first). `⌘`-click toggles and `⇧`-click selects the range from the anchor; neither reseeds, so `entry X of N` stays. Selected rows carry `data-selected="true"` and a 3 px primary bar (`span.w-\[3px\]`) on the left; the draft's entry keeps `aria-current="true"`. The selection never spans two launchpads: a `⌘`-click in another launchpad starts a new selection there. `⌘A` selects the focused launchpad's entries, hidden ones included, and Esc collapses two or more to the anchor (the last `⌘`-clicked entry, or where a range started).
+
+```json
+{"name":"selection","steps":[
+ {"click":".lp-entry","hasText":"/a1"},{"waitText":"entry 1 of 5"},
+ {"click":".lp-entry","hasText":"/a3","modifiers":["shift"]},
+ {"click":".lp-entry","hasText":"/a5","modifiers":["cmd"]},
+ {"click":".lp-entry","hasText":"/a2","modifiers":["cmd"]},
+ {"waitText":"entry 1 of 5"},{"key":"cmd+a"},{"key":"escape"}]}
+```
+
+Read the result from the capture: `.lp-entry[data-selected=true]` per step (a1–a3, then a1–a3 + a5, then a1, a3, a5, then all five, then only a2).
+
+**Drag.** Press any entry row and move 5 px to start a drag. Dragging a selected entry drags the whole selection in entry order; an unselected one drags alone and becomes the selection, without reseeding the draft. While dragging, the dragged rows fade, a pill `.lp-drag-pill` follows the pointer (`N entries`, plus `· <reason>` when refused), and the drop point shows as `.lp-drop-line` (a 2 px line with a dot) on the top or bottom edge of the entry under the pointer: the top half inserts before that entry, the bottom half after it. Over a launchpad row (`.lp-row`) the row is tinted (`.lp-drop-row`) and the drop appends at the end; held over a collapsed launchpad's row for 0.6 s, it expands. `body[data-launchpad-drag]` is `move` or `refused` during a drag. Esc cancels. Use `hold` to see the drag in progress and `toEdge` to choose the half:
+
+```json
+{"name":"drag-reorder","steps":[
+ {"click":".lp-entry","hasText":"/a1"},{"waitText":"entry 1 of 5"},
+ {"click":".lp-entry","hasText":"/a2","modifiers":["shift"]},
+ {"drag":".lp-entry","hasText":"/a1","to":".lp-entry","toHasText":"/a4","toEdge":"bottom","hold":true},
+ {"waitSelector":".lp-drop-line"},{"waitText":"2 entries","within":".lp-drag-pill"},
+ {"release":true},{"waitNoSelector":".lp-drag-pill"}]}
+```
+
+That leaves `a3, a4, a1, a2, a5`, renumbered `1`–`5`, with a1 and a2 still selected; check `launchpad_request.position`. To another launchpad, drop between its rows (`{"drag":".lp-entry","hasText":"/a5","to":".lp-entry","toHasText":"/b2","toEdge":"top"}` puts a5 before b2) or on its row (`"to":".lp-row","toHasText":"Gamma"` appends, and the collapsed target expands). After a move, the selection follows the moved entries and the target scrolls them into view; the open launchpad does not change unless the move takes its draft's entry (below).
+
+**Refusals.** A refused drop shows a not-allowed cursor, `· <reason>` on the pill and an error outline on a launchpad row, and releasing it changes nothing. Reasons: `N already in <launchpad>` when the target holds one of the pairs, `N launching` when a moving entry's launch from this launchpad is pending (to another launchpad only: reordering it within its launchpad works), and `Grouped by status` or `Searching` for any drop between rows or within the launchpad while the tree is grouped or searching (a drop on another launchpad's row still moves). Keep a launch pending with the slow origin (`GET /slow?sleep=600`, see "Launches are tracked" above), then:
+
+```json
+{"name":"pending-drag","steps":[
+ {"drag":".lp-entry[data-launch=pending]","to":".lp-row","toHasText":"Beta","hold":true},
+ {"waitText":"1 launching","within":".lp-drag-pill"},
+ {"key":"escape"},{"waitNoSelector":".lp-drag-pill"},{"release":true},
+ {"drag":".lp-entry[data-launch=pending]","to":".lp-entry","toHasText":"/a3","toEdge":"top","hold":true},
+ {"waitSelector":".lp-drop-line"},{"release":true},{"waitNoSelector":".lp-drag-pill"}]}
+```
+
+While the launch is pending, `Delete launchpad` in the top bar is disabled with `title="Launching: cancel or wait"`, and the Ledger greys `Delete` and that launchpad's `Remove from launchpad` item (see `ledger.md`). For searching, the entry search needs 3 or more characters before entries list: `{"click":"input[aria-label=\"Search launchpads\"]"},{"insert":"18099/a"},{"waitText":"matching entries","within":"[data-launchpad-tree]"}`.
+
+**Entry menu.** Right-click an entry: outside the selection it becomes the selection, without reseeding. The menu is the Ledger's `.ledger-row-menu`: a header (`#n`, method, status and URL for one entry; `N entries · in <launchpad>` with method and status counts for several), then `[data-menu-item=move]` (`Move N to launchpad`, a submenu `Adds at the end` listing the other launchpads with counts, each greyed with its refusal as the `title`), `top`, `up`, `down`, `bottom` (greyed `Already first`/`Already last`, `Grouped by status` or `Searching`) and `remove` (`Remove N from launchpad`, greyed `N launching`). A pending entry greys `move` itself, so its submenu does not open. Disabled items cannot be hovered by the driver; read their `title` from the capture instead.
+
+```json
+{"name":"menu-move","steps":[
+ {"click":".lp-entry","hasText":"/b1","modifiers":["cmd"]},
+ {"click":".lp-entry","hasText":"/a5","modifiers":["cmd"]},
+ {"click":".lp-entry","hasText":"/a5","button":"right"},{"waitSelector":".ledger-row-menu"},
+ {"hover":"[data-menu-item=move]"},{"waitSelector":".ledger-row-submenu"},
+ {"click":".ledger-row-submenu button","hasText":"Gamma"},{"waitNoSelector":".ledger-row-menu"}]}
+```
+
+Order items and keys, with the selection in the second launchpad: `{"click":".lp-entry","hasText":"/b3","button":"right"},{"click":"[data-menu-item=top]"},{"waitText":"/b3","within":"[data-launchpad]:nth-child(2) .lp-entry:nth-child(2)"},{"key":"alt+down"},{"key":"alt+up"},{"key":"alt+shift+down"},{"key":"alt+shift+up"}`. The right-click focuses the tree, so the ⌥ keys reach it. `[data-launchpad]:nth-child(k) .lp-entry:nth-child(p+1)` is the entry at position `p` (the launchpad row is the first child). `remove` unlinks the selection from this launchpad only; the pairs stay in the project and in other launchpads.
+
+**The draft follows its entry.** When a move takes the entry a launchpad's draft was seeded from to another launchpad, the draft goes with it, dirty or not, and the source reseeds from its last entry (or shows `Empty launchpad`). If that was the open launchpad's draft, the open launchpad switches to the target; otherwise it stays. A clean target draft is replaced silently; a dirty one asks `Discard the draft?` (`The target launchpad's draft has unsaved edits. The draft moving with its entry replaces them.`), and Cancel cancels the move. Proven, with Alpha open on its draft entry `/slow…` and Gamma's draft dirty:
+
+```json
+{"name":"draft-follows","steps":[
+ {"click":".lp-editor .cm-content"},{"key":"cmd+a"},
+ {"insert":"GET /dirty-follows HTTP/1.1\nHost: 127.0.0.1:18099\n\n"},{"waitText":"Revert draft"},
+ {"drag":".lp-entry","hasText":"/slow","to":".lp-row","toHasText":"Beta"},
+ {"waitText":"Beta","within":".lp-topbar"},{"waitText":"/dirty-follows","within":".lp-editor"},
+ {"drag":".lp-entry","hasText":"/slow","to":".lp-row","toHasText":"Gamma"},
+ {"waitText":"Discard the draft?"},{"text":"Confirm"},
+ {"waitText":"Gamma","within":".lp-topbar"},{"waitText":"/dirty-follows","within":".lp-editor"}]}
+```
+
+Open a launchpad by its name button, `{"click":".lp-row button.flex-1","hasText":"Alpha"}`; the row's other button is the chevron (`aria-label="Expand Alpha"`/`"Collapse Alpha"`).
 
 ## Gotchas
 
 - The empty state proves only that the route loaded.
-- Moving between pages or launchpads never prompts; drafts survive in memory. In the page, only seeding over a dirty draft (`Discard the draft?`, also from clicking another entry) and deleting a launchpad prompt.
+- Moving between pages or launchpads never prompts; drafts survive in memory. In the page, only seeding over a dirty draft (`Discard the draft?`, also from clicking another entry), a move or removal that would replace a dirty draft (the draft's entry moving into a launchpad whose draft is dirty, or removing the entry a dirty draft was seeded from), and deleting a launchpad prompt.
 - Switching the project or closing Marasi with dirty drafts asks in a native warning dialog (`1 launchpad has an unsaved draft. Switch Project will discard them. Continue?`, with `Cancel` as the default; it also names active Armory runs it would cancel). The page reports its dirty-draft count through `SetUnsavedDraftCount`, and `confirmLosingWork` in `app.go` asks. Headless Chrome cannot see or answer that dialog, and Chrome's `OpenProject` call waits on it, so do not drive a project switch over a dirty draft; `app_draft_guard_test.go` covers the dialog.
 - After `Cancel` on a prompt, wait with `waitNoSelector` on the modal rather than `waitNoText` on its title.
 - Text waits match the editors too. Scope them with `"within":".lp-scroll"`, `".lp-editor"` or `".lp-response"`.
@@ -150,3 +231,6 @@ Prove linkage with `select l.name, r.path, r.status_code from launchpad l join l
 - The `Jump to Launchpad` toast lives 5 s, and each driver click can take about 5 s to be acknowledged in the headless page. Click it right after the toast appears. A click on the mounted Launchpad page before it lets the toast expire.
 - The headless page reports `visibilityState: hidden`: `requestAnimationFrame` never fires, and CDP does not always ack `Input.dispatchMouseEvent`. Send drag events without awaiting the reply.
 - Editing frontend source during a run makes Vite reload the page, which resets the listener to offline. Clean up and relaunch.
+- Sticky launchpad rows cover the entries scrolled under them, so a click there fails with `covered by header…`/`covered by h2…`. Scroll with `wheel` over `[data-launchpad-tree]` (unique; the editors also carry `.lp-scroll`), or collapse launchpads above it. Chrome's scroll anchoring keeps the bottom in place when rows are added above it.
+- `waitText` reads visible text, not `aria-label`: wait for a launchpad's chevron with `waitSelector` (`[aria-label="Expand Delta"]`). Holding a drag over a collapsed launchpad's row for 0.6 s expands it, so its label changes.
+- Theme captures right after `cmd+u` can catch the transition half done. Add another wait step after `{"waitSelector":"html.dark"}` and use that step's capture.

@@ -3,7 +3,7 @@
 import fs from "node:fs";
 import { deduplicateBridgeHTML } from "./bridge-html.mjs";
 import { normalizeListenerStartup } from "./listener-startup.mjs";
-import { collectExpression, pickTarget, sameBox } from "./targets.mjs";
+import { collectExpression, dropPoint, pickTarget, sameBox } from "./targets.mjs";
 
 const [mode, portText, appURL, evidenceDir, widthText, heightText, feature, action, label, shortcut] = process.argv.slice(2);
 const port = Number(portText);
@@ -227,10 +227,16 @@ function clickModifiers(names = []) {
 	return bits;
 }
 
+// Where a drag holding the button is (`hold`), until a release step.
+let held = null;
+
 // Press on one match, move onto another with the button held, release there.
-async function dragTarget(from, to, { timeoutMs } = {}) {
+// `edge` lands near the target's top or bottom edge instead of its centre;
+// `hold` keeps the button down so the next steps see the drag in progress.
+async function dragTarget(from, to, { timeoutMs, edge, hold = false } = {}) {
+	if (held) throw new Error("a drag is already held; release it first");
 	const start = await waitForTarget(from, { timeoutMs });
-	const end = await waitForTarget(to, { timeoutMs });
+	const end = dropPoint(await waitForTarget(to, { timeoutMs }), edge);
 	await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: start.x, y: start.y });
 	await send("Input.dispatchMouseEvent", { type: "mousePressed", x: start.x, y: start.y, button: "left", buttons: 1, clickCount: 1 });
 	const steps = 4;
@@ -239,8 +245,21 @@ async function dragTarget(from, to, { timeoutMs } = {}) {
 		const y = start.y + ((end.y - start.y) * i) / steps;
 		await send("Input.dispatchMouseEvent", { type: "mouseMoved", x, y, button: "left", buttons: 1 });
 	}
+	if (hold) {
+		held = end;
+		return { from: start, to: end, held: true };
+	}
 	await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: end.x, y: end.y, button: "left", buttons: 0, clickCount: 1 });
 	return { from: start, to: end };
+}
+
+// Releases a held drag where it stopped.
+async function releaseDrag() {
+	if (!held) throw new Error("release needs a drag step with hold first");
+	const point = held;
+	held = null;
+	await send("Input.dispatchMouseEvent", { type: "mouseReleased", x: point.x, y: point.y, button: "left", buttons: 0, clickCount: 1 });
+	return { release: point };
 }
 
 // Recipes write cmd+/⌘ for the primary modifier. On macOS that is Meta; on
@@ -279,6 +298,7 @@ function keyEvent(key) {
 		"[": { key: "[", code: "BracketLeft", keyCode: 219 },
 		"]": { key: "]", code: "BracketRight", keyCode: 221 },
 		"\\": { key: "\\", code: "Backslash", keyCode: 220 },
+		up: { key: "ArrowUp", code: "ArrowUp", keyCode: 38 },
 		down: { key: "ArrowDown", code: "ArrowDown", keyCode: 40 },
 		enter: { key: "Enter", code: "Enter", keyCode: 13 },
 		escape: { key: "Escape", code: "Escape", keyCode: 27 },
@@ -518,14 +538,26 @@ async function runStep(step) {
 	if (step.drag) {
 		const from = { selector: step.drag, ...scope };
 		const to = { selector: step.to ?? step.drag, ...(step.within ? { within: step.within } : {}), ...(step.toHasText ? { hasText: step.toHasText } : {}) };
-		return { drag: await dragTarget(from, to, { timeoutMs }) };
+		if (step.hold !== undefined && typeof step.hold !== "boolean") throw new Error(`hold must be true or false: ${JSON.stringify(step)}`);
+		return { drag: await dragTarget(from, to, { timeoutMs, edge: step.toEdge, hold: step.hold }) };
 	}
+	if (step.release === true) return releaseDrag();
 	if (step.hover) {
 		// A real pointer move onto the one actionable match, for controls that
 		// only show on hover. The pointer stays there until the next click.
 		const point = await waitForTarget({ selector: step.hover, ...scope }, { timeoutMs, nth: step.nth });
 		await send("Input.dispatchMouseEvent", { type: "mouseMoved", x: point.x, y: point.y });
 		return { hover: point };
+	}
+	if (step.wheel) {
+		// A real wheel turn over the one actionable match, for scrolling a
+		// container (sticky rows can cover the match the driver would click).
+		if (!Number.isFinite(step.deltaY)) throw new Error(`wheel needs a numeric deltaY: ${JSON.stringify(step)}`);
+		const point = await waitForTarget({ selector: step.wheel, ...scope }, { timeoutMs, nth: step.nth });
+		// The hidden headless page may never ack a wheel event, so do not
+		// wait for the reply; wait for the scrolled state in the next step.
+		send("Input.dispatchMouseEvent", { type: "mouseWheel", x: point.x, y: point.y, deltaX: 0, deltaY: step.deltaY }).catch(() => {});
+		return { wheel: point };
 	}
 	if (step.key) return void await pressShortcut(step.key);
 	if (typeof step.insert === "string") return void await insertText(step.insert);
@@ -566,6 +598,12 @@ async function driveSteps(route) {
 		}
 		console.log(`feature=${feature}\naction=steps\nrecipe=${recipe.name}\nresult=passed\nevidence=${evidenceDir}`);
 	} finally {
+		// A recipe that stopped mid-drag cancels it (Esc) before letting go,
+		// so the release drops nothing.
+		if (held) {
+			await pressEscape();
+			await releaseDrag();
+		}
 		fs.writeFileSync(`${evidenceDir}/${prefix}-steps.json`, `${JSON.stringify(log, null, 2)}\n`);
 		await capture(`${prefix}-after`);
 		fs.writeFileSync(`${evidenceDir}/${prefix}-console.json`, `${JSON.stringify(consoleEvents, null, 2)}\n`);

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { pickTarget, sameBox } from "./targets.mjs";
+import { dropPoint, pickTarget, sameBox } from "./targets.mjs";
 
 const control = (overrides = {}) => ({
 	index: 0, description: 'button "Save"', x: 100, y: 100, width: 60, height: 30,
@@ -50,4 +50,12 @@ test("a moving box is not stable", () => {
 	assert.ok(sameBox(control(), control({ x: 100.2 })));
 	assert.ok(!sameBox(control(), control({ y: 140 })));
 	assert.ok(!sameBox(null, control()));
+});
+
+test("a drag lands at the centre, or just inside the top or bottom edge", () => {
+	const row = control({ x: 100, y: 100, height: 20 });
+	assert.deepEqual(dropPoint(row), { x: 100, y: 100 });
+	assert.deepEqual(dropPoint(row, "top"), { x: 100, y: 93 });
+	assert.deepEqual(dropPoint(row, "bottom"), { x: 100, y: 107 });
+	assert.throws(() => dropPoint(row, "middle"), /toEdge must be top or bottom/);
 });

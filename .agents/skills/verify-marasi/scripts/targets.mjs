@@ -97,3 +97,19 @@ export function sameBox(a, b) {
 		&& Math.abs(a.x - b.x) < 0.5 && Math.abs(a.y - b.y) < 0.5
 		&& Math.abs(a.width - b.width) < 0.5 && Math.abs(a.height - b.height) < 0.5;
 }
+
+/**
+ * Where a drag releases on `target` (a picked candidate: centre x/y and box
+ * size). `edge` "top" or "bottom" lands 3 px inside that edge, for drops
+ * that read which half of a row the pointer is in; anything else is the
+ * centre.
+ */
+export function dropPoint(target, edge) {
+	if (edge !== "top" && edge !== "bottom") {
+		if (edge !== undefined) throw new Error(`toEdge must be top or bottom: ${edge}`);
+		return { x: target.x, y: target.y };
+	}
+	const inset = Math.min(3, target.height / 4);
+	const half = target.height / 2 - inset;
+	return { x: target.x, y: edge === "top" ? target.y - half : target.y + half };
+}

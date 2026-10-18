@@ -106,7 +106,7 @@
 	let buildInfo = null;
 	// The update settings (Go UpdateSettings), null until read.
 	let updateSettings = null;
-	let automaticChecks = true;
+	let automaticChecks = false;
 	// Settings → Content Types' one box: it filters the list, and Enter adds
 	// what it holds when that is a new type/subtype or type/*.
 	let contentTypeFind = "";

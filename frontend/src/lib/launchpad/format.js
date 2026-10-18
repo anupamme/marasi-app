@@ -35,3 +35,12 @@ export function shortTime(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString([], { hour12: false });
 }
+
+/**
+ * The entry row's length column: the response length once the entry has a
+ * response, else blank. Marasi reports an unanswered pair's length as "0"
+ * (status code 0 while pending, -1 when its launch ended without one).
+ */
+export function entryLengthText(entry) {
+  return entry?.StatusCode > 0 ? String(entry.Length ?? "") : "";
+}

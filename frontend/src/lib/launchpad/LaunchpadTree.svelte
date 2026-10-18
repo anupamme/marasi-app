@@ -16,7 +16,7 @@
 	import { jumpTarget } from "./jumpTarget.js";
 	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
-	import { launchEndText, primaryVariant, shortTime, statusClass } from "./format.js";
+	import { entryLengthText, launchEndText, primaryVariant, shortTime, statusClass } from "./format.js";
 
 	export let store;
 	export let pickLaunchpad;
@@ -608,7 +608,7 @@
 									{:else}
 										<span class="w-7 flex-none text-right {statusClass(entry.StatusCode)}">{entry.StatusCode || "…"}</span>
 									{/if}
-									<span class="w-9 flex-none text-right opacity-50">{entry.Length || ""}</span>
+									<span class="w-9 flex-none text-right opacity-50">{entryLengthText(entry)}</span>
 								</button>
 							{/if}
 						{/each}

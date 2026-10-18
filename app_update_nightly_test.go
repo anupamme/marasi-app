@@ -47,6 +47,29 @@ func TestNightlyCheckOffersASameDayNightlyFromAnotherCommit(t *testing.T) {
 	}
 }
 
+func TestNightlyCheckReadsTheCommitBelowTheCommitSubjectsInItsNotes(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	notes := "- fix(ledger): a right-click opens only the row menu\n" +
+		"- feat(update): the panel shows a nightly's Commit: line stripped\n" +
+		"\n" +
+		"Ref: main\n" +
+		"Commit: def5678aaaabbbbccccddddeeeeffff0000111122\n"
+	releases.publish(fakeRelease{Tag: "nightly", Name: "18.10.2026 (nightly def5678)", Notes: notes, Prerelease: true})
+	app, _ := newUpdateApp(t, "nightly", "17.10.2026 (nightly abc1234)", releases)
+
+	check := app.CheckForUpdate()
+
+	if check.Outcome != UpdateOutcomeAvailable {
+		t.Fatalf("wanted a nightly update, got %q (%s)", check.Outcome, check.Reason)
+	}
+	if check.Update.Commit != "def5678aaaabbbbccccddddeeeeffff0000111122" {
+		t.Fatalf("wanted the commit from the Commit line, got %q", check.Update.Commit)
+	}
+	if check.Update.Notes != notes {
+		t.Fatalf("wanted the notes as published, got %q", check.Update.Notes)
+	}
+}
+
 func TestNightlyCheckOffersOnlyAnotherCommitDatedOnOrAfterTheRunningBuild(t *testing.T) {
 	cases := []struct {
 		name      string

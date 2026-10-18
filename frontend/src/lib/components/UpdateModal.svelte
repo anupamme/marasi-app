@@ -25,6 +25,7 @@
 		cancellable,
 		channelSettingPath,
 		downloadedAmount,
+		nightlyNotes,
 		progressPercent,
 		showsUpdateIndicator,
 		updatePanelFailure,
@@ -66,6 +67,9 @@
 	$: update = $updateState.Update;
 	$: running = $updateState.Running;
 	$: progress = $updateState.Progress;
+	// A nightly's notes list its commits; a release's are shown as published.
+	$: nightly = update?.Channel === "nightly";
+	$: notes = nightly ? nightlyNotes(update?.Notes) : (update?.Notes ?? "");
 	$: panel = updatePanelSteps($updateState);
 	$: failure = updatePanelFailure($updateState);
 	// Buttons as elsewhere in the app: primary as in Launchpad and the
@@ -165,19 +169,21 @@
 						<p>{failure.message}. Your installed Marasi is unchanged.</p>
 					</aside>
 				{:else if panel.current === "details"}
+					{#if notes}
+						<pre
+							class="whitespace-pre-wrap break-words font-sans">{notes}</pre>
+					{/if}
 					{#if update.CompareURL}
 						<button
 							type="button"
 							class="anchor inline-flex items-center gap-1"
+							class:mt-3={notes}
 							on:click={() => BrowserOpenURL(update.CompareURL)}
 						>
 							<span>Changes since your build</span>
 							<ExternalLink size={14} />
 						</button>
-					{:else if update.Notes}
-						<pre
-							class="whitespace-pre-wrap break-words font-sans">{update.Notes}</pre>
-					{:else}
+					{:else if !notes}
 						<p class="opacity-60">No release notes.</p>
 					{/if}
 				{:else if panel.current === "download"}

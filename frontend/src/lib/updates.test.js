@@ -7,6 +7,7 @@ import {
   checkResultNotice,
   downloadedAmount,
   installFailureMessage,
+  nightlyNotes,
   progressPercent,
   settingsIconIndicator,
   settingsPath,
@@ -455,4 +456,21 @@ test("the indicator shows how far a download is", () => {
   const state = { Status: "downloading", Update: update18, Progress: { Step: "download", Received: 37, Total: 100 } };
 
   assert.equal(updateIndicatorLabel(state), "Downloading update 18.10.2026 · 37%");
+});
+
+test("a nightly's notes show its commit subjects and ref without the Commit line", () => {
+  const notes =
+    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\n";
+
+  assert.equal(
+    nightlyNotes(notes),
+    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main",
+  );
+});
+
+test("a nightly published before its notes listed commits has no notes to show", () => {
+  assert.equal(nightlyNotes("Ref: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\n"), "");
+  assert.equal(nightlyNotes("Ref: main\r\nCommit: def5678\r\n"), "");
+  assert.equal(nightlyNotes(""), "");
+  assert.equal(nightlyNotes(undefined), "");
 });

@@ -89,14 +89,8 @@ export function showsUpdateIndicator(state) {
 export function updateIndicatorLabel(state) {
   const version = state?.Update?.Version ?? "";
   switch (state?.Status) {
-    case "downloading": {
-      const step = installingStepLabel(state.Progress);
-      if (step) {
-        return `${step} update ${version}…`;
-      }
-      const percent = progressPercent(state.Progress);
-      return percent === null ? `Downloading update ${version}` : `Downloading update ${version} · ${percent}%`;
-    }
+    case "downloading":
+      return installingLine(state.Progress, `update ${version}`, null);
     case "failed":
       return `Update ${version} failed to install`;
     case "restart-pending":
@@ -107,8 +101,7 @@ export function updateIndicatorLabel(state) {
 }
 
 /**
- * What the Settings icon carries for state (variant B of the update UI), or
- * null when no update is known:
+ * What the Settings icon carries for state, or null when no update is known:
  * - { kind: "ring", percent, spinning }: a ring around the icon filling with
  *   the download, full and spinning while verifying and installing;
  * - { kind: "dot", tone, pulse }: a dot, "error" after a failed install,
@@ -136,16 +129,54 @@ export function settingsPath(state) {
   return showsUpdateIndicator(state) ? channelSettingPath : "/settings";
 }
 
+/**
+ * The update panel's steps. Download, Verify and Install are the install's
+ * steps, as Go reports them (UpdateProgress.Step, UpdateFailure.Step).
+ */
+export const UpdateStep = Object.freeze({
+  details: "details",
+  download: "download",
+  verify: "verify",
+  install: "install",
+  restart: "restart",
+});
+
+// The panel's steps in order: each step's label, its label while it runs,
+// and the panel's heading while it is the current step.
+const updateSteps = Object.freeze(
+  [
+    { id: UpdateStep.details, label: "Details", running: "Details", heading: "What's new" },
+    { id: UpdateStep.download, label: "Download", running: "Downloading", heading: "Downloading" },
+    { id: UpdateStep.verify, label: "Verify", running: "Verifying", heading: "Verifying" },
+    { id: UpdateStep.install, label: "Install", running: "Installing", heading: "Installing" },
+    { id: UpdateStep.restart, label: "Restart", running: "Restart", heading: "Ready to restart" },
+  ].map((step) => Object.freeze(step)),
+);
+
+/** The table entry for step id. */
+function updateStep(id) {
+  return updateSteps.find((step) => step.id === id);
+}
+
 /** "Verifying" or "Installing" for an install past its download, else null. */
 function installingStepLabel(progress) {
-  switch (progress?.Step) {
-    case "verify":
-      return "Verifying";
-    case "install":
-      return "Installing";
-    default:
-      return null;
+  const step = progress?.Step;
+  return step === UpdateStep.verify || step === UpdateStep.install ? updateStep(step).running : null;
+}
+
+/**
+ * What a running install is doing, about subject: "Verifying subject…" or
+ * "Installing subject…" past the download, else "Downloading subject · n%",
+ * with unknownPercent standing in for a download of unknown size (null
+ * leaves the percentage out).
+ */
+function installingLine(progress, subject, unknownPercent) {
+  const step = installingStepLabel(progress);
+  if (step) {
+    return `${step} ${subject}…`;
   }
+  const percent = progressPercent(progress) ?? unknownPercent;
+  return percent === null ? `Downloading ${subject}` : `Downloading ${subject} · ${percent}%`;
 }
 
 /** How much of the build has downloaded, in whole percent, or null when its size is unknown. */
@@ -169,7 +200,7 @@ export function downloadedAmount(progress) {
 
 /** Whether Cancel can stop the running install: only while it downloads. */
 export function cancellable(progress) {
-  return !progress?.Step || progress.Step === "download";
+  return !progress?.Step || progress.Step === UpdateStep.download;
 }
 
 const failureTitles = {
@@ -199,50 +230,43 @@ export function installFailureMessage(failure) {
   return `${installFailureTitle(failure)}: ${failure?.Reason || "unknown error"}`;
 }
 
-// The update panel's steps: each step's id, its label, and its label while it runs.
-const panelSteps = [
-  ["details", "Details", "Details"],
-  ["download", "Download", "Downloading"],
-  ["verify", "Verify", "Verifying"],
-  ["install", "Install", "Installing"],
-  ["restart", "Restart", "Restart"],
-];
-
 /**
- * The update panel's steps for state: the step it is on (current), whether
- * the install failed there, and each step's mark: done (ticked), current
- * (outlined, with its -ing label), failed (red, with its plain label), todo
- * (dimmed) or skipped (passed over without running).
+ * The update panel's steps for state: the step it is on (current) and the
+ * heading it gives the right pane, whether the install failed there, and
+ * each step's mark: done (ticked), current (outlined, with its -ing label),
+ * failed (red, with its plain label), todo (dimmed) or skipped (passed over
+ * without running).
  */
 export function updatePanelSteps(state) {
-  let current = "details";
+  let current = UpdateStep.details;
   let failed = false;
   if (state?.Status === "available" && state.CanInstall === false) {
-    current = "install";
+    current = UpdateStep.install;
     failed = true;
   } else if (state?.Status === "downloading") {
-    current = state.Progress?.Step || "download";
+    current = state.Progress?.Step || UpdateStep.download;
   } else if (state?.Status === "restart-pending") {
-    current = "restart";
+    current = UpdateStep.restart;
   } else if (state?.Status === "failed") {
-    current = state.Failure?.Step || "install";
+    current = state.Failure?.Step || UpdateStep.install;
     failed = true;
   }
   // A build that can't install updates is found out before anything
   // downloads: the steps before the one it stopped at never ran.
   const skipped = cannotInstall(state);
-  const index = panelSteps.findIndex(([id]) => id === current);
+  const index = updateSteps.findIndex(({ id }) => id === current);
   return {
     current,
+    heading: updateSteps[index]?.heading ?? "",
     failed,
-    steps: panelSteps.map(([id, label, runningLabel], i) => {
+    steps: updateSteps.map(({ id, label, running }, i) => {
       let mark = "todo";
       if (i === index) {
         mark = failed ? "failed" : "current";
       } else if (i < index) {
         mark = skipped && i > 0 ? "skipped" : "done";
       }
-      return { id, label: mark === "current" ? runningLabel : label, mark };
+      return { id, label: mark === "current" ? running : label, mark };
     }),
   };
 }
@@ -290,10 +314,8 @@ export function updateStatusLine(state) {
   }
   const version = state.Update.Version;
   switch (state.Status) {
-    case "downloading": {
-      const step = installingStepLabel(state.Progress);
-      return step ? `${step} ${version}…` : `Downloading ${version} · ${progressPercent(state.Progress) ?? 0}%`;
-    }
+    case "downloading":
+      return installingLine(state.Progress, version, 0);
     case "restart-pending":
       return `${version} ready to restart`;
     case "failed":

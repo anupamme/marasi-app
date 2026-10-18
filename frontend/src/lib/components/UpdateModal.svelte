@@ -30,6 +30,7 @@
 		showsUpdateIndicator,
 		updatePanelFailure,
 		updatePanelSteps,
+		UpdateStep,
 	} from "../updates.js";
 	import { primaryVariant } from "../launchpad/format.js";
 	import { toastError } from "../toasts";
@@ -76,14 +77,6 @@
 	// Ledger, the rest as Home's Open Project.
 	$: primary = primaryVariant($modeCurrent);
 	$: neutral = $modeCurrent ? "variant-ghost border-0 ring-0" : "variant-filled";
-
-	const headings = {
-		details: "What's new",
-		download: "Downloading",
-		verify: "Verifying",
-		install: "Installing",
-		restart: "Ready to restart",
-	};
 </script>
 
 {#if $modalStore[0] && update}
@@ -151,7 +144,7 @@
 
 		<section class="flex min-w-0 flex-1 flex-col p-5">
 			<header class="flex items-center justify-between">
-				<h3 class="h5">{failure ? "Failed" : headings[panel.current]}</h3>
+				<h3 class="h5">{failure ? "Failed" : panel.heading}</h3>
 				<button
 					type="button"
 					class="btn-icon btn-icon-sm"
@@ -168,7 +161,7 @@
 						<AlertTriangle size={18} />
 						<p>{failure.message}. Your installed Marasi is unchanged.</p>
 					</aside>
-				{:else if panel.current === "details"}
+				{:else if panel.current === UpdateStep.details}
 					{#if notes}
 						<pre
 							class="whitespace-pre-wrap break-words font-sans">{notes}</pre>
@@ -186,7 +179,7 @@
 					{:else if !notes}
 						<p class="opacity-60">No release notes.</p>
 					{/if}
-				{:else if panel.current === "download"}
+				{:else if panel.current === UpdateStep.download}
 					<div class="flex h-full flex-col justify-center gap-3">
 						<p class="text-3xl font-bold font-mono">{progressPercent(progress) ?? 0}%</p>
 						<ProgressBar
@@ -197,12 +190,12 @@
 						/>
 						<p class="opacity-60 font-mono text-xs">{downloadedAmount(progress)}</p>
 					</div>
-				{:else if panel.current === "verify"}
+				{:else if panel.current === UpdateStep.verify}
 					<div class="flex h-full flex-col justify-center gap-3">
 						<p>Checking the signature and checksum.</p>
 						<ProgressBar height="h-2" meter="bg-primary-500" />
 					</div>
-				{:else if panel.current === "install"}
+				{:else if panel.current === UpdateStep.install}
 					<div class="flex h-full flex-col justify-center gap-3">
 						<p>Replacing Marasi.</p>
 						<ProgressBar height="h-2" meter="bg-primary-500" />

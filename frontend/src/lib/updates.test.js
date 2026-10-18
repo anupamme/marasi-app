@@ -264,6 +264,15 @@ test("a running install ticks the finished steps and outlines the running one wi
   assert.equal(updatePanelSteps(at("install")).current, "install");
 });
 
+test("the panel heads its right pane with the current step", () => {
+  const at = (Step) => ({ Status: "downloading", Update: update, Progress: { Step, Received: 5, Total: 10 } });
+  assert.equal(updatePanelSteps({ Status: "available", Update: update, CanInstall: true }).heading, "What's new");
+  assert.equal(updatePanelSteps(at("download")).heading, "Downloading");
+  assert.equal(updatePanelSteps(at("verify")).heading, "Verifying");
+  assert.equal(updatePanelSteps(at("install")).heading, "Installing");
+  assert.equal(updatePanelSteps({ Status: "restart-pending", Update: update }).heading, "Ready to restart");
+});
+
 test("an installed update waiting for a restart is at Restart, with every earlier step ticked", () => {
   const state = { Status: "restart-pending", Update: update };
   assert.equal(updatePanelSteps(state).current, "restart");

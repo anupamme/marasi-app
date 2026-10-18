@@ -23,6 +23,7 @@ jobs:
     outputs:
       publish: ${{ steps.check.outputs.publish }}
       sha: ${{ steps.check.outputs.sha }}
+      previous: ${{ steps.check.outputs.previous }}
       version: ${{ steps.check.outputs.version }}
     steps:
       - uses: actions/checkout@v4
@@ -43,6 +44,9 @@ jobs:
           {
             echo 'publish=true'
             echo "sha=$sha"
+            # The commit the published nightly was built from, before the
+            # tag moves; the new nightly's notes list the commits since it.
+            echo "previous=$last"
             echo "version=$(date -u '+%d.%m.%Y') (nightly ${sha:0:7})"
           } >> "$GITHUB_OUTPUT"
 
@@ -64,6 +68,8 @@ jobs:
       - uses: actions/checkout@v4
         with:
           ref: ${{ needs.prepare.outputs.sha }}
+          # Publish lists the commit subjects since the previous nightly.
+          fetch-depth: 0
       - uses: actions/download-artifact@v4
         with:
           path: dist
@@ -110,11 +116,35 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ inputs.ref || github.ref_name }}
           SHA: ${{ needs.prepare.outputs.sha }}
+          # The previous nightly's commit, read before its tag moved; empty
+          # for the first nightly.
+          PREVIOUS: ${{ needs.prepare.outputs.previous }}
           # The app reads the nightly's date from its title (its version
-          # string) and its commit from the Commit line of its notes.
+          # string) and its commit from the Commit line of its notes; it
+          # shows the commit subjects above that line as the notes.
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
-          notes=$(printf 'Ref: %s\nCommit: %s\n' "$REF" "$SHA")
+          # The commits since the previous nightly, newest first. Without a
+          # previous nightly, or when its commit is not an ancestor (history
+          # rewritten, or a build of another branch), the 20 most recent.
+          if [ -n "$PREVIOUS" ] && git merge-base --is-ancestor "$PREVIOUS" "$SHA" 2>/dev/null; then
+            range="$PREVIOUS..$SHA"
+            limit=100
+            total=$(git rev-list --no-merges --count "$range")
+          else
+            range="$SHA"
+            limit=20
+            total=0
+          fi
+          subjects=$(git log --no-merges --format='- %s' -n "$limit" "$range")
+          if [ "$total" -gt "$limit" ]; then
+            subjects=$(printf '%s\n- …and %d more' "$subjects" "$((total - limit))")
+          fi
+          if [ -n "$subjects" ]; then
+            notes=$(printf '%s\n\nRef: %s\nCommit: %s\n' "$subjects" "$REF" "$SHA")
+          else
+            notes=$(printf 'Ref: %s\nCommit: %s\n' "$REF" "$SHA")
+          fi
           if gh release view nightly >/dev/null 2>&1; then
             gh release delete nightly --yes
           fi

@@ -259,7 +259,7 @@
         const state = get(launchpadStore);
         const launchpad = state.launchpads.find((l) => l.ID === state.selectedLaunchpadId);
         if (!launchpad) return;
-        // Marasi refuses while a launch from it is pending (marasi ADR-0049).
+        // Marasi refuses while a launch from it is pending (marasi ADR-0053).
         if (pendingLaunchOf(state, launchpad.ID)) return warnLaunching();
         confirm(
             `Delete ${launchpad.Name}?`,

@@ -352,7 +352,7 @@ test("a ⌘A selection Marasi refuses while a job builds changes nothing and lea
 });
 
 // Marasi refusing a selection that holds pairs still launching (marasi
-// ADR-0049), as the Go side words it.
+// ADR-0053), as the Go side words it.
 const launchPending = (what, ...ids) => new Error(`${what}: launch_pending (${ids.join(", ")}): a launch is pending`);
 
 test("a ⌘A delete Marasi refuses for pairs still launching selects those pairs and deletes nothing", async () => {

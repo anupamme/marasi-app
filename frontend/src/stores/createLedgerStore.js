@@ -1900,7 +1900,7 @@ export function createLedgerStore(api) {
   }
 
   // Waits for a delete or a removal from a launchpad. When Marasi refuses it
-  // for pairs still launching (marasi ADR-0049), nothing changed: the loaded
+  // for pairs still launching (marasi ADR-0053), nothing changed: the loaded
   // ones become the selection, so the researcher sees which, and the error
   // goes on.
   async function showLaunching(operation) {

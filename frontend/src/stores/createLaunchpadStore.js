@@ -812,7 +812,7 @@ export function createLaunchpadStore(api) {
     },
 
     // Deletes without asking: confirming a dirty draft is the page's job.
-    // Marasi refuses while a launch from it is pending (marasi ADR-0049);
+    // Marasi refuses while a launch from it is pending (marasi ADR-0053);
     // the store then learns that launch, so Delete shows it launching.
     deleteLaunchpad: async (id) => {
       try {

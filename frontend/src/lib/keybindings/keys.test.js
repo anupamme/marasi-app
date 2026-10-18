@@ -75,10 +75,14 @@ test("modifier-only and composition events are not bindings", () => {
 test("bindings display in the palette's existing notation for each platform", () => {
   assert.equal(formatBinding("meta+shift+f", "macos"), "⌘+⇧+F");
   assert.equal(formatBinding("ctrl+shift+f", "windows-linux"), "ctrl+⇧+F");
-  assert.equal(formatBinding("meta+alt+1", "macos"), "⌘+alt+1");
+  assert.equal(formatBinding("meta+alt+1", "macos"), "⌘+⌥+1");
+  assert.equal(formatBinding("ctrl+alt+1", "windows-linux"), "ctrl+alt+1");
   assert.equal(formatBinding("meta+shift+enter", "macos"), "⌘+⇧+↩");
   assert.equal(formatBinding("ctrl+shift+enter", "windows-linux"), "ctrl+⇧+enter");
-  assert.equal(formatBinding("meta+shift+arrowdown", "macos"), "⌘+⇧+down");
+  assert.equal(formatBinding("meta+shift+arrowdown", "macos"), "⌘+⇧+↓");
+  assert.equal(formatBinding("alt+arrowup", "macos"), "⌥+↑");
+  assert.equal(formatBinding("alt+shift+arrowdown", "macos"), "⌥+⇧+↓");
+  assert.equal(formatBinding("ctrl+arrowleft", "windows-linux"), "ctrl+left");
   assert.equal(formatBinding("meta+`", "macos"), "⌘+`");
 });
 

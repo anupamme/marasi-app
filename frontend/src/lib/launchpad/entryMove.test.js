@@ -48,8 +48,8 @@ test("a move nothing stands in the way of is not refused", () => {
 });
 
 test("entries still launching cannot go to another launchpad", () => {
-  assert.equal(moveRefusal(move({ pendingIds: ["c"] })), "1 still launching");
-  assert.equal(moveRefusal(move({ pendingIds: ["b", "c"] })), "2 still launching");
+  assert.equal(moveRefusal(move({ pendingIds: ["c"] })), "1 launching");
+  assert.equal(moveRefusal(move({ pendingIds: ["b", "c"] })), "2 launching");
 });
 
 test("entries still launching can be reordered in their own launchpad", () => {

@@ -1,6 +1,26 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { pendingLaunchIDs, pendingLaunchText } from "./launchPending.js";
+import { pendingLaunchIDs, pendingLaunchText, toastLaunchingRefusal } from "./launchPending.js";
+
+// A toast store that keeps what it was given.
+function toasts() {
+  const shown = [];
+  return { shown, trigger: (toast) => shown.push(toast) };
+}
+
+test("a refusal for pending launches toasts a warning with how many", () => {
+  const store = toasts();
+  assert.equal(toastLaunchingRefusal(store, "unlinking traffic: launch_pending (a, b): …", "removed", "entry"), true);
+  assert.deepEqual(store.shown.map(({ message, background }) => [message, background]), [
+    ["2 entries are still launching; nothing was removed", "variant-filled-warning"],
+  ]);
+});
+
+test("any other error toasts nothing, so the caller reports it", () => {
+  const store = toasts();
+  assert.equal(toastLaunchingRefusal(store, new Error("disk full"), "deleted"), false);
+  assert.deepEqual(store.shown, []);
+});
 
 test("a launch_pending refusal's pairs are read from the error's text", () => {
   const error =

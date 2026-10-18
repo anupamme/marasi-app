@@ -2,7 +2,7 @@
 // Pure, like treeRows.js: the tree measures rows and passes what it found.
 // A place is { launchpadId, before }: the moved entries go before the entry
 // `before`, or at the end when it is null (Marasi's MoveLaunchpadEntries).
-import { pendingLaunchIDs, pendingLaunchText } from "../launchPending.js";
+import { launchingHint, pendingLaunchIDs, pendingLaunchText } from "../launchPending.js";
 
 // The first entry at or after `index` in `order` that is not moving, or null
 // for the end, so a block dropped inside itself stays put.
@@ -51,7 +51,7 @@ export function moveRefusal({ sourceId, ids, target, targetName, targetIds, pend
   }
   if (!elsewhere) return null;
   const pending = ids.filter((id) => pendingIds.includes(id)).length;
-  if (pending) return `${pending} still launching`;
+  if (pending) return launchingHint(pending);
   const there = ids.filter((id) => targetIds?.includes(id)).length;
   if (there) return `${there} already in ${targetName}`;
   return null;

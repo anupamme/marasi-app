@@ -52,3 +52,20 @@ export function pendingLaunchText(count, verb, noun = "pair") {
 
 /** Why a launchpad with a pending launch cannot be deleted. */
 export const DELETE_LAUNCHPAD_PENDING_HINT = "Launching: cancel or wait";
+
+/** Shows `message`, why something still launching stopped an action, as a warning toast. */
+export function warnLaunching(toastStore, message) {
+  toastStore.trigger({ message, background: "variant-filled-warning" });
+}
+
+/**
+ * Toasts why Marasi refused an action for pending launches, with
+ * pendingLaunchText(count, verb, noun), and returns true. Returns false,
+ * toasting nothing, for any other error, so the caller reports it.
+ */
+export function toastLaunchingRefusal(toastStore, error, verb, noun = "pair") {
+  const ids = pendingLaunchIDs(error);
+  if (!ids) return false;
+  warnLaunching(toastStore, pendingLaunchText(ids.length, verb, noun));
+  return true;
+}

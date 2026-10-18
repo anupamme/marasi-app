@@ -61,7 +61,7 @@ test("a launchpad that already holds one of the pairs is greyed with how many", 
 test("Move to launchpad is greyed while an entry's launch is pending", () => {
   const move = item(menu(["b", "c"], { pendingIds: ["b", "x"] }), "move");
   assert.equal(move.disabled, true);
-  assert.equal(move.hint, "1 still launching");
+  assert.equal(move.hint, "1 launching");
   assert.ok(!item(menu(["c"], { pendingIds: ["b"] }), "move").disabled);
 });
 

@@ -50,7 +50,12 @@
         pendingLaunchOf,
         selectedEntryIds,
     } from "../../stores/launchpadStore";
-    import { DELETE_LAUNCHPAD_PENDING_HINT, pendingLaunchIDs, pendingLaunchText } from "../../lib/launchPending.js";
+    import {
+        DELETE_LAUNCHPAD_PENDING_HINT,
+        pendingLaunchIDs,
+        toastLaunchingRefusal,
+        warnLaunching,
+    } from "../../lib/launchPending.js";
     import { toastError } from "../../lib/toasts.js";
 
     const modalStore = getModalStore();
@@ -204,14 +209,7 @@
                 background: "variant-filled-success",
             });
         } catch (err) {
-            const pending = pendingLaunchIDs(err);
-            if (pending) {
-                toastStore.trigger({
-                    message: pendingLaunchText(pending.length, "removed", "entry"),
-                    background: "variant-filled-warning",
-                });
-                return;
-            }
+            if (toastLaunchingRefusal(toastStore, err, "removed", "entry")) return;
             console.error("Launchpad remove error:", err);
             toastError(toastStore, "Failed to remove the entries", err);
         }
@@ -260,13 +258,13 @@
         const launchpad = state.launchpads.find((l) => l.ID === state.selectedLaunchpadId);
         if (!launchpad) return;
         // Marasi refuses while a launch from it is pending (marasi ADR-0053).
-        if (pendingLaunchOf(state, launchpad.ID)) return warnLaunching();
+        if (pendingLaunchOf(state, launchpad.ID)) return warnDeleteLaunching();
         confirm(
             `Delete ${launchpad.Name}?`,
             isDraftDirty(state, launchpad.ID) ? "Its unsaved draft will be discarded." : undefined,
             () =>
                 launchpadStore.deleteLaunchpad(launchpad.ID).catch((err) => {
-                    if (pendingLaunchIDs(err)) return warnLaunching();
+                    if (pendingLaunchIDs(err)) return warnDeleteLaunching();
                     console.error("Deleting the launchpad failed:", err);
                     toastStore.trigger({
                         message: "Failed to delete the launchpad",
@@ -276,13 +274,7 @@
         );
     }
 
-    function warnLaunching() {
-        toastStore.trigger({
-            message: DELETE_LAUNCHPAD_PENDING_HINT,
-            background: "variant-filled-warning",
-            timeout: 2000,
-        });
-    }
+    const warnDeleteLaunching = () => warnLaunching(toastStore, DELETE_LAUNCHPAD_PENDING_HINT);
 
     async function launch() {
         const state = get(launchpadStore);

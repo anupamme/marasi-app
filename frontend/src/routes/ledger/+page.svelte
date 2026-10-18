@@ -71,7 +71,7 @@
 	import { select } from "../../lib/storeSelect.js";
 	import { toastError as showError } from "../../lib/toasts.js";
 	import { incompleteJobs, incompleteText } from "../../lib/ledger/selectionIncomplete.js";
-	import { pendingLaunchIDs, pendingLaunchText } from "../../lib/launchPending.js";
+	import { toastLaunchingRefusal } from "../../lib/launchPending.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
@@ -266,10 +266,8 @@
 	// the launchpads are read again so the menu greys it next time. False
 	// for any other error.
 	function launchingRefused(error, verb) {
-		const ids = pendingLaunchIDs(error);
-		if (!ids) return false;
+		if (!toastLaunchingRefusal(toastStore, error, verb)) return false;
 		refreshLaunchpads();
-		toastStore.trigger({ message: pendingLaunchText(ids.length, verb), background: "variant-filled-warning" });
 		return true;
 	}
 

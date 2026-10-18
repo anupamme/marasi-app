@@ -714,8 +714,9 @@ export function createLaunchpadStore(api) {
     // Remove from launchpad: unlinks the entries; their pairs stay in the
     // project. The launchpad reloads, refused or not: a refusal means this
     // view was stale, and one for a pending launch also reads the pending
-    // launches, so the menu shows them launching. Returns how many Marasi
-    // removed; the error goes on.
+    // launches, so the menu shows them launching. Removing the entry the
+    // draft was seeded from, or the selected one, reseeds the draft as a
+    // move does. Returns how many Marasi removed; the error goes on.
     removeEntries: async (launchpadId, ids) => {
       const version = projectStateVersion;
       let count;
@@ -725,8 +726,14 @@ export function createLaunchpadStore(api) {
         await Promise.all([loadEntries(launchpadId), pendingLaunchIDs(err) ? loadPendingLaunches() : null]);
         throw err;
       }
-      await loadEntries(launchpadId);
-      if (version === projectStateVersion) updateEntrySelection(() => selecting.NO_ENTRY_SELECTION);
+      const entries = await loadEntries(launchpadId);
+      if (version !== projectStateVersion) return count;
+      updateEntrySelection(() => selecting.NO_ENTRY_SELECTION);
+      const removed = new Set(ids);
+      const draft = current.draftsByLaunchpad[launchpadId];
+      if (removed.has(draft?.seededFrom) || removed.has(current.selectedEntryByLaunchpad[launchpadId])) {
+        await seedFromLast(launchpadId, entries);
+      }
       return count;
     },
 

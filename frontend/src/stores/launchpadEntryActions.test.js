@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { createLaunchpadStore, pendingEntryIds, pendingLaunchOf } from "./createLaunchpadStore.js";
+import { BLANK_REQUEST, createLaunchpadStore, pendingEntryIds, pendingLaunchOf } from "./createLaunchpadStore.js";
 
 const entry = (id) => ({ ID: id, Method: "GET", Path: `/${id}` });
 
@@ -49,6 +49,45 @@ test("removing unlinks the entries from the launchpad, reloads it with its count
   assert.deepEqual(order(store, "lp1"), ["b", "d", "e"]);
   assert.equal(get(store).launchpads[0].EntryCount, 3);
   assert.deepEqual(get(store).entrySelection.ids, []);
+});
+
+// lp1 is open on e, its last entry, with its draft set to plain HTTP.
+async function onLastEntry(api = fakeApi()) {
+  const store = await populated(api);
+  store.setUseHttps("lp1", false);
+  return store;
+}
+
+test("removing the draft's entry reseeds the draft from the last entry left, over the same scheme", async () => {
+  const store = await onLastEntry();
+  await store.removeEntries("lp1", ["e"]);
+  const state = get(store);
+  assert.deepEqual(state.draftsByLaunchpad.lp1, { raw: "GET /d HTTP/1.1\n\n", seededFrom: "d", useHttps: false });
+  assert.equal(state.selectedEntryByLaunchpad.lp1, "d");
+});
+
+test("removing every entry leaves a blank draft and no selected entry", async () => {
+  const store = await onLastEntry();
+  await store.removeEntries("lp1", ["a", "b", "c", "d", "e"]);
+  const state = get(store);
+  assert.deepEqual(state.draftsByLaunchpad.lp1, { raw: BLANK_REQUEST, seededFrom: null, useHttps: false });
+  assert.equal(state.selectedEntryByLaunchpad.lp1, undefined);
+});
+
+test("removing the selected entry reseeds even when the draft came from another", async () => {
+  const store = await onLastEntry();
+  await store.selectEntry("lp1", "b");
+  await store.removeEntries("lp1", ["b"]);
+  assert.equal(get(store).selectedEntryByLaunchpad.lp1, "e");
+  assert.equal(get(store).draftsByLaunchpad.lp1.seededFrom, "e");
+});
+
+test("removing other entries leaves the draft and the selected entry", async () => {
+  const store = await onLastEntry();
+  const draft = get(store).draftsByLaunchpad.lp1;
+  await store.removeEntries("lp1", ["a", "c"]);
+  assert.equal(get(store).draftsByLaunchpad.lp1, draft);
+  assert.equal(get(store).selectedEntryByLaunchpad.lp1, "e");
 });
 
 test("a removal Marasi refuses for a pending launch reads the pending launches and keeps the selection", async () => {

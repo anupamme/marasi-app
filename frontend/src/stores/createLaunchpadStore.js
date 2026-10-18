@@ -5,6 +5,7 @@ import { writable } from "svelte/store";
 import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
 import * as selecting from "../lib/launchpad/entrySelection.js";
+import { leavesOrder, marasiMoveRefusal } from "../lib/launchpad/entryMove.js";
 import { pendingLaunchIDs } from "../lib/launchPending.js";
 
 // Entry search through Marasi: `matches` holds entry ids by launchpad id,
@@ -593,6 +594,39 @@ export function createLaunchpadStore(api) {
     return { found: true, entryId, needsConfirm };
   }
 
+  // Move: takes `ids` (in entry order) out of `sourceId` and puts them
+  // before `before` in `targetId`, at the end when `before` is null; the
+  // target may be the source. Marasi moves all or none. Both launchpads are
+  // reloaded either way, and after a move the Entry selection is the moved
+  // entries. Returns { moved, refused }: the moved ids in entry order, or
+  // why Marasi refused (its view was stale). Other failures throw.
+  async function moveEntries({ sourceId, targetId, ids, before = null }) {
+    if (sourceId === targetId && leavesOrder(entryIdsOf(current, sourceId), ids, before)) {
+      return { moved: ids, refused: null };
+    }
+    const version = projectStateVersion;
+    const reload = () =>
+      Promise.all([...new Set([sourceId, targetId])].map((id) => loadEntries(id)));
+    let moved;
+    try {
+      moved = (await api.moveEntries(sourceId, targetId, ids, before ?? "")) || [];
+    } catch (err) {
+      const nameOf = (id) => current.launchpads.find((launchpad) => launchpad.ID === id)?.Name ?? "";
+      const refused = marasiMoveRefusal(err, { sourceName: nameOf(sourceId), targetName: nameOf(targetId) });
+      if (!refused) throw err;
+      await Promise.all([reload(), loadPendingLaunches()]);
+      return { moved: null, refused };
+    }
+    if (version !== projectStateVersion) return { moved, refused: null };
+    await reload();
+    updateEntrySelection((selection) => ({
+      launchpadId: targetId,
+      ids: moved,
+      anchor: moved.includes(selection.anchor) ? selection.anchor : moved[0] ?? null,
+    }));
+    return { moved, refused: null };
+  }
+
   return {
     subscribe,
     clear: () => {
@@ -610,6 +644,9 @@ export function createLaunchpadStore(api) {
 
     // Entry selection beyond a plain click (selectEntry). None of these
     // reseeds a draft or changes the open launchpad.
+    // Just this entry, as when a drag starts on an unselected one.
+    selectOnlyEntry: (launchpadId, entryId) =>
+      updateEntrySelection(() => selecting.selectOnly(launchpadId, entryId)),
     toggleEntry: (launchpadId, entryId) =>
       updateEntrySelection((selection) => selecting.toggle(selection, launchpadId, entryId)),
     // `order` is the entry ids the tree shows, for a range under Group by
@@ -624,6 +661,9 @@ export function createLaunchpadStore(api) {
         selecting.selectAll(selection, launchpadId, entryIdsOf(state, launchpadId)),
       ),
     collapseEntrySelection: () => updateEntrySelection(selecting.collapse),
+
+    // Drag and drop and the entry menu both move through this.
+    moveEntries,
 
     updateDraft: (launchpadId, raw) => {
       if (current.draftsByLaunchpad[launchpadId]?.raw === raw) return;

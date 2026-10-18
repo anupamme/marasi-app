@@ -9,6 +9,7 @@ import {
   GetLaunchpads,
   GetRawDetails,
   Launch,
+  MoveLaunchpadEntries,
   PendingLaunches,
   SearchLaunchpadEntries,
   SetUnsavedDraftCount,
@@ -41,6 +42,8 @@ export const launchpadStore = createLaunchpadStore({
   getLaunch: (id) => GetLaunch(id),
   pendingLaunches: () => PendingLaunches(),
   searchEntries: (query) => SearchLaunchpadEntries(query),
+  moveEntries: (sourceId, targetId, ids, before) =>
+    MoveLaunchpadEntries(sourceId, targetId, ids, before),
 });
 
 // Keeps the Go side told how many launchpads have unsaved drafts, so quitting

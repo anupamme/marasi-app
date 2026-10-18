@@ -42,7 +42,7 @@ type HighlightMigration struct {
 // many pairs changed. marasi publishes no event for it: the caller refreshes
 // its own view.
 func (a *App) SetHighlight(sel domain.Selection, highlight int) (int, error) {
-	return a.bulk(fmt.Sprintf("setting highlight %d", highlight), func(repo domain.TrafficRepository) (int, error) {
+	return a.trafficBulk(fmt.Sprintf("setting highlight %d", highlight), func(repo domain.TrafficRepository) (int, error) {
 		return repo.SetHighlight(sel, highlight)
 	})
 }
@@ -50,7 +50,7 @@ func (a *App) SetHighlight(sel domain.Selection, highlight int) (int, error) {
 // ClearHighlight removes the highlight of every pair in sel and returns how
 // many pairs had one.
 func (a *App) ClearHighlight(sel domain.Selection) (int, error) {
-	return a.bulk("clearing highlights", func(repo domain.TrafficRepository) (int, error) {
+	return a.trafficBulk("clearing highlights", func(repo domain.TrafficRepository) (int, error) {
 		return repo.ClearHighlight(sel)
 	})
 }

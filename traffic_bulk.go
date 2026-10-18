@@ -3,7 +3,6 @@ package main
 import (
 	"errors"
 	"fmt"
-	"strings"
 
 	"github.com/google/uuid"
 	"github.com/tfkr-ae/marasi/domain"
@@ -51,24 +50,31 @@ const selectionIncomplete = "selection_incomplete"
 // bulk runs one of Marasi's bulk operations and wraps its error with what.
 // A refused query selection changes nothing and reads as selectionIncomplete;
 // a selection refused for a pending launch reads as launchPending.
-func (a *App) bulk(what string, op func(domain.TrafficRepository) (int, error)) (int, error) {
-	traffic, err := a.Proxy.GetTrafficRepo()
-	if err != nil {
-		return 0, fmt.Errorf("%s: %w", what, err)
+func (a *App) bulk(what string, op func() (int, error)) (int, error) {
+	n, err := op()
+	if err == nil {
+		return n, nil
 	}
-	n, err := op(traffic)
 	var incomplete *domain.SelectionIncompleteError
 	if errors.As(err, &incomplete) {
 		jobs := make([]string, len(incomplete.Jobs))
 		for i, job := range incomplete.Jobs {
 			jobs[i] = string(job)
 		}
-		return 0, fmt.Errorf("%s: %s (%s): %w", what, selectionIncomplete, strings.Join(jobs, ", "), err)
+		return 0, codedError(what, selectionIncomplete, jobs, err)
 	}
-	if err != nil {
-		return 0, launchpadError(what, err)
-	}
-	return n, nil
+	return 0, launchpadError(what, err)
+}
+
+// trafficBulk runs op on the project's traffic repository through bulk.
+func (a *App) trafficBulk(what string, op func(domain.TrafficRepository) (int, error)) (int, error) {
+	return a.bulk(what, func() (int, error) {
+		traffic, err := a.Proxy.GetTrafficRepo()
+		if err != nil {
+			return 0, err
+		}
+		return op(traffic)
+	})
 }
 
 // LinkTraffic links every pair in sel to a launchpad, finding or test case,
@@ -78,7 +84,7 @@ func (a *App) LinkTraffic(sel domain.Selection, target TrafficLinkTarget) (int, 
 	if err != nil {
 		return 0, fmt.Errorf("linking traffic: %w", err)
 	}
-	return a.bulk("linking traffic", func(repo domain.TrafficRepository) (int, error) {
+	return a.trafficBulk("linking traffic", func(repo domain.TrafficRepository) (int, error) {
 		return repo.LinkTraffic(sel, to)
 	})
 }
@@ -91,7 +97,7 @@ func (a *App) UnlinkTraffic(sel domain.Selection, target TrafficLinkTarget) (int
 	if err != nil {
 		return 0, fmt.Errorf("unlinking traffic: %w", err)
 	}
-	return a.bulk("unlinking traffic", func(domain.TrafficRepository) (int, error) {
+	return a.bulk("unlinking traffic", func() (int, error) {
 		return a.Proxy.UnlinkTraffic(sel, from)
 	})
 }
@@ -99,7 +105,7 @@ func (a *App) UnlinkTraffic(sel domain.Selection, target TrafficLinkTarget) (int
 // AppendNote adds text to every pair's note in sel, after a blank line when
 // the pair already has one, and returns how many notes it wrote.
 func (a *App) AppendNote(sel domain.Selection, text string) (int, error) {
-	return a.bulk("appending a note", func(repo domain.TrafficRepository) (int, error) {
+	return a.trafficBulk("appending a note", func(repo domain.TrafficRepository) (int, error) {
 		return repo.AppendNote(sel, text)
 	})
 }
@@ -107,7 +113,7 @@ func (a *App) AppendNote(sel domain.Selection, text string) (int, error) {
 // ClearNotes deletes the notes of the pairs in sel and returns how many it
 // deleted.
 func (a *App) ClearNotes(sel domain.Selection) (int, error) {
-	return a.bulk("clearing notes", func(repo domain.TrafficRepository) (int, error) {
+	return a.trafficBulk("clearing notes", func(repo domain.TrafficRepository) (int, error) {
 		return repo.ClearNotes(sel)
 	})
 }
@@ -116,7 +122,7 @@ func (a *App) ClearNotes(sel domain.Selection) (int, error) {
 // links, WebSocket messages and logs (marasi ADR-0034), and returns how many
 // it deleted. Marasi deletes nothing when sel holds a pending launch.
 func (a *App) DeleteTraffic(sel domain.Selection) (int, error) {
-	return a.bulk("deleting traffic", func(domain.TrafficRepository) (int, error) {
+	return a.bulk("deleting traffic", func() (int, error) {
 		return a.Proxy.DeleteTraffic(sel)
 	})
 }

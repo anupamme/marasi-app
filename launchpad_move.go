@@ -28,6 +28,12 @@ var launchpadRefusals = []struct {
 	{domain.ErrLaunchpadNotLinked, "not_linked"},
 }
 
+// codedError wraps err with what, code and the ids the refusal names:
+// "<what>: <code> (<id>, <id>): <err>". The frontend's codeIDs reads it.
+func codedError(what, code string, ids []string, err error) error {
+	return fmt.Errorf("%s: %s (%s): %w", what, code, strings.Join(ids, ", "), err)
+}
+
 // launchpadError wraps err with what, and with its code when it is one of
 // launchpadRefusals or a launch pending.
 func launchpadError(what string, err error) error {
@@ -37,7 +43,7 @@ func launchpadError(what string, err error) error {
 		for i, id := range pending.IDs {
 			ids[i] = id.String()
 		}
-		return fmt.Errorf("%s: %s (%s): %w", what, launchPending, strings.Join(ids, ", "), err)
+		return codedError(what, launchPending, ids, err)
 	}
 	for _, refusal := range launchpadRefusals {
 		if errors.Is(err, refusal.err) {

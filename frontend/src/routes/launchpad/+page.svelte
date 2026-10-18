@@ -15,6 +15,7 @@
         Columns2Icon,
         FolderTreeIcon,
         GitCompareIcon,
+        ListChecksIcon,
         LockIcon,
         PanelLeftIcon,
         PenIcon,
@@ -247,6 +248,14 @@
         if (compare?.leftId && compare.rightId) launchpadStore.swapCompare();
     }
 
+    // ⌘A in the tree: the focused launchpad is the entry selection's, else
+    // the open one.
+    function selectAllEntries() {
+        const { entrySelection, selectedLaunchpadId } = get(launchpadStore);
+        const id = entrySelection.launchpadId ?? selectedLaunchpadId;
+        if (id) launchpadStore.selectAllEntries(id);
+    }
+
     // Catalog actions keep their pre-redesign IDs (ADR-0001):
     // toggle-settings renames, *-tab steps launchpads.
     const launchpadMenu = [
@@ -271,6 +280,7 @@
             handler: () => workspace?.toggleCompareView(),
         },
         { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
+        { actionId: "launchpad.tree.select-all-entries", icon: ListChecksIcon, handler: selectAllEntries },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },
         { actionId: "launchpad.previous-tab", icon: ArrowLeftIcon, handler: () => stepLaunchpad(-1) },
         { actionId: "launchpad.next-entry", icon: ArrowDownIcon, handler: () => stepEntry(1) },

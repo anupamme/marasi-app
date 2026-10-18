@@ -6,8 +6,14 @@
 	// from the selected pairs; choosing one dispatches `action` with the
 	// item's action for the page to run. The highlight swatches sit on one
 	// row: ←→ move between them there, and hovering one shows its label.
+	// Another list of pairs (the Launchpad tree's entries) passes its own
+	// `items` in the same shape, with its `noun` and `scope` for the header.
 	import { createEventDispatcher, tick } from "svelte";
 	import {
+		ArrowDown,
+		ArrowDownToLine,
+		ArrowUp,
+		ArrowUpToLine,
 		Braces,
 		BookCheck,
 		Check,
@@ -16,6 +22,7 @@
 		Eraser,
 		EyeOff,
 		Filter,
+		FolderInput,
 		Highlighter,
 		Link,
 		ListChecks,
@@ -48,6 +55,12 @@
 	export let pairs = [];
 	/** What the menu lists besides the pairs: see menuFor in rowMenu.js. */
 	export let context = {};
+	/** The items, when not the Ledger's menuFor(pairs, context). */
+	export let items = null;
+	/** What the header counts the pairs as: [one, many]. */
+	export let noun = ["request", "requests"];
+	/** Where the pairs are, shown after the count ("in Login"); hosts when null. */
+	export let scope = null;
 
 	const dispatch = createEventDispatcher();
 
@@ -69,6 +82,11 @@
 		highlighter: Highlighter,
 		trash: Trash2,
 		eraser: Eraser,
+		move: FolderInput,
+		top: ArrowUpToLine,
+		up: ArrowUp,
+		down: ArrowDown,
+		bottom: ArrowDownToLine,
 	};
 	const METHOD_CLASS = {
 		POST: "text-tertiary-700 dark:text-tertiary-500",
@@ -100,8 +118,8 @@
 	let position = { left: 0, top: 0 };
 	const subPanels = [];
 
-	$: items = open ? menuFor(pairs, context) : [];
-	$: list = filterMenu(items, filter);
+	$: menuItems = !open ? [] : items ?? menuFor(pairs, context);
+	$: list = filterMenu(menuItems, filter);
 	$: filtered = filter.trim() !== "";
 	$: summary = open ? selectionSummary(pairs) : null;
 	$: levelItems = subItemsOf(list, subs);
@@ -298,7 +316,7 @@
 			? context.count == null
 				? "All matching"
 				: `All ${context.count.toLocaleString()} matching`
-			: plural(summary.count, "request");
+			: plural(summary.count, ...noun);
 </script>
 
 <svelte:window on:keydown|capture={onKeydown} on:pointerdown|capture={onPointerDown} on:blur={() => open && close(false)} />
@@ -328,7 +346,8 @@
 			{:else}
 				<div class="flex items-center gap-2">
 					<span class="font-semibold">{selectionLabel}</span>
-					{#if !partial}<span class="opacity-60">· {plural(summary.hosts.length, "host")}</span>{/if}
+					{#if scope}<span class="truncate opacity-60">· {scope}</span>
+					{:else if !partial}<span class="opacity-60">· {plural(summary.hosts.length, "host")}</span>{/if}
 				</div>
 				{#if !partial}
 				<div class="mt-1 flex flex-wrap gap-x-2 gap-y-0.5 font-mono text-[10px]">
@@ -502,7 +521,8 @@
 								{#if item.severity && SEVERITY_CLASS[item.severity]}
 									<span class="px-1 text-[9px] font-bold {SEVERITY_CLASS[item.severity]}">{item.severity}</span>
 								{/if}
-								{#if item.disabled && item.hint}<span class="text-[10px]">{item.hint}</span>{/if}
+								{#if item.disabled && item.hint}<span class="text-[10px]">{item.hint}</span>
+								{:else if item.count != null}<span class="text-[10px] opacity-50">{item.count}</span>{/if}
 								{#if key && !item.disabled}<kbd class="font-sans text-[10px] opacity-50">{key}</kbd>{/if}
 								{#if opensSub && !item.disabled}<ChevronRight size={12} class="opacity-60" />{/if}
 							</button>

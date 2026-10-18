@@ -1,0 +1,118 @@
+// The Launchpad tree's context menu for an Entry selection, as data in the
+// shape of the Ledger's row menu (ledger/rowMenu.js), so RowMenu.svelte
+// renders it and menuAction runs its shortcuts. Every item is a Move, to the
+// end of another launchpad or to a new place in this one, or a removal.
+// Plain functions, so they load under node.
+//
+// Actions:
+//   { type: "move", targetId, name }   to the end of another launchpad
+//   { type: "reorder", before }        within the launchpad; before null is the end
+//   { type: "remove" }                 unlink from the launchpad
+import { unlessLaunching } from "../ledger/rowMenu.js";
+import { moveRefusal } from "./entryMove.js";
+
+const entriesLabel = (n) => (n === 1 ? "" : ` ${n.toLocaleString()}`);
+
+// Where each Order item puts the picked block, as the `before` a Move takes
+// (null for the end), or undefined when the block is already there. The
+// block keeps its order; up and down hop it over the nearest unpicked entry.
+function reorderBefore(order, picked) {
+  const rest = order.filter((id) => !picked.has(id));
+  const first = order.findIndex((id) => picked.has(id));
+  const last = order.findLastIndex((id) => picked.has(id));
+  const atTop = order.slice(0, picked.size).every((id) => picked.has(id));
+  const atBottom = order.slice(-picked.size).every((id) => picked.has(id));
+  const above = order.slice(0, first).filter((id) => !picked.has(id)).at(-1);
+  const below = order.slice(last + 1).find((id) => !picked.has(id));
+  return {
+    top: atTop ? undefined : rest[0],
+    up: above,
+    down: below ? rest[rest.indexOf(below) + 1] ?? null : undefined,
+    bottom: atBottom ? undefined : null,
+  };
+}
+
+const ORDER_ITEMS = [
+  ["top", "Move to top", "Already first"],
+  ["up", "Move up", "Already first"],
+  ["down", "Move down", "Already last"],
+  ["bottom", "Move to bottom", "Already last"],
+];
+
+/**
+ * The menu for the Entry selection `ids` in launchpad `launchpadId`, whose
+ * `entries` are in entry order. `launchpads` is the launchpad list,
+ * `entriesByLaunchpad` the entry lists loaded so far, `pendingIds` the
+ * entries whose launch is pending. Reordering is off while the tree is
+ * `grouped` by status or `searching`; moving to another launchpad's end is
+ * not.
+ */
+export function entryMenuFor({
+  launchpadId,
+  entries = [],
+  ids = [],
+  launchpads = [],
+  entriesByLaunchpad = {},
+  pendingIds = [],
+  grouped = false,
+  searching = false,
+}) {
+  const order = entries.map((entry) => entry.ID);
+  const picked = order.filter((id) => ids.includes(id));
+  const n = picked.length;
+  const launching = picked.filter((id) => pendingIds.includes(id)).length;
+  const targets = launchpads
+    .filter((launchpad) => launchpad.ID !== launchpadId)
+    .map((launchpad) => {
+      const name = launchpad.Name || "Untitled launchpad";
+      const refused = moveRefusal({
+        sourceId: launchpadId,
+        ids: picked,
+        target: { launchpadId: launchpad.ID, via: "launchpad" },
+        targetName: name,
+        targetIds: entriesByLaunchpad[launchpad.ID]?.map((entry) => entry.ID) ?? null,
+        pendingIds,
+        grouped,
+        searching,
+      });
+      return {
+        id: `mv-${launchpad.ID}`,
+        label: name,
+        count: launchpad.EntryCount ?? 0,
+        ...(refused ? { disabled: true, hint: refused } : {}),
+        action: { type: "move", targetId: launchpad.ID, name },
+      };
+    });
+  // A pending entry refuses every target alike, so the submenu is shut.
+  const moveOff = !targets.length ? "No other launchpads" : launching ? targets[0].hint : null;
+  const reorderOff = grouped ? "Grouped by status" : searching ? "Searching" : null;
+  const before = reorderBefore(order, new Set(picked));
+  return [
+    {
+      id: "move",
+      label: `Move${entriesLabel(n)} to launchpad`,
+      icon: "move",
+      ...(moveOff ? { disabled: true, hint: moveOff } : {}),
+      sub: [{ heading: "Adds at the end" }, ...targets],
+    },
+    { heading: "Order" },
+    ...ORDER_ITEMS.map(([key, label, already]) => ({
+      id: key,
+      label,
+      icon: key,
+      actionId: `launchpad.tree.move-entries-${key}`,
+      ...(reorderOff || before[key] === undefined ? { disabled: true, hint: reorderOff ?? already } : {}),
+      action: { type: "reorder", before: before[key] ?? null },
+    })),
+    "sep",
+    {
+      id: "remove",
+      label: `Remove${entriesLabel(n)} from launchpad`,
+      icon: "unlink",
+      danger: true,
+      // Marasi keeps a pending launch's pair in its launchpad (marasi ADR-0049).
+      ...unlessLaunching(launching),
+      action: { type: "remove" },
+    },
+  ];
+}

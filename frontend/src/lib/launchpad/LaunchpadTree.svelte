@@ -24,6 +24,8 @@
 	// The page's Move ({ sourceId, targetId, ids, before }): the store's
 	// moveEntries plus its toasts. Resolves to { moved, refused }.
 	export let moveEntries;
+	// Opens the entry context menu at (x, y) for the Entry selection.
+	export let openEntryMenu = () => {};
 	export let searchInput = null;
 
 	export let groupByStatus = savedGroupByStatus;
@@ -109,6 +111,17 @@
 			return store.extendEntrySelection(launchpadId, entryId, shown);
 		}
 		pickEntry(launchpadId, entryId);
+	}
+	// A right-click acts on the Entry selection; outside it, the entry
+	// becomes the selection. The draft is not reseeded.
+	function rightClickEntry(event, launchpadId, entryId) {
+		scroller?.focus({ preventScroll: true });
+		if (!isEntrySelected(state, launchpadId, entryId)) store.selectOnlyEntry(launchpadId, entryId);
+		openEntryMenu(event.clientX, event.clientY);
+	}
+	/** Focuses the tree, where its shortcuts work. */
+	export function focus() {
+		scroller?.focus({ preventScroll: true });
 	}
 	// Esc is the page's key (gate.js), so the tree collapses the selection
 	// itself; with one entry selected, Esc goes on to the page (closing compare).
@@ -548,6 +561,7 @@
 									use:reveal={active}
 									on:pointerdown={(event) => pressEntry(event, launchpad.ID, entry.ID)}
 									on:click={(event) => clickEntry(event, launchpad.ID, entry.ID, rows)}
+									on:contextmenu|preventDefault={(event) => rightClickEntry(event, launchpad.ID, entry.ID)}
 								>
 									{#if picked}<span class="absolute bottom-0 left-0 top-0 w-[3px] bg-primary-500"></span>{/if}
 									{#if dropLine?.entryId === entry.ID}

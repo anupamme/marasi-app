@@ -10,6 +10,8 @@
         ArrowLeftIcon,
         ArrowLeftRightIcon,
         ArrowRightIcon,
+        ArrowUpIcon,
+        ArrowUpToLineIcon,
         BracesIcon,
         CircleStopIcon,
         Columns2Icon,
@@ -35,11 +37,20 @@
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
     import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
+    import { entryMenuFor } from "../../lib/launchpad/entryMenu.js";
     import { lastEntry } from "../../lib/launchpad/jumpTarget.js";
+    import RowMenu from "../../lib/ledger/RowMenu.svelte";
+    import { menuAction } from "../../lib/ledger/rowMenu.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
-    import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
-    import { DELETE_LAUNCHPAD_PENDING_HINT, pendingLaunchIDs } from "../../lib/launchPending.js";
+    import {
+        isDraftDirty,
+        launchOf,
+        launchpadStore,
+        pendingLaunchOf,
+        selectedEntryIds,
+    } from "../../stores/launchpadStore";
+    import { DELETE_LAUNCHPAD_PENDING_HINT, pendingLaunchIDs, pendingLaunchText } from "../../lib/launchPending.js";
     import { toastError } from "../../lib/toasts.js";
 
     const modalStore = getModalStore();
@@ -124,6 +135,84 @@
             toastError(toastStore, "Failed to move the entries", err);
             return { moved: null, refused: null };
         }
+    }
+
+    // The entry context menu (RowMenu with entryMenu.js items) for the
+    // Entry selection. Its Order items are also the tree's ⌥-arrow actions.
+    let entryMenu = { open: false, x: 0, y: 0 };
+
+    function entryMenuInput(state) {
+        const { launchpadId } = state.entrySelection;
+        const entries = state.entriesByLaunchpad[launchpadId] || [];
+        const ids = selectedEntryIds(state);
+        return {
+            launchpadId,
+            entries,
+            ids,
+            launchpads: state.launchpads,
+            entriesByLaunchpad: state.entriesByLaunchpad,
+            pendingIds: ids.filter((id) => launchOf(state, id)?.Status === "pending"),
+            grouped: groupByStatus,
+            searching: state.search.trim() !== "",
+        };
+    }
+
+    $: entryMenuData = entryMenu.open ? entryMenuInput($launchpadStore) : null;
+    $: entryMenuEntries = entryMenuData ? entryMenuData.entries.filter((e) => entryMenuData.ids.includes(e.ID)) : [];
+    $: entryMenuName = $launchpadStore.launchpads.find((l) => l.ID === entryMenuData?.launchpadId)?.Name;
+
+    function openEntryMenu(x, y) {
+        if (selectedEntryIds(get(launchpadStore)).length) entryMenu = { open: true, x, y };
+    }
+
+    // Runs a menu item's action on the Entry selection.
+    async function runEntryAction(action) {
+        const state = get(launchpadStore);
+        const sourceId = state.entrySelection.launchpadId;
+        const ids = selectedEntryIds(state);
+        if (!sourceId || !ids.length) return;
+        if (action.type === "remove") return removeEntries(sourceId, ids);
+        const targetId = action.type === "move" ? action.targetId : sourceId;
+        const before = action.type === "move" ? null : action.before;
+        const { moved } = await moveEntries({ sourceId, targetId, ids, before });
+        if (moved?.length) await tree?.showEntry(targetId, moved[0]);
+    }
+
+    async function removeEntries(launchpadId, ids) {
+        const name = get(launchpadStore).launchpads.find((l) => l.ID === launchpadId)?.Name || "Untitled launchpad";
+        try {
+            const count = await launchpadStore.removeEntries(launchpadId, ids);
+            toastStore.trigger({
+                message: `Removed ${count === 1 ? "1 entry" : `${count} entries`} from "${name}"`,
+                background: "variant-filled-success",
+            });
+        } catch (err) {
+            const pending = pendingLaunchIDs(err);
+            if (pending) {
+                toastStore.trigger({
+                    message: pendingLaunchText(pending.length, "removed"),
+                    background: "variant-filled-warning",
+                });
+                return;
+            }
+            console.error("Launchpad remove error:", err);
+            toastError(toastStore, "Failed to remove the entries", err);
+        }
+    }
+
+    // ⌥↑ ⌥↓ ⌥⇧↑ ⌥⇧↓ in the tree: the menu's Order item, run as choosing it
+    // would; when the menu greys it, its reason instead.
+    function runEntryShortcut(actionId) {
+        entryMenu = { ...entryMenu, open: false };
+        const input = entryMenuInput(get(launchpadStore));
+        if (!input.ids.length) return;
+        const item = menuAction(entryMenuFor(input), actionId);
+        if (!item) return;
+        if (item.disabled) {
+            toastStore.trigger({ message: item.hint, background: "variant-filled-warning", timeout: 2000 });
+            return;
+        }
+        runEntryAction(item.action);
     }
 
     // ⌘⇧↓ selects the open launchpad's last entry through the usual
@@ -317,6 +406,10 @@
         },
         { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
         { actionId: "launchpad.tree.select-all-entries", icon: ListChecksIcon, handler: selectAllEntries },
+        { actionId: "launchpad.tree.move-entries-up", icon: ArrowUpIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-up") },
+        { actionId: "launchpad.tree.move-entries-down", icon: ArrowDownIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-down") },
+        { actionId: "launchpad.tree.move-entries-top", icon: ArrowUpToLineIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-top") },
+        { actionId: "launchpad.tree.move-entries-bottom", icon: ArrowDownToLineIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-bottom") },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },
         { actionId: "launchpad.previous-tab", icon: ArrowLeftIcon, handler: () => stepLaunchpad(-1) },
         { actionId: "launchpad.next-entry", icon: ArrowDownIcon, handler: () => stepEntry(1) },
@@ -364,6 +457,7 @@
             pickLaunchpad={(id) => launchpadStore.selectLaunchpad(id)}
             {pickEntry}
             {moveEntries}
+            {openEntryMenu}
             bind:searchInput
         />
     </LaunchpadDock>
@@ -379,3 +473,16 @@
         />
     </div>
 </div>
+
+<RowMenu
+    bind:open={entryMenu.open}
+    x={entryMenu.x}
+    y={entryMenu.y}
+    pairs={entryMenuEntries}
+    items={entryMenuData ? entryMenuFor(entryMenuData) : []}
+    context={{ numberOf: (entry) => entryMenuData.entries.indexOf(entry) + 1 }}
+    noun={["entry", "entries"]}
+    scope={entryMenuName ? `in ${entryMenuName}` : null}
+    on:action={(e) => runEntryAction(e.detail)}
+    on:close={(e) => e.detail.refocus && tree?.focus()}
+/>

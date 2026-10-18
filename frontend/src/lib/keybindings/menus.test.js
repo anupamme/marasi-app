@@ -513,6 +513,21 @@ test("⌘A selects every entry only while the Launchpad tree has focus, and not 
   assert.ok(contextsConflict(CONTEXTS, "launchpad.tree", "launchpad"));
 });
 
+test("⌥ arrows move the entry selection only while the Launchpad tree has focus, and not from an editor", () => {
+  const alt = (key, mods = {}, target) => keydown(key, key, { altKey: true, ...mods }, target);
+  const tree = { ...on("/launchpad"), launchpadTreeFocused: true };
+  for (const dispatcher of [mac(), createDispatcher({ catalog: buildCatalog(), platform: WINDOWS_LINUX })]) {
+    assert.equal(dispatcher.resolve(alt("ArrowUp"), tree), "launchpad.tree.move-entries-up");
+    assert.equal(dispatcher.resolve(alt("ArrowDown"), tree), "launchpad.tree.move-entries-down");
+    assert.equal(dispatcher.resolve(alt("ArrowUp", { shiftKey: true }), tree), "launchpad.tree.move-entries-top");
+    assert.equal(dispatcher.resolve(alt("ArrowDown", { shiftKey: true }), tree), "launchpad.tree.move-entries-bottom");
+    assert.equal(dispatcher.resolve(alt("ArrowUp"), on("/launchpad")), null);
+    // ⌥↑ moves a line in CodeMirror; the tree's search box keeps it too.
+    const search = alt("ArrowUp", {}, { tagName: "INPUT", closest: () => null });
+    assert.equal(dispatcher.resolve(search, tree), null);
+  }
+});
+
 test("no Launchpad default hides a global shortcut", () => {
   const catalog = buildCatalog();
   for (const platform of [MACOS, WINDOWS_LINUX]) {

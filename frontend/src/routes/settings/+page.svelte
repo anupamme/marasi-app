@@ -50,7 +50,7 @@
 	} from "../../stores/updateStore";
 	import { chromeError } from "../../lib/globalActions.js";
 	import { toastError } from "../../lib/toasts.js";
-	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import { neutralVariant, primaryVariant } from "../../lib/launchpad/format.js";
 	import {
 		highlightPalette,
 		resetHighlights,
@@ -119,7 +119,7 @@
 
 	$: primary = primaryVariant($modeCurrent);
 	// Home's Open Project button: the app's neutral style.
-	$: neutral = $modeCurrent ? "variant-ghost border-0 ring-0" : "variant-filled";
+	$: neutral = neutralVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
 		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";

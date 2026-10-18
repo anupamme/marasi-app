@@ -4,6 +4,10 @@
 export const primaryVariant = (lightMode) =>
   lightMode ? "variant-ghost-primary ring-0 shadow-none" : "variant-filled-primary";
 
+/** Marasi's neutral variant, as Home's Open Project: ghost in light mode, filled in dark. */
+export const neutralVariant = (lightMode) =>
+  lightMode ? "variant-ghost border-0 ring-0" : "variant-filled";
+
 /** Text colour class for an HTTP status code; pending (0, or -1 as stored) is dimmed. */
 export function statusClass(code) {
   if (!(code > 0)) return "opacity-50";

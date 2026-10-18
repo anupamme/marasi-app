@@ -32,7 +32,7 @@
 		updatePanelSteps,
 		UpdateStep,
 	} from "../updates.js";
-	import { primaryVariant } from "../launchpad/format.js";
+	import { neutralVariant, primaryVariant } from "../launchpad/format.js";
 	import { toastError } from "../toasts";
 
 	export let parent;
@@ -76,7 +76,7 @@
 	// Buttons as elsewhere in the app: primary as in Launchpad and the
 	// Ledger, the rest as Home's Open Project.
 	$: primary = primaryVariant($modeCurrent);
-	$: neutral = $modeCurrent ? "variant-ghost border-0 ring-0" : "variant-filled";
+	$: neutral = neutralVariant($modeCurrent);
 </script>
 
 {#if $modalStore[0] && update}

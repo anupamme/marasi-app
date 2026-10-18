@@ -3,11 +3,11 @@
 // bool, as read by treeRows.entryRows) and swaps in what these return.
 import { statusKey } from "./treeRows.js";
 
-// IDs of every status folder; the original (first) entry is in none.
+// IDs of every status folder holding at least one entry.
 function statusFolderIds(launchpads, entriesByLaunchpad, launchFor) {
   const ids = new Set();
   for (const launchpad of launchpads) {
-    for (const entry of (entriesByLaunchpad[launchpad.ID] || []).slice(1)) {
+    for (const entry of (entriesByLaunchpad[launchpad.ID] || [])) {
       ids.add(`${launchpad.ID}:${statusKey(entry, launchFor?.(entry))}`);
     }
   }
@@ -45,7 +45,7 @@ export function collapseAll({ launchpads, entriesByLaunchpad, launchFor }) {
 export function revealEntry({ expanded, openGroups, entriesByLaunchpad, groupByStatus, launchFor }, launchpadId, entryId) {
   const entries = entriesByLaunchpad[launchpadId] || [];
   const index = entries.findIndex((entry) => entry.ID === entryId);
-  const inFolder = groupByStatus && index > 0;
+  const inFolder = groupByStatus && index >= 0;
   return {
     expanded: { ...expanded, [launchpadId]: true },
     openGroups: inFolder ? { ...openGroups, [`${launchpadId}:${statusKey(entries[index], launchFor?.(entries[index]))}`]: true } : openGroups,

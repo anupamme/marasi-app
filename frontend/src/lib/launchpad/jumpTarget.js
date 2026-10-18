@@ -1,4 +1,4 @@
-// The floating "Latest in …" button of the Launchpad tree, like the
+// The floating "End of …" button of the Launchpad tree, like the
 // WebSocket table's "Jump to bottom". Pure, so it takes measured geometry.
 
 /** Height of the sticky launchpad row that covers the top of the tree. */
@@ -24,10 +24,10 @@ export function jumpTarget(rows, view) {
 }
 
 /**
- * What ⌘⇧↓ selects: the open launchpad's newest Launchpad entry as
+ * What ⌘⇧↓ selects: the open launchpad's last Launchpad entry in entry order as
  * `{ launchpadId, entryId }`, or null when there is none to select.
  */
-export function latestEntry({ selectedLaunchpadId, entriesByLaunchpad }) {
-  const newest = entriesByLaunchpad[selectedLaunchpadId]?.at(-1);
-  return newest ? { launchpadId: selectedLaunchpadId, entryId: newest.ID } : null;
+export function lastEntry({ selectedLaunchpadId, entriesByLaunchpad }) {
+  const last = entriesByLaunchpad[selectedLaunchpadId]?.at(-1);
+  return last ? { launchpadId: selectedLaunchpadId, entryId: last.ID } : null;
 }

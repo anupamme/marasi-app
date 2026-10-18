@@ -500,6 +500,19 @@ test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => 
   assert.equal(dispatcher.resolve(compare, on("/launchpad")), "launchpad.toggle-compare");
 });
 
+test("⌘A selects every entry only while the Launchpad tree has focus, and not from its search box", () => {
+  const dispatcher = mac();
+  const tree = { ...on("/launchpad"), launchpadTreeFocused: true };
+  assert.equal(dispatcher.resolve(cmd("a", "KeyA"), tree), "launchpad.tree.select-all-entries");
+  assert.equal(dispatcher.resolve(cmd("a", "KeyA"), on("/launchpad")), null);
+  const search = keydown("a", "KeyA", { metaKey: true }, { tagName: "INPUT", closest: () => null });
+  assert.equal(dispatcher.resolve(search, tree), null);
+  // The page's own shortcuts still run from the tree.
+  assert.equal(dispatcher.resolve(cmdShift("C", "KeyC"), tree), "launchpad.toggle-compare");
+  // Both are eligible together, so one key cannot serve both.
+  assert.ok(contextsConflict(CONTEXTS, "launchpad.tree", "launchpad"));
+});
+
 test("no Launchpad default hides a global shortcut", () => {
   const catalog = buildCatalog();
   for (const platform of [MACOS, WINDOWS_LINUX]) {

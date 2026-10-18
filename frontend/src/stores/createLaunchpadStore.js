@@ -4,6 +4,7 @@
 import { writable } from "svelte/store";
 import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
+import * as selecting from "../lib/launchpad/entrySelection.js";
 
 // Entry search through Marasi: `matches` holds entry ids by launchpad id,
 // `status` is idle, loading, done or error.
@@ -33,6 +34,8 @@ function initialState(projectStateVersion = 0) {
     launchesById: {},
     detailsById: {},
     selectedLaunchpadId: null,
+    // The Entry selection (entrySelection.js): one launchpad at a time.
+    entrySelection: selecting.NO_ENTRY_SELECTION,
     search: "",
     entrySearch: IDLE_SEARCH,
     compare: null,
@@ -75,6 +78,19 @@ export function dirtyLaunchpadIds(state) {
   return Object.keys(state.draftsByLaunchpad).filter((id) =>
     isDraftDirty(state, id),
   );
+}
+
+/** True when the entry is in the Entry selection. */
+export function isEntrySelected(state, launchpadId, entryId) {
+  const selection = state.entrySelection;
+  return selection.launchpadId === launchpadId && selection.ids.includes(entryId);
+}
+
+/** The Entry selection's entry ids in entry order. */
+export function selectedEntryIds(state) {
+  const { launchpadId, ids } = state.entrySelection;
+  const selected = new Set(ids);
+  return entryIdsOf(state, launchpadId).filter((id) => selected.has(id));
 }
 
 /**
@@ -148,6 +164,10 @@ function selectLaunched(state, launchpadId, entryId, sentRaw, launchedRaw) {
     },
   };
 }
+
+// The launchpad's entry ids in entry order.
+const entryIdsOf = (state, launchpadId) =>
+  (state.entriesByLaunchpad[launchpadId] || []).map((entry) => entry.ID);
 
 function without(map, key) {
   const copy = { ...map };
@@ -486,10 +506,16 @@ export function createLaunchpadStore(api) {
           [launchpadId]: entryId,
         },
       }));
-      return { needsConfirm: false };
+    } else {
+      await seedDraft(launchpadId, entryId);
     }
-    await seedDraft(launchpadId, entryId);
+    // A click selects just this entry.
+    updateEntrySelection(() => selecting.selectOnly(launchpadId, entryId));
     return { needsConfirm: false };
+  }
+
+  function updateEntrySelection(fn) {
+    update((state) => ({ ...state, entrySelection: fn(state.entrySelection, state) }));
   }
 
   function updateDraftFields(launchpadId, fields) {
@@ -536,6 +562,9 @@ export function createLaunchpadStore(api) {
         ),
         ...mapPerLaunchpad(state, keep),
         compare: ids.has(state.compare?.launchpadId) ? state.compare : null,
+        entrySelection: ids.has(state.entrySelection.launchpadId)
+          ? state.entrySelection
+          : selecting.NO_ENTRY_SELECTION,
       };
     });
     const exists = (id) => launchpads.some((launchpad) => launchpad.ID === id);
@@ -572,6 +601,23 @@ export function createLaunchpadStore(api) {
     ensureDetails,
     selectLaunchpad,
     selectEntry,
+
+    // Entry selection beyond a plain click (selectEntry). None of these
+    // reseeds a draft or changes the open launchpad.
+    toggleEntry: (launchpadId, entryId) =>
+      updateEntrySelection((selection) => selecting.toggle(selection, launchpadId, entryId)),
+    // `order` is the entry ids the tree shows, for a range under Group by
+    // status or a search; the launchpad's entry order otherwise.
+    extendEntrySelection: (launchpadId, entryId, order = null) =>
+      updateEntrySelection((selection, state) =>
+        selecting.extend(selection, launchpadId, entryId, order ?? entryIdsOf(state, launchpadId)),
+      ),
+    // Every entry, including those behind "Show more".
+    selectAllEntries: (launchpadId) =>
+      updateEntrySelection((selection, state) =>
+        selecting.selectAll(selection, launchpadId, entryIdsOf(state, launchpadId)),
+      ),
+    collapseEntrySelection: () => updateEntrySelection(selecting.collapse),
 
     updateDraft: (launchpadId, raw) => {
       if (current.draftsByLaunchpad[launchpadId]?.raw === raw) return;
@@ -653,6 +699,8 @@ export function createLaunchpadStore(api) {
         launchpads: state.launchpads.filter((launchpad) => launchpad.ID !== id),
         ...mapPerLaunchpad(state, (map) => without(map, id)),
         compare: state.compare?.launchpadId === id ? null : state.compare,
+        entrySelection:
+          state.entrySelection.launchpadId === id ? selecting.NO_ENTRY_SELECTION : state.entrySelection,
       }));
       if (current.selectedLaunchpadId !== id) return;
       const neighbour =

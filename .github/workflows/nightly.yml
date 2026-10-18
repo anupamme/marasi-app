@@ -125,9 +125,10 @@ jobs:
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           # The commits since the previous nightly, newest first. Without a
-          # previous nightly, or when its commit is not an ancestor (history
-          # rewritten, or a build of another branch), the 20 most recent.
-          if [ -n "$PREVIOUS" ] && git merge-base --is-ancestor "$PREVIOUS" "$SHA" 2>/dev/null; then
+          # previous nightly, when it is this same commit (a forced rebuild),
+          # or when its commit is not an ancestor (history rewritten, or a
+          # build of another branch), the 20 most recent.
+          if [ -n "$PREVIOUS" ] && [ "$PREVIOUS" != "$SHA" ] && git merge-base --is-ancestor "$PREVIOUS" "$SHA" 2>/dev/null; then
             range="$PREVIOUS..$SHA"
             limit=100
             total=$(git rev-list --no-merges --count "$range")

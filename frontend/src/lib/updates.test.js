@@ -415,10 +415,10 @@ test("the Settings icon carries no indicator without an update", () => {
   assert.equal(settingsIconIndicator(null), null);
 });
 
-test("an available update puts a primary dot on the Settings icon", () => {
+test("an available update puts a green dot on the Settings icon", () => {
   assert.deepEqual(settingsIconIndicator({ Status: "available", Update: update18 }), {
     kind: "dot",
-    tone: "primary",
+    tone: "success",
     pulse: false,
   });
 });
@@ -429,10 +429,10 @@ test("a failed install turns the dot red", () => {
   assert.deepEqual(settingsIconIndicator(state), { kind: "dot", tone: "error", pulse: false });
 });
 
-test("an update waiting for a restart pulses its dot", () => {
+test("an update waiting for a restart pulses a tertiary dot", () => {
   assert.deepEqual(settingsIconIndicator({ Status: "restart-pending", Update: update18 }), {
     kind: "dot",
-    tone: "primary",
+    tone: "tertiary",
     pulse: true,
   });
 });

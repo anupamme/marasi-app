@@ -148,6 +148,12 @@
 	const modalStore = getModalStore();
 	// The Settings icon's update indicator (see settingsIconIndicator).
 	$: settingsIndicator = settingsIconIndicator($updateState);
+	// Full class names, so Tailwind keeps them.
+	const dotTones = {
+		success: { dot: "bg-success-500", ping: "bg-success-400" },
+		error: { dot: "bg-error-500", ping: "bg-error-400" },
+		tertiary: { dot: "bg-tertiary-500", ping: "bg-tertiary-400" },
+	};
 	const ringRadius = 17;
 	const ringLength = 2 * Math.PI * ringRadius;
 	const drawerStore = getDrawerStore();
@@ -768,8 +774,8 @@
 						/>
 					</div>
 					<!-- The Settings icon carries the update indicator: a dot for
-					     an update waiting (red after a failure, pulsing for a
-					     restart), a ring filling with its download. While an
+					     an update waiting (green when available, red after a
+					     failure, tertiary and pulsing for a restart), a ring filling with its download. While an
 					     update waits, the icon opens Settings → Updates. -->
 					<AppRailAnchor
 						selected={$page.url.pathname ===
@@ -835,14 +841,11 @@
 								>
 									{#if settingsIndicator.pulse}
 										<span
-											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75"
+											class="absolute inline-flex h-full w-full animate-ping rounded-full {dotTones[settingsIndicator.tone].ping} opacity-75"
 										></span>
 									{/if}
 									<span
-										class="relative inline-flex h-3 w-3 rounded-full ring-2 ring-surface-50 dark:ring-surface-800 {settingsIndicator.tone ===
-										'error'
-											? 'bg-error-500'
-											: 'bg-primary-500'}"
+										class="relative inline-flex h-3 w-3 rounded-full ring-2 ring-surface-50 dark:ring-surface-800 {dotTones[settingsIndicator.tone].dot}"
 									></span>
 								</span>
 							{/if}

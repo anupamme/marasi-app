@@ -104,8 +104,9 @@ export function updateIndicatorLabel(state) {
  * What the Settings icon carries for state, or null when no update is known:
  * - { kind: "ring", percent, spinning }: a ring around the icon filling with
  *   the download, full and spinning while verifying and installing;
- * - { kind: "dot", tone, pulse }: a dot, "error" after a failed install,
- *   pulsing while a restart is waiting.
+ * - { kind: "dot", tone, pulse }: a dot, "success" for an available update,
+ *   "error" after a failed install, "tertiary" and pulsing while a restart
+ *   is waiting.
  */
 export function settingsIconIndicator(state) {
   if (!showsUpdateIndicator(state)) {
@@ -117,9 +118,10 @@ export function settingsIconIndicator(state) {
     }
     return { kind: "ring", percent: progressPercent(state.Progress) ?? 0, spinning: false };
   }
+  const tones = { failed: "error", "restart-pending": "tertiary" };
   return {
     kind: "dot",
-    tone: state.Status === "failed" ? "error" : "primary",
+    tone: tones[state.Status] ?? "success",
     pulse: state.Status === "restart-pending",
   };
 }

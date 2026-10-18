@@ -74,14 +74,62 @@ export function showsUpdateIndicator(state) {
 export function updateIndicatorLabel(state) {
   const version = state?.Update?.Version ?? "";
   switch (state?.Status) {
-    case "downloading":
-      return `Downloading update ${version}`;
+    case "downloading": {
+      const step = installingStepLabel(state.Progress);
+      if (step) {
+        return `${step} update ${version}…`;
+      }
+      const percent = progressPercent(state.Progress);
+      return percent === null ? `Downloading update ${version}` : `Downloading update ${version} · ${percent}%`;
+    }
     case "failed":
       return `Update ${version} failed to install`;
     case "restart-pending":
       return `Restart Marasi to run ${version}`;
     default:
       return `Update available: ${version}`;
+  }
+}
+
+/**
+ * What the Settings icon carries for state (variant B of the update UI), or
+ * null when no update is known:
+ * - { kind: "ring", percent, spinning }: a ring around the icon filling with
+ *   the download, full and spinning while verifying and installing;
+ * - { kind: "dot", tone, pulse }: a dot, "error" after a failed install,
+ *   pulsing while a restart is waiting.
+ */
+export function settingsIconIndicator(state) {
+  if (!showsUpdateIndicator(state)) {
+    return null;
+  }
+  if (state.Status === "downloading") {
+    if (installingStepLabel(state.Progress)) {
+      return { kind: "ring", percent: 100, spinning: true };
+    }
+    return { kind: "ring", percent: progressPercent(state.Progress) ?? 0, spinning: false };
+  }
+  return {
+    kind: "dot",
+    tone: state.Status === "failed" ? "error" : "primary",
+    pulse: state.Status === "restart-pending",
+  };
+}
+
+/** Where the Settings icon goes: Settings → Updates while an update is waiting. */
+export function settingsPath(state) {
+  return showsUpdateIndicator(state) ? channelSettingPath : "/settings";
+}
+
+/** "Verifying" or "Installing" for an install past its download, else null. */
+function installingStepLabel(progress) {
+  switch (progress?.Step) {
+    case "verify":
+      return "Verifying";
+    case "install":
+      return "Installing";
+    default:
+      return null;
   }
 }
 
@@ -226,8 +274,10 @@ export function updateStatusLine(state) {
   }
   const version = state.Update.Version;
   switch (state.Status) {
-    case "downloading":
-      return `Downloading ${version} · ${progressPercent(state.Progress) ?? 0}%`;
+    case "downloading": {
+      const step = installingStepLabel(state.Progress);
+      return step ? `${step} ${version}…` : `Downloading ${version} · ${progressPercent(state.Progress) ?? 0}%`;
+    }
     case "restart-pending":
       return `${version} ready to restart`;
     case "failed":

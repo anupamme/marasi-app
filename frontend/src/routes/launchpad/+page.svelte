@@ -45,8 +45,8 @@
     import { listener } from "../../stores";
     import {
         isDraftDirty,
-        launchOf,
         launchpadStore,
+        pendingEntryIds,
         pendingLaunchOf,
         selectedEntryIds,
     } from "../../stores/launchpadStore";
@@ -168,7 +168,7 @@
             ids,
             launchpads: state.launchpads,
             entriesByLaunchpad: state.entriesByLaunchpad,
-            pendingIds: ids.filter((id) => launchOf(state, id)?.Status === "pending"),
+            pendingIds: pendingEntryIds(state, launchpadId, ids),
             grouped: groupByStatus,
             searching: state.search.trim() !== "",
         };

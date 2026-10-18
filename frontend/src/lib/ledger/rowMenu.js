@@ -19,6 +19,7 @@ import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presenta
 import { shortType } from "./table.js";
 import { effectivePalette } from "./highlights.js";
 import { LAUNCHPADS_EACH_MAX } from "./pairs.js";
+import { launchingIds, unlessLaunching } from "../launchPending.js";
 
 const unique = (values) => [...new Set(values)];
 
@@ -230,19 +231,8 @@ export function isPartialSelection(pairs, { all = false, count = null } = {}) {
 }
 
 // How many of `pairs` are still launching, from `launchpadId` when given.
-// Marasi refuses to delete such a pair or remove it from the launchpad it
-// was launched from (marasi ADR-0049).
-function launchingCount(pairs, pendingLaunches, launchpadId = null) {
-  const ids = new Set(
-    pendingLaunches
-      .filter((launch) => launchpadId == null || launch.LaunchpadID === launchpadId)
-      .map((launch) => String(launch.ID)),
-  );
-  return pairs.filter((pair) => ids.has(String(pair.ID))).length;
-}
-
-/** Greys an item whose pairs include `launching` still launching. */
-export const unlessLaunching = (launching) => (launching ? { disabled: true, hint: `${launching} launching` } : {});
+const launchingCount = (pairs, pendingLaunches, launchpadId = null) =>
+  launchingIds(pendingLaunches, pairs.map((pair) => pair.ID), launchpadId).length;
 
 /**
  * The menu for `pairs`, the selected pairs the table has loaded, in table

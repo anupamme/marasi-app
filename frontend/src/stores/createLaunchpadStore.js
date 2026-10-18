@@ -6,7 +6,7 @@ import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
 import * as selecting from "../lib/launchpad/entrySelection.js";
 import { leavesOrder, marasiMoveRefusal } from "../lib/launchpad/entryMove.js";
-import { pendingLaunchIDs } from "../lib/launchPending.js";
+import { launchingIds, pendingLaunchIDs } from "../lib/launchPending.js";
 
 // Entry search through Marasi: `matches` holds entry ids by launchpad id,
 // `status` is idle, loading, done or error.
@@ -113,6 +113,15 @@ export function launchOf(state, entryId, entry = undefined) {
     found?.Metadata?.launch ?? state.detailsById[entryId]?.Metadata?.launch;
   if (!stored?.status) return null;
   return { Status: stored.status, Reason: stored.reason || "" };
+}
+
+/**
+ * The ids of `ids` still launching from `launchpadId`: their launch is
+ * pending and was launched from it. Marasi refuses to move such an entry to
+ * another launchpad or remove it (marasi ADR-0053).
+ */
+export function pendingEntryIds(state, launchpadId, ids) {
+  return launchingIds(Object.values(state.launchesById), ids, launchpadId);
 }
 
 /** The launchpad's newest pending launch, or null. */

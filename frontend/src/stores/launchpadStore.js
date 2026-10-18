@@ -25,6 +25,7 @@ export {
   isDraftDirty,
   isEntrySelected,
   launchOf,
+  pendingEntryIds,
   pendingLaunchOf,
   seededRaw,
   selectedEntryIds,

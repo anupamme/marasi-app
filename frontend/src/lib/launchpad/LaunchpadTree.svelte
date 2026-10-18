@@ -10,7 +10,7 @@
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate, onDestroy, tick } from "svelte";
 	import { ArrowDown, Ban, ChevronDown, CircleAlert, LoaderCircle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
-	import { isDraftDirty, isEntrySelected, launchOf, pendingLaunchOf, selectedEntryIds } from "../../stores/launchpadStore";
+	import { isDraftDirty, isEntrySelected, launchOf, pendingEntryIds, pendingLaunchOf, selectedEntryIds } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { dropTarget, moveRefusal } from "./entryMove.js";
 	import { jumpTarget } from "./jumpTarget.js";
@@ -185,7 +185,7 @@
 				target,
 				targetName: state.launchpads.find((launchpad) => launchpad.ID === target.launchpadId)?.Name ?? "",
 				targetIds: state.entriesByLaunchpad[target.launchpadId] ? entryIds(target.launchpadId) : null,
-				pendingIds: drag.ids.filter((id) => launchOf(state, id)?.Status === "pending"),
+				pendingIds: pendingEntryIds(state, drag.from, drag.ids),
 				grouped: groupByStatus,
 				searching,
 			});

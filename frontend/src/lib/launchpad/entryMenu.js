@@ -8,7 +8,7 @@
 //   { type: "move", targetId, name }   to the end of another launchpad
 //   { type: "reorder", before }        within the launchpad; before null is the end
 //   { type: "remove" }                 unlink from the launchpad
-import { unlessLaunching } from "../ledger/rowMenu.js";
+import { unlessLaunching } from "../launchPending.js";
 import { moveRefusal } from "./entryMove.js";
 
 const entriesLabel = (n) => (n === 1 ? "" : ` ${n.toLocaleString()}`);

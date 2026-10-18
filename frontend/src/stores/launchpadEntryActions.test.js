@@ -4,7 +4,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { get } from "svelte/store";
-import { createLaunchpadStore, pendingLaunchOf } from "./createLaunchpadStore.js";
+import { createLaunchpadStore, pendingEntryIds, pendingLaunchOf } from "./createLaunchpadStore.js";
 
 const entry = (id) => ({ ID: id, Method: "GET", Path: `/${id}` });
 
@@ -64,4 +64,19 @@ test("a removal Marasi refuses for a pending launch reads the pending launches a
   const state = get(store);
   assert.equal(pendingLaunchOf(state, "lp1")?.ID, "b");
   assert.deepEqual(state.entrySelection.ids, ["b"]);
+});
+
+// Marasi refuses to move or remove an entry only while its launch is
+// pending from that launchpad (marasi ADR-0053); a pair launched from
+// another launchpad and linked here too moves freely.
+test("an entry is launching from a launchpad only when its pending launch came from there", () => {
+  const state = {
+    launchesById: {
+      a: { ID: "a", LaunchpadID: "lp1", Status: "pending" },
+      b: { ID: "b", LaunchpadID: "lp2", Status: "pending" },
+      c: { ID: "c", LaunchpadID: "lp1", Status: "completed" },
+    },
+  };
+  assert.deepEqual(pendingEntryIds(state, "lp1", ["a", "b", "c", "d"]), ["a"]);
+  assert.deepEqual(pendingEntryIds(state, "lp2", ["a", "b"]), ["b"]);
 });

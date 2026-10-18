@@ -16,6 +16,29 @@ export function pendingLaunchIDs(error) {
     .filter(Boolean);
 }
 
+/**
+ * The ids of `ids` whose launch in `launches` ({ ID, LaunchpadID, Status })
+ * is pending, from `launchpadId` when given. Marasi refuses to delete such a
+ * pair, and to move or remove it from the launchpad it was launched from.
+ */
+export function launchingIds(launches, ids, launchpadId = null) {
+  const pending = new Set(
+    launches
+      .filter((launch) => launch.Status === "pending" && (launchpadId == null || launch.LaunchpadID === launchpadId))
+      .map((launch) => String(launch.ID)),
+  );
+  return ids.filter((id) => pending.has(String(id)));
+}
+
+/**
+ * Greys a Move, Remove or Delete item whose entries or pairs include
+ * `launching` still launching: "2 launching".
+ */
+export const unlessLaunching = (launching) => (launching ? { disabled: true, hint: launchingHint(launching) } : {});
+
+/** "2 launching": why a Move, Remove or Delete is greyed. */
+export const launchingHint = (count) => `${count.toLocaleString()} launching`;
+
 /** "3 pairs are still launching; nothing was deleted". */
 export function pendingLaunchText(count, verb) {
   const pairs = count === 1 ? "1 pair is" : `${count.toLocaleString()} pairs are`;

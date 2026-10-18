@@ -4,7 +4,7 @@
 	// the left and its control in one fixed-width column on the right, so
 	// inputs, buttons and switches line up. Lists are tables with the add
 	// row underneath.
-	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, Replace, Search, Wrench, X } from "lucide-svelte";
+	import { Chrome, FileType, Globe, Highlighter, Info, Keyboard, Pencil, RefreshCw, Replace, Search, Wrench, X } from "lucide-svelte";
 	import {
 		CreateWaypoint,
 		DeleteWaypoint,
@@ -35,8 +35,19 @@
 	import { onMount } from "svelte";
 	import { page } from "$app/stores";
 	import { goto } from "$app/navigation";
-	import { channelSwitchNotice, updatePanelModal } from "../../lib/updates.js";
-	import { reinstallLatestRelease, setUpdateChannel } from "../../stores/updateStore";
+	import {
+		channelSwitchNotice,
+		checkResultNotice,
+		showsUpdateIndicator,
+		updatePanelModal,
+		updateStatusLine,
+	} from "../../lib/updates.js";
+	import {
+		checkForUpdates,
+		reinstallLatestRelease,
+		setUpdateChannel,
+		updateState,
+	} from "../../stores/updateStore";
 	import { chromeError } from "../../lib/globalActions.js";
 	import { toastError } from "../../lib/toasts.js";
 	import { primaryVariant } from "../../lib/launchpad/format.js";
@@ -62,7 +73,8 @@
 		{ id: "highlights", name: "Highlights", hint: "Colours and labels", icon: Highlighter },
 		{ id: "content-types", name: "Content Types", hint: "Types the Ledger hides", icon: FileType },
 		{ id: "maintenance", name: "Maintenance", hint: "Background jobs and rebuilds", icon: Wrench },
-		{ id: "about", name: "About", hint: "Version, build and updates", icon: Info },
+		{ id: "updates", name: "Updates", hint: "Channel and checks", icon: RefreshCw },
+		{ id: "about", name: "About", hint: "Version and build", icon: Info },
 	];
 	const syntaxModes = [
 		["disabled", "Disabled"],
@@ -106,6 +118,8 @@
 	$: contentTypeList = exclusionGroups($defaultExclusion, contentTypeFind);
 
 	$: primary = primaryVariant($modeCurrent);
+	// Home's Open Project button: the app's neutral style.
+	$: neutral = $modeCurrent ? "variant-ghost border-0 ring-0" : "variant-filled";
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
 		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
@@ -277,6 +291,25 @@
 			})
 			.catch((error) => toastError(toastStore, "Error switching channel", error))
 			.finally(() => (switchingChannel = false));
+	}
+
+	// Settings → Updates' Check runs "Check for updates…": an update opens the
+	// details panel; otherwise a toast says why there is none.
+	let checking = false;
+	function checkNow() {
+		if (checking) return;
+		checking = true;
+		checkForUpdates()
+			.then((check) => {
+				const notice = checkResultNotice(check);
+				if (notice) {
+					toastStore.trigger(notice);
+				} else {
+					modalStore.trigger(updatePanelModal());
+				}
+			})
+			.catch((error) => toastError(toastStore, "Could not check for updates", error))
+			.finally(() => (checking = false));
 	}
 
 	// "Reinstall latest release": Go shows the warning about newer projects,
@@ -820,6 +853,72 @@
 						</tbody>
 					</table>
 				</div>
+			{:else if section === "updates"}
+				<h3 class="text-xl font-bold">Updates</h3>
+				{#if updateSettings?.Channel}
+					<div class={row}>
+						<p>Channel</p>
+						<!-- Styled as the Ledger sitemap's All / Matching toggle. -->
+						<div class="{control} text-sm" role="radiogroup" aria-label="Channel">
+							{#each channels as [value, label]}
+								<button
+									type="button"
+									role="radio"
+									aria-checked={updateSettings.Channel === value}
+									disabled={switchingChannel}
+									class="flex-1 px-3 py-1.5 {updateSettings.Channel === value
+										? primary
+										: 'bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600'}"
+									on:click={() => chooseChannel(value)}>{label}</button
+								>
+							{/each}
+						</div>
+					</div>
+				{/if}
+				<div class={row}>
+					<div>
+						<p>{updateStatusLine($updateState)}</p>
+						<p class="text-sm opacity-60 font-mono">{buildInfo?.Version ?? "…"}</p>
+					</div>
+					<div class="{control} justify-end gap-2">
+						{#if showsUpdateIndicator($updateState)}
+							<button
+								type="button"
+								class="btn btn-sm {primary}"
+								on:click={() => modalStore.trigger(updatePanelModal())}>View</button
+							>
+						{/if}
+						<button type="button" class="btn btn-sm {neutral}" disabled={checking} on:click={checkNow}
+							><RefreshCw size={14} class={checking ? "animate-spin" : ""} /><span>Check</span></button
+						>
+					</div>
+				</div>
+				<div class={row}>
+					<p>Check automatically</p>
+					<div class="{control} justify-end">
+						<SlideToggle
+							name="update-checks"
+							label="Check automatically"
+							active="bg-primary-500"
+							disabled={!updateSettings?.Channel}
+							bind:checked={automaticChecks}
+							on:change={() => setAutomaticChecks(automaticChecks)}
+						/>
+					</div>
+				</div>
+				{#if updateSettings?.Channel}
+					<div class={row}>
+						<p>Latest release</p>
+						<div class="{control} justify-end">
+							<button
+								type="button"
+								class="btn btn-sm {primary}"
+								disabled={reinstalling}
+								on:click={reinstall}>{reinstalling ? "Reinstalling…" : "Reinstall"}</button
+							>
+						</div>
+					</div>
+				{/if}
 			{:else}
 				<h3 class="text-xl font-bold">About</h3>
 				<div class={row}>
@@ -829,64 +928,6 @@
 				<div class={row}>
 					<p>Build channel</p>
 					<p class="{control} font-mono text-sm">{buildInfo?.Channel ?? "…"}</p>
-				</div>
-				{#if updateSettings?.Channel}
-					<div class={row}>
-						<div>
-							<p>Channel</p>
-							<p class="text-sm opacity-70">
-								Nightly checks right away. Back on release, you keep your nightly until a newer release is published.
-							</p>
-						</div>
-						<div class="{control} grid grid-cols-2" role="radiogroup" aria-label="Channel">
-							{#each channels as [value, label]}
-								<button
-									type="button"
-									role="radio"
-									aria-checked={updateSettings.Channel === value}
-									disabled={switchingChannel}
-									class="btn !border-0 !ring-0 {updateSettings.Channel === value
-										? 'variant-filled-primary'
-										: 'variant-soft-primary !text-surface-900 dark:!text-surface-50'}"
-									on:click={() => chooseChannel(value)}>{label}</button
-								>
-							{/each}
-						</div>
-					</div>
-					<div class={row}>
-						<div>
-							<p>Reinstall latest release</p>
-							<p class="text-sm opacity-70">
-								Go back to the latest release now. Projects opened in a newer build may not open in it.
-							</p>
-						</div>
-						<div class="{control} justify-end">
-							<button
-								type="button"
-								class="btn btn-sm variant-ghost-surface"
-								disabled={reinstalling}
-								on:click={reinstall}>{reinstalling ? "Reinstalling…" : "Reinstall…"}</button
-							>
-						</div>
-					</div>
-				{/if}
-				<div class={row}>
-					<div>
-						<p>Automatic update checks</p>
-						<p class="text-sm opacity-70">
-							Check for an update at launch and every 6 hours. "Check for updates…" works either way.
-						</p>
-					</div>
-					<div class="{control} justify-end">
-						<SlideToggle
-							name="update-checks"
-							label="Automatic update checks"
-							active="bg-primary-500"
-							disabled={!updateSettings?.Channel}
-							bind:checked={automaticChecks}
-							on:change={() => setAutomaticChecks(automaticChecks)}
-						/>
-					</div>
 				</div>
 			{/if}
 		</section>

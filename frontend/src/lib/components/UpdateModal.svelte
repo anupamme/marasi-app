@@ -26,7 +26,7 @@
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
 
-	// The Channel setting lives in Settings → About.
+	// The Channel setting lives in Settings → Updates.
 	function openChannelSetting() {
 		parent.onClose();
 		goto(channelSettingPath);

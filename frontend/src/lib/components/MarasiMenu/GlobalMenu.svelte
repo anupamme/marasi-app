@@ -37,13 +37,12 @@
 	import MarasiKeys from "./MarasiKeys.svelte";
 	import ExtensionUI from "../../extensions/ExtensionUI.svelte";
 	import {
-		CheckForUpdate,
 		StartBrowser,
 		ToggleFlag,
 		ToggleIntercept,
 	} from "../../wailsjs/go/main/App";
 	import { checkResultNotice, updatePanelModal } from "../../updates.js";
-	import { onUpdateAvailable } from "../../../stores/updateStore";
+	import { checkForUpdates as checkForUpdate } from "../../../stores/updateStore";
 	import { toastError } from "../../toasts.js";
 	import {
 		extensions,
@@ -127,14 +126,13 @@
 	// toast says the build is the latest on its channel, or why the check
 	// failed.
 	function checkForUpdates() {
-		return CheckForUpdate()
+		return checkForUpdate()
 			.then((check) => {
 				const notice = checkResultNotice(check);
 				if (notice) {
 					toastStore.trigger(notice);
 					return;
 				}
-				onUpdateAvailable(check.Update);
 				toggleModal(updatePanelModal());
 			})
 			.catch((err) =>

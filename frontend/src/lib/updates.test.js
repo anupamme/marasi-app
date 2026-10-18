@@ -486,13 +486,13 @@ test("the indicator shows how far a download is", () => {
   assert.equal(updateIndicatorLabel(state), "Downloading update 18.10.2026 · 37%");
 });
 
-test("a nightly's notes show its commit subjects and ref without the Commit line", () => {
+test("a nightly's notes show only its commit subjects, without the Ref and Commit lines", () => {
   const notes =
     "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\n";
 
   assert.equal(
     nightlyNotes(notes),
-    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main",
+    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes",
   );
 });
 

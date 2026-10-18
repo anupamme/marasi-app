@@ -53,18 +53,18 @@ export function channelSwitchNotice(change, running) {
 }
 
 /**
- * A nightly's notes as the details panel shows them: the commit subjects the
- * nightly workflow lists and its Ref line, without the Commit line Marasi
- * reads the nightly's commit from. A nightly published before the workflow
- * listed subjects has only Ref and Commit lines, so it has nothing to show
- * ("") and the panel shows the compare link alone.
+ * A nightly's notes as the details panel shows them: only the commit
+ * subjects the nightly workflow lists, without its Ref line or the Commit
+ * line Marasi reads the nightly's commit from. A nightly published before
+ * the workflow listed subjects has only Ref and Commit lines, so it has
+ * nothing to show ("") and the panel shows the compare link alone.
  */
 export function nightlyNotes(notes) {
-  const lines = (notes ?? "").split(/\r?\n/).filter((line) => !line.trim().startsWith("Commit:"));
-  if (lines.every((line) => !line.trim() || line.trim().startsWith("Ref:"))) {
-    return "";
-  }
-  return lines.join("\n").trim();
+  return (notes ?? "")
+    .split(/\r?\n/)
+    .filter((line) => !/^(Ref|Commit):/.test(line.trim()))
+    .join("\n")
+    .trim();
 }
 
 /** The modal settings that open the update details panel. */

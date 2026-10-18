@@ -1,6 +1,7 @@
 import { get, writable } from "svelte/store";
 import {
   CancelUpdateDownload,
+  CheckForUpdate,
   DismissUpdate,
   GetUpdateState,
   InstallUpdate,
@@ -47,6 +48,19 @@ export function dismissUpdate() {
   return DismissUpdate().then((state) => {
     updateState.set(state);
     return state;
+  });
+}
+
+/**
+ * "Check for updates…": resolves with the UpdateCheck, after recording an
+ * update it found. The caller shows the toast or opens the details panel.
+ */
+export function checkForUpdates() {
+  return CheckForUpdate().then((check) => {
+    if (check.Outcome === "available") {
+      onUpdateAvailable(check.Update);
+    }
+    return check;
   });
 }
 

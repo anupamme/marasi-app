@@ -210,10 +210,15 @@ const summaryOfEntries = (entries) => ({
   NewestEntryID: entries.at(-1)?.ID ?? null,
 });
 
-// A request from the layout's "request" event. Launched requests carry their
-// launchpad in Metadata.launchpad_id; anything else is ignored.
+// The launchpad a launched pair belongs to, from its launch: launch events
+// and this store's own launches name it. Pair metadata is not read, since
+// Marasi leaves it stale when an entry moves.
+const launchpadOfLaunch = (state, id) => state.launchesById[id]?.LaunchpadID;
+
+// A request from the layout's "request" event. A launched request goes to its
+// launch's launchpad; anything else is ignored.
 function arriveRequest(state, request) {
-  const launchpadId = request?.Metadata?.launchpad_id;
+  const launchpadId = launchpadOfLaunch(state, request?.ID);
   if (!launchpadId) return state;
   const launchpad = state.launchpads.find((item) => item.ID === launchpadId);
   if (!launchpad) return state;
@@ -251,7 +256,7 @@ function arriveRequest(state, request) {
 // A response from the layout's "response" event, matched to an arrived request.
 function arriveResponse(state, response) {
   const details = state.detailsById[response?.ID];
-  const launchpadId = details?.Request?.Metadata?.launchpad_id;
+  const launchpadId = details && launchpadOfLaunch(state, response.ID);
   if (!launchpadId) return state;
   const entries = state.entriesByLaunchpad[launchpadId];
   const newest = state.launchpads.find((item) => item.ID === launchpadId)?.NewestEntryID;

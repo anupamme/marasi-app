@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { jumpTarget, latestEntry } from "./jumpTarget.js";
+import { jumpTarget, lastEntry } from "./jumpTarget.js";
 
 // Rows 20px tall in document order; the viewport shows y 0..100 and its
 // sticky launchpad header covers the top 34px.
@@ -38,19 +38,21 @@ test("no target when nothing is in view", () => {
   assert.equal(jumpTarget([row("a", -100, true)], view), null);
 });
 
-// ⌘⇧↓: the open launchpad's newest Launchpad entry, whatever is on screen.
+// ⌘⇧↓: the open launchpad's last Launchpad entry in entry order, whatever is on screen.
 const lists = {
   launchpads: [{ ID: "lp1" }, { ID: "lp2" }],
   entriesByLaunchpad: { lp1: [{ ID: "a" }, { ID: "b" }, { ID: "c" }], lp2: [{ ID: "d" }] },
 };
 
-test("the latest entry is the open launchpad's newest, even in a short list", () => {
-  assert.deepEqual(latestEntry({ ...lists, selectedLaunchpadId: "lp1" }), { launchpadId: "lp1", entryId: "c" });
-  assert.deepEqual(latestEntry({ ...lists, selectedLaunchpadId: "lp2" }), { launchpadId: "lp2", entryId: "d" });
+test("the last entry is the open launchpad's last in entry order, not its newest", () => {
+  // "b" is the newest pair, but "a" was moved to the end.
+  const reordered = { lp1: [{ ID: "c", Number: 3 }, { ID: "b", Number: 9 }, { ID: "a", Number: 1 }], lp2: [{ ID: "d" }] };
+  assert.deepEqual(lastEntry({ ...lists, entriesByLaunchpad: reordered, selectedLaunchpadId: "lp1" }), { launchpadId: "lp1", entryId: "a" });
+  assert.deepEqual(lastEntry({ ...lists, selectedLaunchpadId: "lp2" }), { launchpadId: "lp2", entryId: "d" });
 });
 
-test("no latest entry without an open launchpad or before its entries load", () => {
-  assert.equal(latestEntry({ ...lists, selectedLaunchpadId: null }), null);
-  assert.equal(latestEntry({ ...lists, selectedLaunchpadId: "lp3" }), null);
-  assert.equal(latestEntry({ ...lists, entriesByLaunchpad: { lp1: [] }, selectedLaunchpadId: "lp1" }), null);
+test("no last entry without an open launchpad or before its entries load", () => {
+  assert.equal(lastEntry({ ...lists, selectedLaunchpadId: null }), null);
+  assert.equal(lastEntry({ ...lists, selectedLaunchpadId: "lp3" }), null);
+  assert.equal(lastEntry({ ...lists, entriesByLaunchpad: { lp1: [] }, selectedLaunchpadId: "lp1" }), null);
 });

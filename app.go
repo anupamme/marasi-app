@@ -833,10 +833,11 @@ func (a *App) CreateLaunchpadEntry(name string, description string) uuid.UUID {
 	return launchpadUUID
 }
 
+// DeleteLaunchpad deletes a launchpad unless a launch from it is pending;
+// then it returns the launch_pending refusal (see launchpadError).
 func (a *App) DeleteLaunchpad(id uuid.UUID) error {
-	err := a.Proxy.LaunchpadRepo.DeleteLaunchpad(id)
-	if err != nil {
-		return err
+	if err := a.Proxy.DeleteLaunchpad(id); err != nil {
+		return launchpadError("deleting launchpad", err)
 	}
 	return nil
 }

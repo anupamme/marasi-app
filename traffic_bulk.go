@@ -49,7 +49,8 @@ func (target TrafficLinkTarget) domainTarget() (domain.LinkTarget, error) {
 const selectionIncomplete = "selection_incomplete"
 
 // bulk runs one of Marasi's bulk operations and wraps its error with what.
-// A refused query selection changes nothing and reads as selectionIncomplete.
+// A refused query selection changes nothing and reads as selectionIncomplete;
+// a selection refused for a pending launch reads as launchPending.
 func (a *App) bulk(what string, op func(domain.TrafficRepository) (int, error)) (int, error) {
 	traffic, err := a.Proxy.GetTrafficRepo()
 	if err != nil {
@@ -65,7 +66,7 @@ func (a *App) bulk(what string, op func(domain.TrafficRepository) (int, error)) 
 		return 0, fmt.Errorf("%s: %s (%s): %w", what, selectionIncomplete, strings.Join(jobs, ", "), err)
 	}
 	if err != nil {
-		return 0, fmt.Errorf("%s: %w", what, err)
+		return 0, launchpadError(what, err)
 	}
 	return n, nil
 }
@@ -83,14 +84,15 @@ func (a *App) LinkTraffic(sel domain.Selection, target TrafficLinkTarget) (int, 
 }
 
 // UnlinkTraffic unlinks every pair in sel from a launchpad, finding or test
-// case, and returns how many had been linked.
+// case, and returns how many had been linked. Marasi unlinks nothing from a
+// launchpad when sel holds a launch pending from it.
 func (a *App) UnlinkTraffic(sel domain.Selection, target TrafficLinkTarget) (int, error) {
 	from, err := target.domainTarget()
 	if err != nil {
 		return 0, fmt.Errorf("unlinking traffic: %w", err)
 	}
-	return a.bulk("unlinking traffic", func(repo domain.TrafficRepository) (int, error) {
-		return repo.UnlinkTraffic(sel, from)
+	return a.bulk("unlinking traffic", func(domain.TrafficRepository) (int, error) {
+		return a.Proxy.UnlinkTraffic(sel, from)
 	})
 }
 
@@ -112,9 +114,9 @@ func (a *App) ClearNotes(sel domain.Selection) (int, error) {
 
 // DeleteTraffic deletes the pairs in sel from the project, with their notes,
 // links, WebSocket messages and logs (marasi ADR-0034), and returns how many
-// it deleted.
+// it deleted. Marasi deletes nothing when sel holds a pending launch.
 func (a *App) DeleteTraffic(sel domain.Selection) (int, error) {
-	return a.bulk("deleting traffic", func(repo domain.TrafficRepository) (int, error) {
-		return repo.DeleteTraffic(sel)
+	return a.bulk("deleting traffic", func(domain.TrafficRepository) (int, error) {
+		return a.Proxy.DeleteTraffic(sel)
 	})
 }

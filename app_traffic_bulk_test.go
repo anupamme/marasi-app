@@ -231,3 +231,34 @@ func TestBulkOpsReportAQuerySelectionRefusedWhileTheIndexBuilds(t *testing.T) {
 		t.Fatalf("a query without a text term still applies while the index builds: %v", err)
 	}
 }
+
+func TestUnlinkTrafficRefusesToRemoveAPendingLaunchFromItsLaunchpad(t *testing.T) {
+	app, launchpad, launch := pendingLaunch(t)
+	other := jsonPair(t, app, "a.acme.test")
+	app.LinkRequestToLaunchpad(other, launchpad)
+
+	n, err := app.UnlinkTraffic(idSelection(t, launch, other), TrafficLinkTarget{Kind: "launchpad", ID: launchpad.String()})
+
+	if n != 0 {
+		t.Fatalf("wanted nothing unlinked, got %d", n)
+	}
+	wantLaunchPending(t, err, launch)
+	if got := launchpadPairIDs(app, launchpad); !slices.Contains(got, other) {
+		t.Fatalf("wanted the other pair kept, got %v", got)
+	}
+}
+
+func TestDeleteTrafficRefusesToDeleteAPendingLaunch(t *testing.T) {
+	app, _, launch := pendingLaunch(t)
+	other := jsonPair(t, app, "a.acme.test")
+
+	n, err := app.DeleteTraffic(idSelection(t, launch, other))
+
+	if n != 0 {
+		t.Fatalf("wanted nothing deleted, got %d", n)
+	}
+	wantLaunchPending(t, err, launch)
+	if got := countTraffic(t, app, `host = "a.acme.test"`, "").Count; got != 1 {
+		t.Fatalf("wanted the other pair kept, got %d", got)
+	}
+}

@@ -15,8 +15,7 @@ test("expand all opens every launchpad", () => {
 
 test("expand all with group by status also opens every status folder", () => {
   const { openGroups } = expandAll({ launchpads, entriesByLaunchpad, groupByStatus: true });
-  // The original entry (first) sits outside the folders.
-  assert.deepEqual(openGroups, { "lp1:200": true, "lp1:404": true, "lp2:pending": true });
+  assert.deepEqual(openGroups, { "lp1:200": true, "lp1:404": true, "lp2:200": true, "lp2:pending": true });
 });
 
 test("expand all keeps folder choices when not grouping", () => {
@@ -28,7 +27,7 @@ test("expand all keeps folder choices when not grouping", () => {
 test("collapse all closes every launchpad and every status folder", () => {
   const result = collapseAll({ launchpads, entriesByLaunchpad });
   assert.deepEqual(result.expanded, { lp1: false, lp2: false });
-  assert.deepEqual(result.openGroups, { "lp1:200": false, "lp1:404": false, "lp2:pending": false });
+  assert.deepEqual(result.openGroups, { "lp1:200": false, "lp1:404": false, "lp2:200": false, "lp2:pending": false });
 });
 
 test("the selected launchpad opens on its own the first time it is selected", () => {
@@ -49,12 +48,16 @@ test("revealing an entry opens its launchpad and its status folder, even after c
   const collapsed = collapseAll({ launchpads, entriesByLaunchpad });
   const shown = revealEntry({ ...collapsed, entriesByLaunchpad, groupByStatus: true }, "lp1", "c");
   assert.deepEqual(shown.expanded, { lp1: true, lp2: false });
-  assert.deepEqual(shown.openGroups, { "lp1:200": false, "lp1:404": true, "lp2:pending": false });
+  assert.deepEqual(shown.openGroups, { "lp1:200": false, "lp1:404": true, "lp2:200": false, "lp2:pending": false });
 });
 
-test("revealing the original entry or an ungrouped entry opens no folder", () => {
+test("revealing the first entry opens its status folder like any other", () => {
   const closed = { expanded: { lp1: false }, openGroups: { "lp1:200": false }, entriesByLaunchpad };
-  assert.deepEqual(revealEntry({ ...closed, groupByStatus: true }, "lp1", "a").openGroups, { "lp1:200": false });
+  assert.deepEqual(revealEntry({ ...closed, groupByStatus: true }, "lp1", "a").openGroups, { "lp1:200": true });
+});
+
+test("revealing an ungrouped entry opens no folder", () => {
+  const closed = { expanded: { lp1: false }, openGroups: { "lp1:200": false }, entriesByLaunchpad };
   assert.deepEqual(revealEntry({ ...closed, groupByStatus: false }, "lp1", "b").openGroups, { "lp1:200": false });
   assert.deepEqual(revealEntry({ ...closed, groupByStatus: false }, "lp1", "b").expanded, { lp1: true });
 });

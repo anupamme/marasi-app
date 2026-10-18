@@ -487,7 +487,7 @@ test("Launchpad page shortcuts run only on the Launchpad page", () => {
   assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
 });
 
-test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {
+test("jump to last entry leaves ⌘⇧↓ to a focused editor or text field", () => {
   const dispatcher = mac();
   const codeMirror = { tagName: "DIV", isContentEditable: true, closest: (s) => (s.includes(".cm-editor") ? {} : null) };
   const field = { tagName: "INPUT", closest: () => null };

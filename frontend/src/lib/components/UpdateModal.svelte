@@ -18,7 +18,13 @@
 		restartToUpdate,
 		updateState,
 	} from "../../stores/updateStore";
-	import { channelSettingPath, installFailureMessage, progressPercent } from "../updates.js";
+	import {
+		cancellable,
+		channelSettingPath,
+		installFailureMessage,
+		installProgressLabel,
+		progressPercent,
+	} from "../updates.js";
 	import { toastError } from "../toasts";
 
 	export let parent;
@@ -41,7 +47,9 @@
 	$: update = $updateState.Update;
 	$: running = $updateState.Running;
 	$: status = $updateState.Status;
-	$: percent = progressPercent($updateState.Progress);
+	$: progress = $updateState.Progress;
+	// Verify and install have no measure of their own: their bar is indeterminate.
+	$: percent = cancellable(progress) ? progressPercent(progress) : null;
 	$: canInstall =
 		$updateState.CanInstall && (status === "available" || status === "failed");
 
@@ -106,11 +114,7 @@
 					max={100}
 					height="h-2"
 				/>
-				<p class="text-sm opacity-70">
-					{percent === null
-						? "Downloading and verifying…"
-						: `Downloading… ${percent}%`}
-				</p>
+				<p class="text-sm opacity-70">{installProgressLabel(progress)}</p>
 			</section>
 		{:else if status === "restart-pending"}
 			<p class="text-sm">
@@ -174,7 +178,7 @@
 					<span>Release page</span>
 				</button>
 			{/if}
-			{#if status === "downloading"}
+			{#if status === "downloading" && cancellable(progress)}
 				<button
 					type="button"
 					class="btn variant-ghost-surface btn-sm"

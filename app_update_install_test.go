@@ -9,6 +9,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -201,6 +202,47 @@ func TestInstallReportsDownloadProgress(t *testing.T) {
 	}
 }
 
+func TestInstallReportsEachStepAsItStartsInTheEventsAndTheState(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "17.10.2026", updateBinary)
+	app, events := newInstallApp(t, releases, keys)
+	// What a frontend reloaded at each progress event would read.
+	var stateSteps []InstallStep
+	app.emitEvent = func(name string, data ...any) {
+		if name == updateProgressEvent {
+			if state := app.GetUpdateState(); state.Progress != nil {
+				stateSteps = append(stateSteps, state.Progress.Step)
+			} else {
+				stateSteps = append(stateSteps, "")
+			}
+		}
+		events.emit(name, data...)
+	}
+
+	if _, err := app.InstallUpdate(); err != nil {
+		t.Fatalf("installing: %v", err)
+	}
+
+	var eventSteps []InstallStep
+	for _, progress := range progressEvents(events) {
+		eventSteps = append(eventSteps, progress.Step)
+	}
+	want := []InstallStep{InstallStepDownload, InstallStepVerify, InstallStepInstall}
+	if got := slices.Compact(slices.Clone(eventSteps)); !slices.Equal(got, want) {
+		t.Fatalf("wanted progress events through the steps %v, got %v", want, eventSteps)
+	}
+	if !slices.Equal(stateSteps, eventSteps) {
+		t.Fatalf("wanted the state to report each event's step %v, got %v", eventSteps, stateSteps)
+	}
+	if last := progressEvents(events)[len(eventSteps)-1]; last.Received != int64(len(updateBinary)) {
+		t.Fatalf("wanted the later steps to keep the finished download's size, got %+v", last)
+	}
+	if state := app.GetUpdateState(); state.Progress != nil {
+		t.Fatalf("wanted no step once installed, got %+v", state.Progress)
+	}
+}
+
 // progressEvents is the progress reported so far, in order.
 func progressEvents(events *recordedEvents) []UpdateProgress {
 	events.mu.Lock()
@@ -289,7 +331,7 @@ func TestUnwritableInstallLocationOffersOnlyTheReleasePage(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertFailed(t, app, events, result, UpdateFailurePermissions, "cannot write to "+dir)
+	assertFailed(t, app, events, result, UpdateFailurePermissions, InstallStepInstall, "cannot write to "+dir)
 	if releases.requestCount() != requests {
 		t.Fatalf("wanted nothing downloaded, got %v", releases.requested())
 	}
@@ -324,7 +366,7 @@ func TestBuildWithoutASigningKeyCannotInstall(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertFailed(t, app, events, result, UpdateFailureSignature, "no Marasi signing key")
+	assertFailed(t, app, events, result, UpdateFailureSignature, InstallStepVerify, "no Marasi signing key")
 }
 
 func TestInstallWithoutAnUpdateIsRefused(t *testing.T) {
@@ -504,32 +546,33 @@ func TestFailedInstallLeavesTheInstallUnchangedAndSaysWhatFailed(t *testing.T) {
 		name    string
 		publish func(*fakeReleaseServer, signingKeys)
 		kind    UpdateFailureKind
+		step    InstallStep
 		reason  string
 	}{
 		{"signed by another key", func(r *fakeReleaseServer, _ signingKeys) {
 			publishSignedRelease(r, newSigningKeys(t), "17.10.2026", updateBinary)
-		}, UpdateFailureSignature, "not signed by the Marasi signing key"},
+		}, UpdateFailureSignature, InstallStepVerify, "not signed by the Marasi signing key"},
 		{"checksums changed after signing", func(r *fakeReleaseServer, keys signingKeys) {
 			signed := checksumsFor(map[string][]byte{"marasi-app": updateBinary})
 			tampered := checksumsFor(map[string][]byte{"marasi-app": []byte("evil")})
 			publishRelease(r, "17.10.2026", []byte("evil"), tampered, minisign.Sign(keys.private, signed))
-		}, UpdateFailureSignature, "not signed by the Marasi signing key"},
+		}, UpdateFailureSignature, InstallStepVerify, "not signed by the Marasi signing key"},
 		{"no signature published", func(r *fakeReleaseServer, _ signingKeys) {
 			publishRelease(r, "17.10.2026", updateBinary, checksumsFor(map[string][]byte{"marasi-app": updateBinary}), nil)
-		}, UpdateFailureSignature, "no signature"},
+		}, UpdateFailureSignature, InstallStepVerify, "no signature"},
 		{"build differs from its signed checksum", func(r *fakeReleaseServer, keys signingKeys) {
 			checksums := checksumsFor(map[string][]byte{"marasi-app": updateBinary})
 			publishRelease(r, "17.10.2026", []byte("corrupted"), checksums, minisign.Sign(keys.private, checksums))
-		}, UpdateFailureChecksum, "does not match its signed checksum"},
+		}, UpdateFailureChecksum, InstallStepVerify, "does not match its signed checksum"},
 		{"build missing from the signed checksums", func(r *fakeReleaseServer, keys signingKeys) {
 			checksums := checksumsFor(map[string][]byte{"marasi-app.exe": updateBinary})
 			publishRelease(r, "17.10.2026", updateBinary, checksums, minisign.Sign(keys.private, checksums))
-		}, UpdateFailureChecksum, "do not list marasi-app"},
+		}, UpdateFailureChecksum, InstallStepVerify, "do not list marasi-app"},
 		{"no build for this platform", func(r *fakeReleaseServer, keys signingKeys) {
 			checksums := checksumsFor(map[string][]byte{"marasi-app.exe": updateBinary})
 			publishRelease(r, "17.10.2026", nil, checksums, minisign.Sign(keys.private, checksums))
 			r.addAsset("17.10.2026", "marasi-app.exe", updateBinary)
-		}, UpdateFailureNoBuild, "this release has no build for your platform"},
+		}, UpdateFailureNoBuild, InstallStepDownload, "this release has no build for your platform"},
 	}
 	for _, c := range cases {
 		t.Run(c.name, func(t *testing.T) {
@@ -543,7 +586,7 @@ func TestFailedInstallLeavesTheInstallUnchangedAndSaysWhatFailed(t *testing.T) {
 			if err != nil {
 				t.Fatalf("installing: %v", err)
 			}
-			assertFailed(t, app, events, result, c.kind, c.reason)
+			assertFailed(t, app, events, result, c.kind, c.step, c.reason)
 		})
 	}
 }
@@ -560,13 +603,59 @@ func TestInstallThatCannotDownloadIsANetworkFailure(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertFailed(t, app, events, result, UpdateFailureNetwork, "502")
+	assertFailed(t, app, events, result, UpdateFailureNetwork, InstallStepDownload, "502")
 }
 
-// assertFailed fails unless the install failed with kind, a reason
+// unswappableInstaller is the Linux installer with a swap that always
+// fails, as when the install location is replaced by something else mid
+// install.
+type unswappableInstaller struct{ binaryInstaller }
+
+func (unswappableInstaller) swap(staged, location string) error {
+	return fmt.Errorf("moving the new build into place: %w", os.ErrExist)
+}
+
+func TestAFailedReplacementStopsAtTheInstallStep(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "17.10.2026", updateBinary)
+	app, events := newInstallApp(t, releases, keys)
+	app.installer = unswappableInstaller{binaryInstaller{assetName: "marasi-app"}}
+
+	result, err := app.InstallUpdate()
+
+	if err != nil {
+		t.Fatalf("installing: %v", err)
+	}
+	assertFailed(t, app, events, result, UpdateFailureInstall, InstallStepInstall, "moving the new build into place")
+}
+
+func TestAPlatformThatCannotReplaceItselfStopsAtTheInstallStepWithoutDownloading(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "17.10.2026", updateBinary)
+	app, events := newInstallApp(t, releases, keys)
+	app.installer = nil
+	requests := releases.requestCount()
+
+	result, err := app.InstallUpdate()
+
+	if err != nil {
+		t.Fatalf("installing: %v", err)
+	}
+	assertFailed(t, app, events, result, UpdateFailurePermissions, InstallStepInstall, "cannot replace itself on this platform")
+	if releases.requestCount() != requests {
+		t.Fatalf("wanted nothing downloaded, got %v", releases.requested())
+	}
+	if progressEvents(events) != nil {
+		t.Fatalf("wanted no step reported before the failure, got %+v", progressEvents(events))
+	}
+}
+
+// assertFailed fails unless the install failed with kind at step, a reason
 // containing reason and the release page, emitted it, and left the running
 // build alone.
-func assertFailed(t *testing.T, app *App, events *recordedEvents, result UpdateInstall, kind UpdateFailureKind, reason string) {
+func assertFailed(t *testing.T, app *App, events *recordedEvents, result UpdateInstall, kind UpdateFailureKind, step InstallStep, reason string) {
 	t.Helper()
 	if result.Outcome != InstallOutcomeFailed || result.Failure == nil {
 		t.Fatalf("wanted a failed install, got %+v", result)
@@ -574,6 +663,9 @@ func assertFailed(t *testing.T, app *App, events *recordedEvents, result UpdateI
 	failure := *result.Failure
 	if failure.Kind != kind || !strings.Contains(failure.Reason, reason) {
 		t.Fatalf("wanted a %s failure saying %q, got %s: %s", kind, reason, failure.Kind, failure.Reason)
+	}
+	if failure.Step != step {
+		t.Fatalf("wanted the %s failure to stop at the %s step, got %q", kind, step, failure.Step)
 	}
 	if failure.ReleasePage != "https://github.com/tfkr-ae/marasi-app/releases/tag/17.10.2026" {
 		t.Fatalf("wanted the failure to link the release page, got %q", failure.ReleasePage)

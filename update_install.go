@@ -30,6 +30,12 @@ import (
 //
 // A failure at any step discards what was downloaded or staged, leaving the
 // install location as it was.
+//
+// The researcher sees three of these as the install's steps (InstallStep):
+// download (2 and 3's downloads), verify (the checksum compare and the
+// platform's checks in stage) and install (the rest of stage and the swap).
+// Each step is reported in UpdateState.Progress and an update-progress event
+// as it starts, and a failure records the step it stopped at.
 
 // Release assets every release and nightly publishes beside the builds.
 const (
@@ -45,7 +51,8 @@ const (
 
 // Events sent to the frontend while installing.
 const (
-	// updateProgressEvent carries an UpdateProgress while the build downloads.
+	// updateProgressEvent carries an UpdateProgress while the build
+	// downloads, and again as each later step starts.
 	updateProgressEvent = "update-progress"
 	// updateInstalledEvent carries the Update now on disk, pending a restart.
 	updateInstalledEvent = "update-installed"
@@ -70,10 +77,11 @@ type platformInstaller interface {
 	checkReplaceable(location string) error
 	// stage turns download, a verified copy of asset in a temp directory,
 	// into a replacement beside location, and returns its path. Platform
-	// checks of the new build (the macOS team check) belong here; return an
-	// *installError to give their failure its own kind. On failure stage
-	// removes what it created.
-	stage(download, location string) (string, error)
+	// checks of the new build (the macOS team check) belong here, before
+	// stage calls verified, which moves the install from the verify step to
+	// the install step; return an *installError to give their failure its
+	// own kind. On failure stage removes what it created.
+	stage(download, location string, verified func()) (string, error)
 	// swap replaces location with staged in one step. On failure location
 	// is unchanged.
 	swap(staged, location string) error
@@ -95,7 +103,33 @@ const (
 	InstallOutcomeCancelled InstallOutcome = "cancelled"
 )
 
-// UpdateFailureKind is the step an install failed at, so the panel can say
+// InstallStep is the step an install is on, or stopped at when it failed.
+type InstallStep string
+
+const (
+	// InstallStepDownload: downloading checksums.txt, its signature and the
+	// build. A Marasi that cannot download (network) or finds no build for
+	// its platform (no-build) stops here.
+	InstallStepDownload InstallStep = "download"
+	// InstallStepVerify: checking the signature, the checksum and, on macOS,
+	// the developer team. Signature, checksum and team failures stop here.
+	InstallStepVerify InstallStep = "verify"
+	// InstallStepInstall: replacing the build at the install location. A
+	// Marasi that cannot replace itself stops here, though that is found
+	// out before anything downloads.
+	InstallStepInstall InstallStep = "install"
+)
+
+// failureSteps is the step a failure of each kind stops at wherever it is
+// found. Other kinds stop at the step running when they occur.
+var failureSteps = map[UpdateFailureKind]InstallStep{
+	UpdateFailureNetwork:   InstallStepDownload,
+	UpdateFailureSignature: InstallStepVerify,
+	UpdateFailureChecksum:  InstallStepVerify,
+	UpdateFailureTeam:      InstallStepVerify,
+}
+
+// UpdateFailureKind is what an install failed at, so the panel can say
 // plainly what failed.
 type UpdateFailureKind string
 
@@ -122,15 +156,20 @@ const (
 // UpdateFailure says why an install failed.
 type UpdateFailure struct {
 	Kind UpdateFailureKind
+	// Step is the step the install stopped at.
+	Step InstallStep
 	// Reason is in words a researcher can act on.
 	Reason string
 	// ReleasePage is where the build can be installed by hand.
 	ReleasePage string
 }
 
-// UpdateProgress is how far the build's download has got. Total is 0 when
-// the size is unknown.
+// UpdateProgress is the step a running install is on and how far the
+// build's download has got. Total is 0 when the size is unknown. Once the
+// download is done, Received and Total keep its size through the later
+// steps.
 type UpdateProgress struct {
+	Step     InstallStep
 	Received int64
 	Total    int64
 }
@@ -144,9 +183,11 @@ type UpdateInstall struct {
 	Failure *UpdateFailure
 }
 
-// installError is a failed install step and its kind.
+// installError is a failed install step and its kind. step, when set, is
+// the step the failure is reported at instead of the running one.
 type installError struct {
 	kind UpdateFailureKind
+	step InstallStep
 	err  error
 }
 
@@ -270,7 +311,7 @@ func (a *App) startInstall(target *Update) (*Update, context.Context, error) {
 	ctx, cancel := context.WithCancel(a.updateContext())
 	a.updates.status = UpdateStatusDownloading
 	a.updates.cancelDownload = cancel
-	a.updates.progress = &UpdateProgress{}
+	a.updates.progress = &UpdateProgress{Step: InstallStepDownload}
 	a.updates.failure = nil
 	return a.updates.update, ctx, nil
 }
@@ -283,6 +324,10 @@ func (a *App) finishInstall(ctx context.Context, update *Update, err error) Upda
 		a.updates.cancelDownload()
 		a.updates.cancelDownload = nil
 	}
+	running := InstallStepDownload
+	if a.updates.progress != nil {
+		running = a.updates.progress.Step
+	}
 	a.updates.progress = nil
 	switch {
 	case err == nil:
@@ -293,10 +338,16 @@ func (a *App) finishInstall(ctx context.Context, update *Update, err error) Upda
 		a.updates.status = UpdateStatusAvailable
 	default:
 		result.Outcome = InstallOutcomeFailed
-		result.Failure = &UpdateFailure{Kind: UpdateFailureInstall, Reason: err.Error(), ReleasePage: update.ReleasePage}
+		result.Failure = &UpdateFailure{Kind: UpdateFailureInstall, Step: running, Reason: err.Error(), ReleasePage: update.ReleasePage}
 		var stepErr *installError
 		if errors.As(err, &stepErr) {
 			result.Failure.Kind = stepErr.kind
+			if step, ok := failureSteps[stepErr.kind]; ok {
+				result.Failure.Step = step
+			}
+			if stepErr.step != "" {
+				result.Failure.Step = stepErr.step
+			}
 		}
 		a.updates.status = UpdateStatusFailed
 		a.updates.failure = result.Failure
@@ -342,6 +393,10 @@ func (a *App) install(ctx context.Context, update *Update) error {
 	if err != nil {
 		return err
 	}
+	// The signed checksums are checked before the build downloads, so a bad
+	// signature wastes no download. It is instant, so the install shows the
+	// verify step only once the build is in; a failure here still stops at
+	// verify (failureSteps).
 	sums, err := verifyChecksums(*a.signingKey, checksums, signature)
 	if err != nil {
 		return err
@@ -361,6 +416,7 @@ func (a *App) install(ctx context.Context, update *Update) error {
 	if err != nil {
 		return err
 	}
+	a.enterStep(InstallStepVerify)
 	if got != want {
 		return failed(UpdateFailureChecksum, "the downloaded %s does not match its signed checksum", installer.asset())
 	}
@@ -368,7 +424,7 @@ func (a *App) install(ctx context.Context, update *Update) error {
 		return errCancelled
 	}
 
-	staged, err := installer.stage(download, location)
+	staged, err := installer.stage(download, location, func() { a.enterStep(InstallStepInstall) })
 	if err != nil {
 		return asInstallError(err, "could not prepare the new build")
 	}
@@ -386,14 +442,28 @@ func (a *App) replaceable() (platformInstaller, string, error) {
 	case a.signingKey == nil:
 		return nil, "", failed(UpdateFailureSignature, "this build has no Marasi signing key to verify updates with")
 	case a.installer == nil:
-		return nil, "", failed(UpdateFailurePermissions, "Marasi cannot replace itself on this platform")
+		return nil, "", atInstallStep(failed(UpdateFailurePermissions, "Marasi cannot replace itself on this platform"))
 	case a.installLocation == "":
-		return nil, "", failed(UpdateFailurePermissions, "Marasi could not find where it is installed")
+		return nil, "", atInstallStep(failed(UpdateFailurePermissions, "Marasi could not find where it is installed"))
 	}
 	if err := a.installer.checkReplaceable(a.installLocation); err != nil {
-		return nil, "", asInstallError(err, "Marasi cannot replace itself")
+		return nil, "", atInstallStep(asInstallError(err, "Marasi cannot replace itself"))
 	}
 	return a.installer, a.installLocation, nil
+}
+
+// atInstallStep reports a Marasi that cannot replace itself at the install
+// step, where it would fail, though it is found out before anything
+// downloads. A failure kind with a step of its own (a missing signing key is
+// a signature failure, at verify) keeps that step.
+func atInstallStep(err error) error {
+	var stepErr *installError
+	if errors.As(err, &stepErr) {
+		if _, ok := failureSteps[stepErr.kind]; !ok {
+			stepErr.step = InstallStepInstall
+		}
+	}
+	return err
 }
 
 // asInstallError keeps an installer's own failure kind, and otherwise calls a
@@ -486,7 +556,23 @@ func downloadError(ctx context.Context, asset releaseAsset, err error) error {
 
 // reportProgress records and emits how far the download has got.
 func (a *App) reportProgress(progress UpdateProgress) {
+	progress.Step = InstallStepDownload
 	a.updates.setProgress(progress)
+	a.emitEvent(updateProgressEvent, progress)
+}
+
+// enterStep records and emits that the install has moved on to step. It
+// does nothing when the install is already on step.
+func (a *App) enterStep(step InstallStep) {
+	a.updates.mu.Lock()
+	if a.updates.status != UpdateStatusDownloading || a.updates.progress == nil || a.updates.progress.Step == step {
+		a.updates.mu.Unlock()
+		return
+	}
+	progress := *a.updates.progress
+	progress.Step = step
+	a.updates.progress = &progress
+	a.updates.mu.Unlock()
 	a.emitEvent(updateProgressEvent, progress)
 }
 

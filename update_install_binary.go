@@ -39,7 +39,8 @@ func (b binaryInstaller) checkReplaceable(location string) error {
 // stage copies the download beside location as an executable file and
 // flushes it to disk, so the rename in swap is the only step that changes
 // the install.
-func (b binaryInstaller) stage(download, location string) (string, error) {
+func (b binaryInstaller) stage(download, location string, verified func()) (string, error) {
+	verified()
 	src, err := os.Open(download)
 	if err != nil {
 		return "", err

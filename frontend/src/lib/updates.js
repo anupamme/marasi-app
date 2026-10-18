@@ -93,6 +93,29 @@ export function progressPercent(progress) {
   return Math.floor((progress.Received * 100) / progress.Total);
 }
 
+/**
+ * The panel's progress line for a running install (UpdateState.Progress):
+ * the step it is on (Go's InstallStep: download, verify, install) and, while
+ * downloading, how far. No progress yet is the download starting.
+ */
+export function installProgressLabel(progress) {
+  switch (progress?.Step) {
+    case "verify":
+      return "Verifying…";
+    case "install":
+      return "Installing…";
+    default: {
+      const percent = progressPercent(progress);
+      return percent === null ? "Downloading…" : `Downloading… ${percent}%`;
+    }
+  }
+}
+
+/** Whether Cancel can stop the running install: only while it downloads. */
+export function cancellable(progress) {
+  return !progress?.Step || progress.Step === "download";
+}
+
 const failureTitles = {
   network: "Download failed",
   signature: "Signature check failed",

@@ -156,16 +156,19 @@ func TestInstallingOnMacOSReplacesTheAppBundle(t *testing.T) {
 	}
 }
 
-// assertBundleFailed fails unless the install failed with kind and a reason
+// assertBundleFailed fails unless the install failed with kind at step and a reason
 // containing reason, emitted it, and left the running bundle as running with
 // nothing staged beside it.
-func assertBundleFailed(t *testing.T, app *App, events *recordedEvents, result UpdateInstall, running macBundle, kind UpdateFailureKind, reason string) {
+func assertBundleFailed(t *testing.T, app *App, events *recordedEvents, result UpdateInstall, running macBundle, kind UpdateFailureKind, step InstallStep, reason string) {
 	t.Helper()
 	if result.Outcome != InstallOutcomeFailed || result.Failure == nil {
 		t.Fatalf("wanted a failed install, got %+v", result)
 	}
 	if result.Failure.Kind != kind || !strings.Contains(result.Failure.Reason, reason) {
 		t.Fatalf("wanted a %s failure saying %q, got %s: %s", kind, reason, result.Failure.Kind, result.Failure.Reason)
+	}
+	if result.Failure.Step != step {
+		t.Fatalf("wanted the %s failure to stop at the %s step, got %q", kind, step, result.Failure.Step)
 	}
 	if result.Failure.ReleasePage == "" {
 		t.Fatalf("wanted the failure to link the release page, got %+v", result.Failure)
@@ -192,7 +195,7 @@ func TestAppSignedByAnotherDeveloperTeamIsRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailureTeam, "developer team")
+	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailureTeam, InstallStepVerify, "developer team")
 }
 
 func TestRunningAppWithoutADeveloperTeamRefusesTheUpdate(t *testing.T) {
@@ -210,7 +213,7 @@ func TestRunningAppWithoutADeveloperTeamRefusesTheUpdate(t *testing.T) {
 		t.Fatalf("installing: %v", err)
 	}
 	unsigned := macBundle{executable: runningBinary, team: ""}
-	assertBundleFailed(t, app, events, result, unsigned, UpdateFailureTeam, "developer team")
+	assertBundleFailed(t, app, events, result, unsigned, UpdateFailureTeam, InstallStepVerify, "developer team")
 }
 
 func TestAppRunFromDownloadsAsksToBeMovedToApplications(t *testing.T) {
@@ -232,7 +235,7 @@ func TestAppRunFromDownloadsAsksToBeMovedToApplications(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailurePermissions, "Move Marasi to Applications")
+	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailurePermissions, InstallStepInstall, "Move Marasi to Applications")
 	if releases.requestCount() != requests {
 		t.Fatalf("wanted nothing downloaded, got %v", releases.requested())
 	}
@@ -270,7 +273,7 @@ func TestZipEntriesOutsideTheAppAreRefused(t *testing.T) {
 	if err != nil {
 		t.Fatalf("installing: %v", err)
 	}
-	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailureInstall, "outside")
+	assertBundleFailed(t, app, events, result, runningBundle, UpdateFailureInstall, InstallStepVerify, "outside")
 	if _, err := os.Stat(filepath.Join(filepath.Dir(filepath.Dir(app.installLocation)), "escaped")); err == nil {
 		t.Fatalf("wanted nothing written outside the install directory")
 	}

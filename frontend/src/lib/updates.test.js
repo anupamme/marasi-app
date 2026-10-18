@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import {
   channelSettingPath,
   channelSwitchNotice,
+  cancellable,
   checkResultNotice,
   installFailureMessage,
+  installProgressLabel,
   progressPercent,
   showsUpdateIndicator,
   updateIndicatorLabel,
@@ -77,6 +79,22 @@ test("download progress is a whole percentage, or unknown without a size", () =>
   assert.equal(progressPercent({ Received: 200, Total: 200 }), 100);
   assert.equal(progressPercent({ Received: 5, Total: 0 }), null);
   assert.equal(progressPercent(null), null);
+});
+
+test("the progress line names the step the install is on", () => {
+  assert.equal(installProgressLabel({ Step: "download", Received: 101, Total: 200 }), "Downloading… 50%");
+  assert.equal(installProgressLabel({ Step: "download", Received: 5, Total: 0 }), "Downloading…");
+  assert.equal(installProgressLabel({ Step: "verify", Received: 200, Total: 200 }), "Verifying…");
+  assert.equal(installProgressLabel({ Step: "install", Received: 200, Total: 200 }), "Installing…");
+  // Install chosen, before Go reports the first step.
+  assert.equal(installProgressLabel(null), "Downloading…");
+});
+
+test("only the download can be cancelled", () => {
+  assert.equal(cancellable({ Step: "download", Received: 5, Total: 200 }), true);
+  assert.equal(cancellable(null), true);
+  assert.equal(cancellable({ Step: "verify", Received: 200, Total: 200 }), false);
+  assert.equal(cancellable({ Step: "install", Received: 200, Total: 200 }), false);
 });
 
 test("a failed install says which check failed and why", () => {

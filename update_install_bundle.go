@@ -79,8 +79,10 @@ func translocated(location string) bool {
 }
 
 // stage unpacks the downloaded zip next to the bundle and returns the
-// unpacked app, a hidden .app beside location.
-func (b bundleInstaller) stage(download, location string) (string, error) {
+// unpacked app, a hidden .app beside location. Unpacking and the team check
+// are part of the verify step; moving the app into its staged place starts
+// the install step.
+func (b bundleInstaller) stage(download, location string, verified func()) (string, error) {
 	dir := filepath.Dir(location)
 	unpacked, err := os.MkdirTemp(dir, ".marasi-app-unpack-*")
 	if err != nil {
@@ -94,6 +96,7 @@ func (b bundleInstaller) stage(download, location string) (string, error) {
 	if err := b.checkTeam(app, location); err != nil {
 		return "", err
 	}
+	verified()
 	// The staged app sits directly beside location, so the swap renames
 	// within one directory and never moves the running bundle elsewhere.
 	staged, err := os.MkdirTemp(dir, ".marasi-app-update-*.app")

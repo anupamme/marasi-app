@@ -29,7 +29,7 @@ export function checkResultNotice(check) {
 }
 
 /** Where the details panel's link to the Channel setting goes. */
-export const channelSettingPath = "/settings?section=about";
+export const channelSettingPath = "/settings?section=updates";
 
 /**
  * The toast after the Channel setting changes (a ChannelChange), or null when
@@ -125,13 +125,43 @@ const failureTitles = {
   install: "Install failed",
 };
 
+const noBuildMessage = "This release has no build for your platform";
+
+/** A failed install's title (an UpdateFailure), without its reason. */
+function installFailureTitle(failure) {
+  if (failure?.Kind === "no-build") {
+    return noBuildMessage;
+  }
+  return failureTitles[failure?.Kind] ?? "Install failed";
+}
+
 /** What the panel says about a failed install (an UpdateFailure). */
 export function installFailureMessage(failure) {
   if (failure?.Kind === "no-build") {
-    return "This release has no build for your platform";
+    return noBuildMessage;
   }
-  const title = failureTitles[failure?.Kind] ?? "Install failed";
-  return `${title}: ${failure?.Reason || "unknown error"}`;
+  return `${installFailureTitle(failure)}: ${failure?.Reason || "unknown error"}`;
+}
+
+/** The status row of Settings → Updates: where the researcher stands for state. */
+export function updateStatusLine(state) {
+  if (state?.Status === "unavailable") {
+    return "Development builds don't check for updates";
+  }
+  if (!showsUpdateIndicator(state)) {
+    return "Up to date";
+  }
+  const version = state.Update.Version;
+  switch (state.Status) {
+    case "downloading":
+      return `Downloading ${version} · ${progressPercent(state.Progress) ?? 0}%`;
+    case "restart-pending":
+      return `${version} ready to restart`;
+    case "failed":
+      return installFailureTitle(state.Failure);
+    default:
+      return `${version} available`;
+  }
 }
 
 /**

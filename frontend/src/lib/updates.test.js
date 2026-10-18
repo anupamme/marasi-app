@@ -10,6 +10,7 @@ import {
   progressPercent,
   showsUpdateIndicator,
   updateIndicatorLabel,
+  updateStatusLine,
   withFailure,
   withInstallResult,
   withInstallStarted,
@@ -202,6 +203,46 @@ test("a found update never replaces one downloading or waiting for a restart", (
   assert.deepEqual(withUpdateFound(installed, { Version: "18.10.2026" }), installed);
 });
 
-test("the details panel links to the Channel setting in Settings → About", () => {
-  assert.equal(channelSettingPath, "/settings?section=about");
+test("the details panel links to the Channel setting in Settings → Updates", () => {
+  assert.equal(channelSettingPath, "/settings?section=updates");
+});
+
+test("Settings → Updates says the build is up to date when no update is known", () => {
+  assert.equal(updateStatusLine({ Status: "idle", Update: null }), "Up to date");
+});
+
+test("Settings → Updates names an available update", () => {
+  assert.equal(updateStatusLine({ Status: "available", Update: { Version: "18.10.2026" } }), "18.10.2026 available");
+});
+
+test("Settings → Updates shows how far an update has downloaded", () => {
+  const state = { Status: "downloading", Update: { Version: "18.10.2026" }, Progress: { Received: 37, Total: 100 } };
+
+  assert.equal(updateStatusLine(state), "Downloading 18.10.2026 · 37%");
+});
+
+test("Settings → Updates shows 0% before the first progress arrives", () => {
+  const state = { Status: "downloading", Update: { Version: "18.10.2026" }, Progress: null };
+
+  assert.equal(updateStatusLine(state), "Downloading 18.10.2026 · 0%");
+});
+
+test("Settings → Updates names an installed update waiting for a restart", () => {
+  assert.equal(updateStatusLine({ Status: "restart-pending", Update: { Version: "18.10.2026" } }), "18.10.2026 ready to restart");
+});
+
+test("Settings → Updates shows a failed install by its title, without the reason", () => {
+  const state = { Status: "failed", Update: { Version: "18.10.2026" }, Failure: { Kind: "checksum", Reason: "sha mismatch" } };
+
+  assert.equal(updateStatusLine(state), "Checksum check failed");
+});
+
+test("Settings → Updates says a release with no build for this platform", () => {
+  const state = { Status: "failed", Update: { Version: "18.10.2026" }, Failure: { Kind: "no-build", Reason: "" } };
+
+  assert.equal(updateStatusLine(state), "This release has no build for your platform");
+});
+
+test("Settings → Updates says a development build does not check", () => {
+  assert.equal(updateStatusLine({ Status: "unavailable", Update: null }), "Development builds don't check for updates");
 });

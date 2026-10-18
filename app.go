@@ -17,6 +17,7 @@ import (
 	"os/user"
 	"path"
 	"path/filepath"
+	goruntime "runtime"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -149,9 +150,9 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 		return app.installer.relaunch(location)
 	}
 	app.quitApp = func() { runtime.Quit(app.ctx) }
-	app.messageDialog = func(options runtime.MessageDialogOptions) (string, error) {
+	app.messageDialog = nativeMessageDialog(goruntime.GOOS, func(options runtime.MessageDialogOptions) (string, error) {
 		return runtime.MessageDialog(app.ctx, options)
-	}
+	})
 	listener := service.NewListenerLifecycle(proxy, logWriter)
 	app.projects = service.NewProjectLifecycle(proxy, configDir, wordlists, logger, app.attachExtensionHooks)
 	listener.BindProject(app.projects)
@@ -622,6 +623,7 @@ func (a *App) ForwardCheckpoint(id uuid.UUID, body string, interceptResponse boo
 func (a *App) DropCheckpoint(id uuid.UUID) error {
 	return a.Proxy.DropCheckpoint(id)
 }
+
 // Launch sends raw from the launchpad and returns the launch id, which is
 // also the UUID of the entry it creates. A malformed request or a missing
 // Host fails at once; how the launch ends arrives as a launch-finished event.

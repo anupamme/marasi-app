@@ -40,6 +40,7 @@
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
     import { DELETE_LAUNCHPAD_PENDING_HINT, pendingLaunchIDs } from "../../lib/launchPending.js";
+    import { toastError } from "../../lib/toasts.js";
 
     const modalStore = getModalStore();
     const toastStore = getToastStore();
@@ -107,6 +108,22 @@
             "This launchpad's draft has unsaved edits. Loading another entry replaces them.",
             () => launchpadStore.selectEntry(launchpadId, entryId, { force: true }),
         );
+    }
+
+    // A Move from the tree. Marasi's refusals (the view was stale) and
+    // failures become toasts; the store has reloaded both launchpads.
+    async function moveEntries(move) {
+        try {
+            const result = await launchpadStore.moveEntries(move);
+            if (result.refused) {
+                toastStore.trigger({ message: result.refused, background: "variant-filled-warning" });
+            }
+            return result;
+        } catch (err) {
+            console.error("Launchpad move error:", err);
+            toastError(toastStore, "Failed to move the entries", err);
+            return { moved: null, refused: null };
+        }
     }
 
     // ⌘⇧↓ selects the open launchpad's last entry through the usual
@@ -346,6 +363,7 @@
             store={launchpadStore}
             pickLaunchpad={(id) => launchpadStore.selectLaunchpad(id)}
             {pickEntry}
+            {moveEntries}
             bind:searchInput
         />
     </LaunchpadDock>

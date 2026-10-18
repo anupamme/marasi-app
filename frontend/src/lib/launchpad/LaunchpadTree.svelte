@@ -8,10 +8,11 @@
 	// each list in entry order, windowed to its last entries.
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
-	import { afterUpdate, tick } from "svelte";
+	import { afterUpdate, onDestroy, tick } from "svelte";
 	import { ArrowDown, Ban, ChevronDown, CircleAlert, LoaderCircle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
-	import { isDraftDirty, isEntrySelected, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
+	import { isDraftDirty, isEntrySelected, launchOf, pendingLaunchOf, selectedEntryIds } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
+	import { dropTarget, moveRefusal } from "./entryMove.js";
 	import { jumpTarget } from "./jumpTarget.js";
 	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
@@ -20,6 +21,9 @@
 	export let store;
 	export let pickLaunchpad;
 	export let pickEntry;
+	// The page's Move ({ sourceId, targetId, ids, before }): the store's
+	// moveEntries plus its toasts. Resolves to { moved, refused }.
+	export let moveEntries;
 	export let searchInput = null;
 
 	export let groupByStatus = savedGroupByStatus;
@@ -97,6 +101,7 @@
 	// or searching, a range covers only the rows shown. The click focuses the
 	// tree, where ⌘A and Esc work: WebKit does not focus a clicked button.
 	function clickEntry(event, launchpadId, entryId, rows) {
+		if (suppressClick) return;
 		scroller?.focus({ preventScroll: true });
 		if (event.metaKey || event.ctrlKey) return store.toggleEntry(launchpadId, entryId);
 		if (event.shiftKey) {
@@ -111,6 +116,147 @@
 		if (event.key !== "Escape" || event.defaultPrevented || state.entrySelection.ids.length < 2) return;
 		event.preventDefault();
 		store.collapseEntrySelection();
+	}
+
+	// Drag and drop (spec: Drag and drop). Pointer events, not HTML5 drag and
+	// drop, which Wails owns for file drops. A press becomes a drag after
+	// DRAG_START px, so a plain click still selects. Where a drop lands and
+	// why it is refused come from entryMove.js; the pill shows the reason.
+	const DRAG_START = 5;
+	const EDGE = 36;
+	const SCROLL_STEP = 8;
+	const HOVER_EXPAND_MS = 600;
+	// { from, entryId, startX, startY, x, y, active, ids, target, refused }
+	let drag = null;
+	let suppressClick = false;
+	let scrollFrame = null;
+	let hoverTimer = null;
+	let hoverLaunchpad = null;
+
+	function pressEntry(event, launchpadId, entryId) {
+		if (event.button !== 0 || event.metaKey || event.ctrlKey || event.shiftKey) return;
+		drag = { from: launchpadId, entryId, startX: event.clientX, startY: event.clientY, x: event.clientX, y: event.clientY, active: false, ids: [], target: null, refused: null };
+	}
+
+	// Dragging a selected entry drags the whole Entry selection in entry
+	// order; an unselected one drags alone and becomes the selection.
+	function startDrag() {
+		const selected = isEntrySelected(state, drag.from, drag.entryId);
+		if (!selected) store.selectOnlyEntry(drag.from, drag.entryId);
+		drag = { ...drag, active: true, ids: selected ? selectedEntryIds(state) : [drag.entryId] };
+		scrollFrame = requestAnimationFrame(autoScroll);
+	}
+
+	const entryIds = (launchpadId) => (state.entriesByLaunchpad[launchpadId] || []).map((entry) => entry.ID);
+
+	// The row under the pointer, as dropTarget reads it.
+	function hitAt(x, y) {
+		const node = document.elementFromPoint(x, y)?.closest("[data-drop]");
+		if (!node || !scroller?.contains(node)) return null;
+		const launchpadId = node.dataset.dropLaunchpad;
+		if (node.dataset.drop === "launchpad") return { kind: "launchpad", launchpadId };
+		const rect = node.getBoundingClientRect();
+		return { kind: "entry", launchpadId, entryId: node.dataset.entry, top: rect.top, height: rect.height };
+	}
+
+	// Re-reads the target under the pointer; also run while auto-scrolling.
+	function aim() {
+		const hit = hitAt(drag.x, drag.y);
+		hoverToExpand(hit?.kind === "launchpad" && !expanded[hit.launchpadId] && !searching ? hit.launchpadId : null);
+		const target = hit && dropTarget({ hit, pointerY: drag.y, order: entryIds(hit.launchpadId), moving: drag.ids });
+		const refused =
+			target &&
+			moveRefusal({
+				sourceId: drag.from,
+				ids: drag.ids,
+				target,
+				targetName: state.launchpads.find((launchpad) => launchpad.ID === target.launchpadId)?.Name ?? "",
+				targetIds: state.entriesByLaunchpad[target.launchpadId] ? entryIds(target.launchpadId) : null,
+				pendingIds: drag.ids.filter((id) => launchOf(state, id)?.Status === "pending"),
+				grouped: groupByStatus,
+				searching,
+			});
+		drag = { ...drag, target, refused };
+	}
+
+	// Hovering a collapsed launchpad's row opens it after a moment.
+	function hoverToExpand(launchpadId) {
+		if (launchpadId === hoverLaunchpad) return;
+		clearTimeout(hoverTimer);
+		hoverLaunchpad = launchpadId;
+		if (launchpadId) hoverTimer = setTimeout(() => (expanded = { ...expanded, [launchpadId]: true }), HOVER_EXPAND_MS);
+	}
+
+	function autoScroll() {
+		if (!drag?.active) return;
+		const box = scroller.getBoundingClientRect();
+		const step = drag.y < box.top + EDGE ? -SCROLL_STEP : drag.y > box.bottom - EDGE ? SCROLL_STEP : 0;
+		if (step) {
+			scroller.scrollTop += step;
+			aim();
+		}
+		scrollFrame = requestAnimationFrame(autoScroll);
+	}
+
+	function onPointerMove(event) {
+		if (!drag) return;
+		drag.x = event.clientX;
+		drag.y = event.clientY;
+		if (!drag.active) {
+			if (Math.hypot(drag.x - drag.startX, drag.y - drag.startY) < DRAG_START) return;
+			startDrag();
+		}
+		aim();
+	}
+
+	async function onPointerUp() {
+		if (!drag) return;
+		const { active, from, ids, target, refused } = drag;
+		endDrag();
+		if (!active) return;
+		// The click that ends a drag is not a selection click.
+		suppressClick = true;
+		setTimeout(() => (suppressClick = false));
+		if (!target || refused) return;
+		const { moved } = await moveEntries({ sourceId: from, targetId: target.launchpadId, ids, before: target.before });
+		if (moved?.length) await showMoved(target.launchpadId, moved);
+	}
+
+	function endDrag() {
+		drag = null;
+		cancelAnimationFrame(scrollFrame);
+		hoverToExpand(null);
+	}
+
+	function onDragKeydown(event) {
+		if (event.key !== "Escape" || !drag?.active) return;
+		event.preventDefault();
+		event.stopPropagation();
+		endDrag();
+	}
+	onDestroy(() => {
+		endDrag();
+		if (typeof document !== "undefined") delete document.body.dataset.launchpadDrag;
+	});
+
+	// After a move: the target opens, its window widens to the moved entries,
+	// and the first scrolls into view.
+	async function showMoved(launchpadId, moved) {
+		const entries = state.entriesByLaunchpad[launchpadId] || [];
+		const first = entries.findIndex((entry) => entry.ID === moved[0]);
+		if (first >= 0 && !groupByStatus) {
+			const shown = Math.max(shownByList[launchpadId] ?? WINDOW, entries.length - first);
+			shownByList = { ...shownByList, [launchpadId]: shown };
+		}
+		await showEntry(launchpadId, moved[0]);
+	}
+
+	$: dragging = drag?.active ? new Set(drag.ids) : new Set();
+	// Where to draw the insertion line: { entryId, edge }, or the tinted row.
+	$: dropLine = drag?.active && !drag.refused && drag.target?.via === "entry" ? drag.target.line : null;
+	$: dropLaunchpad = drag?.active && drag.target?.via === "launchpad" ? drag.target.launchpadId : null;
+	$: if (typeof document !== "undefined") {
+		document.body.dataset.launchpadDrag = drag?.active ? (drag.refused ? "refused" : "move") : "";
 	}
 
 	// Floating "End of …": measured after every render and on scroll.
@@ -151,6 +297,8 @@
 		last?.scrollIntoView({ block: "end", behavior: "smooth" });
 	}
 </script>
+
+<svelte:window on:pointermove={onPointerMove} on:pointerup={onPointerUp} on:pointercancel={endDrag} on:keydown|capture={onDragKeydown} />
 
 <div class="flex h-full min-h-0 flex-col">
 	<header class="space-y-2 border-b border-surface-500/30 p-3">
@@ -245,12 +393,19 @@
 				{@const rows = open
 					? entryRows({ launchpad, entries, matchedEntries, groupByStatus, shownByList, openGroups, selectedEntryId, launchFor })
 					: []}
+				{@const dropHere = dropLaunchpad === launchpad.ID}
 				<div data-launchpad={launchpad.ID}>
 					<div
 						data-tree-row={open ? undefined : ""}
+						data-drop="launchpad"
+						data-drop-launchpad={launchpad.ID}
 						class="lp-row flex items-center gap-1.5 border-l-4 pr-3 text-sm {open ? 'sticky top-0 z-10' : ''} {isSelected
 							? 'border-primary-500 bg-surface-200 dark:bg-surface-700'
-							: 'border-transparent bg-surface-50 hover:bg-surface-100 dark:bg-surface-900 dark:hover:bg-surface-800'}"
+							: 'border-transparent bg-surface-50 hover:bg-surface-100 dark:bg-surface-900 dark:hover:bg-surface-800'} {dropHere
+							? drag.refused
+								? 'outline outline-2 -outline-offset-2 outline-error-500'
+								: 'lp-drop-row'
+							: ''}"
 					>
 						<button
 							class="py-1.5 pl-1.5 opacity-60 hover:opacity-100"
@@ -375,8 +530,10 @@
 											? 'bg-primary-500/15'
 											: inCompare && compare.picking
 												? 'hover:bg-primary-500/15'
-												: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
+												: 'hover:bg-surface-100 dark:hover:bg-surface-800'} {dragging.has(entry.ID) ? 'opacity-35' : ''}"
 									data-selected={picked ? "true" : undefined}
+									data-drop="entry"
+									data-drop-launchpad={launchpad.ID}
 									data-compare={side ? COMPARE_SIDES[side].label : undefined}
 									title="#{row.index + 1} · pair #{entry.Number} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
 										? ` · ${endText}`
@@ -389,9 +546,22 @@
 									data-last={row.last ? "true" : undefined}
 									data-label={row.label}
 									use:reveal={active}
+									on:pointerdown={(event) => pressEntry(event, launchpad.ID, entry.ID)}
 									on:click={(event) => clickEntry(event, launchpad.ID, entry.ID, rows)}
 								>
 									{#if picked}<span class="absolute bottom-0 left-0 top-0 w-[3px] bg-primary-500"></span>{/if}
+									{#if dropLine?.entryId === entry.ID}
+										<!-- The insertion line, with a dot where it starts. -->
+										<span
+											class="lp-drop-line pointer-events-none absolute left-8 right-2 z-10 h-[2px] bg-primary-500 {dropLine.edge === 'top'
+												? '-top-[1px]'
+												: '-bottom-[1px]'}"
+										>
+											<span
+												class="absolute -left-1 -top-[3px] h-2 w-2 rounded-full border-2 border-primary-500 bg-surface-50 dark:bg-surface-900"
+											></span>
+										</span>
+									{/if}
 									<span class="absolute bottom-0 left-[1.15rem] top-0 border-l border-surface-500/30"></span>
 									{#if row.depth === 2}<span class="absolute bottom-0 left-[2.4rem] top-0 border-l border-surface-500/30"></span>{/if}
 									<span class="flex w-9 flex-none items-center justify-end gap-1 opacity-60">
@@ -443,3 +613,31 @@
 		{/if}
 	</div>
 </div>
+
+{#if drag?.active}
+	<!-- The pill: how many entries move, and why a drop here is refused. -->
+	<div
+		class="lp-drag-pill pointer-events-none fixed z-50 flex items-center gap-1.5 border px-2 py-1 text-xs shadow-xl bg-surface-100-800-token {drag.refused
+			? 'border-error-500 text-error-500'
+			: 'border-primary-500'}"
+		style="left: {drag.x + 14}px; top: {drag.y + 10}px"
+	>
+		{#if drag.refused}<Ban size={12} />{/if}
+		<span class="font-bold">{drag.ids.length} {drag.ids.length === 1 ? "entry" : "entries"}</span>
+		{#if drag.refused}<span>· {drag.refused}</span>{/if}
+	</div>
+{/if}
+
+<style>
+	/* While dragging, the drag's cursor shows wherever the pointer goes. */
+	:global(body[data-launchpad-drag="move"] *) {
+		cursor: grabbing !important;
+	}
+	:global(body[data-launchpad-drag="refused"] *) {
+		cursor: not-allowed !important;
+	}
+	/* A launchpad row taking a drop is tinted over its own background. */
+	.lp-drop-row {
+		background-color: rgb(var(--color-primary-500) / 0.25) !important;
+	}
+</style>

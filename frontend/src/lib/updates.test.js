@@ -8,6 +8,8 @@ import {
   installFailureMessage,
   installProgressLabel,
   progressPercent,
+  settingsIconIndicator,
+  settingsPath,
   showsUpdateIndicator,
   updateIndicatorLabel,
   updateStatusLine,
@@ -245,4 +247,92 @@ test("Settings → Updates says a release with no build for this platform", () =
 
 test("Settings → Updates says a development build does not check", () => {
   assert.equal(updateStatusLine({ Status: "unavailable", Update: null }), "Development builds don't check for updates");
+});
+
+const update18 = { Version: "18.10.2026" };
+
+test("the Settings icon carries no indicator without an update", () => {
+  assert.equal(settingsIconIndicator({ Status: "idle", Update: null }), null);
+  assert.equal(settingsIconIndicator({ Status: "unavailable", Update: null }), null);
+  assert.equal(settingsIconIndicator(null), null);
+});
+
+test("an available update puts a primary dot on the Settings icon", () => {
+  assert.deepEqual(settingsIconIndicator({ Status: "available", Update: update18 }), {
+    kind: "dot",
+    tone: "primary",
+    pulse: false,
+  });
+});
+
+test("a failed install turns the dot red", () => {
+  const state = { Status: "failed", Update: update18, Failure: { Kind: "network", Reason: "reset" } };
+
+  assert.deepEqual(settingsIconIndicator(state), { kind: "dot", tone: "error", pulse: false });
+});
+
+test("an update waiting for a restart pulses its dot", () => {
+  assert.deepEqual(settingsIconIndicator({ Status: "restart-pending", Update: update18 }), {
+    kind: "dot",
+    tone: "primary",
+    pulse: true,
+  });
+});
+
+test("a download fills a ring around the Settings icon with its progress", () => {
+  const state = { Status: "downloading", Update: update18, Progress: { Step: "download", Received: 37, Total: 100 } };
+
+  assert.deepEqual(settingsIconIndicator(state), { kind: "ring", percent: 37, spinning: false });
+});
+
+test("the ring starts empty before the first progress arrives, or when the size is unknown", () => {
+  assert.deepEqual(settingsIconIndicator({ Status: "downloading", Update: update18, Progress: null }), {
+    kind: "ring",
+    percent: 0,
+    spinning: false,
+  });
+  assert.deepEqual(
+    settingsIconIndicator({ Status: "downloading", Update: update18, Progress: { Step: "download", Received: 5, Total: 0 } }),
+    { kind: "ring", percent: 0, spinning: false },
+  );
+});
+
+test("while verifying and installing the ring is full and spins", () => {
+  for (const Step of ["verify", "install"]) {
+    const state = { Status: "downloading", Update: update18, Progress: { Step, Received: 100, Total: 100 } };
+
+    assert.deepEqual(settingsIconIndicator(state), { kind: "ring", percent: 100, spinning: true }, Step);
+  }
+});
+
+test("a dismissed update leaves the Settings icon bare", () => {
+  // DismissUpdate answers the state with no update known.
+  assert.equal(settingsIconIndicator({ Status: "idle", Update: null }), null);
+});
+
+test("the Settings icon opens Settings → Updates while an update is waiting", () => {
+  for (const Status of ["available", "downloading", "failed", "restart-pending"]) {
+    assert.equal(settingsPath({ Status, Update: update18 }), "/settings?section=updates", Status);
+  }
+});
+
+test("without an update the Settings icon opens Settings as usual", () => {
+  assert.equal(settingsPath({ Status: "idle", Update: null }), "/settings");
+  assert.equal(settingsPath(null), "/settings");
+});
+
+test("the indicator and Settings → Updates say when an update is verifying or installing", () => {
+  const verifying = { Status: "downloading", Update: update18, Progress: { Step: "verify", Received: 100, Total: 100 } };
+  const installing = { Status: "downloading", Update: update18, Progress: { Step: "install", Received: 100, Total: 100 } };
+
+  assert.equal(updateIndicatorLabel(verifying), "Verifying update 18.10.2026…");
+  assert.equal(updateIndicatorLabel(installing), "Installing update 18.10.2026…");
+  assert.equal(updateStatusLine(verifying), "Verifying 18.10.2026…");
+  assert.equal(updateStatusLine(installing), "Installing 18.10.2026…");
+});
+
+test("the indicator shows how far a download is", () => {
+  const state = { Status: "downloading", Update: update18, Progress: { Step: "download", Received: 37, Total: 100 } };
+
+  assert.equal(updateIndicatorLabel(state), "Downloading update 18.10.2026 · 37%");
 });

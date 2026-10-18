@@ -87,7 +87,6 @@
 	import KeybindingsModal from "../lib/components/Keybindings/KeybindingsModal.svelte";
 	import GlobalMenu from "../lib/components/MarasiMenu/GlobalMenu.svelte";
 	import UpdateModal from "../lib/components/UpdateModal.svelte";
-	import { ArrowUpCircle, RotateCw } from "lucide-svelte";
 	import {
 		updateState,
 		refreshUpdateState,
@@ -97,9 +96,9 @@
 		onUpdateFailed,
 	} from "../stores/updateStore";
 	import {
-		showsUpdateIndicator,
+		settingsIconIndicator,
+		settingsPath,
 		updateIndicatorLabel,
-		updatePanelModal,
 	} from "../lib/updates.js";
 	import { get } from "svelte/store";
 	import {
@@ -147,6 +146,10 @@
 	};
 	const toastStore = getToastStore();
 	const modalStore = getModalStore();
+	// The Settings icon's update indicator (see settingsIconIndicator).
+	$: settingsIndicator = settingsIconIndicator($updateState);
+	const ringRadius = 17;
+	const ringLength = 2 * Math.PI * ringRadius;
 	const drawerStore = getDrawerStore();
 	storePopup.set({
 		computePosition,
@@ -750,26 +753,6 @@
 					{/if}
 				{/each}
 				<svelte:fragment slot="trail">
-					{#if showsUpdateIndicator($updateState)}
-						<div
-							class="flex justify-center items-center w-full py-2"
-						>
-							<button
-								type="button"
-								class="btn-icon btn-icon-sm variant-soft-primary"
-								title={updateIndicatorLabel($updateState)}
-								aria-label={updateIndicatorLabel($updateState)}
-								on:click={() =>
-									modalStore.trigger(updatePanelModal())}
-							>
-								{#if $updateState.Status === "restart-pending"}
-									<RotateCw size={18} />
-								{:else}
-									<ArrowUpCircle size={18} />
-								{/if}
-							</button>
-						</div>
-					{/if}
 					<div
 						class="flex justify-center items-center w-full py-2"
 					>
@@ -784,21 +767,80 @@
 							class="outline-none focus:outline-none focus-visible:outline-none"
 						/>
 					</div>
+					<!-- The Settings icon carries the update indicator: a dot for
+					     an update waiting (red after a failure, pulsing for a
+					     restart), a ring filling with its download. While an
+					     update waits, the icon opens Settings → Updates. -->
 					<AppRailAnchor
 						selected={$page.url.pathname ===
 							"/settings"}
 						on:click={() => {
-							goto("/settings");
+							goto(settingsPath($updateState));
 						}}
 						bind:group={currentTile}
 						name="Settings"
 						value={appRailIndex++}
-						title="Settings"
+						title={settingsIndicator
+							? `Settings · ${updateIndicatorLabel($updateState)}`
+							: "Settings"}
 					>
 						<div
-							class="flex justify-center items-center w-full"
+							class="relative flex justify-center items-center w-full"
 						>
 							<SettingsIcon />
+							{#if settingsIndicator?.kind === "ring"}
+								<svg
+									class="pointer-events-none absolute h-10 w-10 -rotate-90 {settingsIndicator.spinning
+										? 'animate-spin'
+										: ''}"
+									viewBox="0 0 40 40"
+									aria-hidden="true"
+								>
+									<circle
+										cx="20"
+										cy="20"
+										r={ringRadius}
+										fill="none"
+										stroke-width="3"
+										class={settingsIndicator.spinning
+											? "stroke-primary-500/40"
+											: "stroke-surface-300 dark:stroke-surface-600"}
+									/>
+									<circle
+										cx="20"
+										cy="20"
+										r={ringRadius}
+										fill="none"
+										stroke-width="3"
+										stroke-linecap="round"
+										class="stroke-primary-500 transition-all"
+										stroke-dasharray={ringLength}
+										stroke-dashoffset={settingsIndicator.spinning
+											? ringLength * 0.75
+											: ringLength *
+												(1 -
+													settingsIndicator.percent /
+														100)}
+									/>
+								</svg>
+							{:else if settingsIndicator?.kind === "dot"}
+								<span
+									class="pointer-events-none absolute right-5 -top-1 flex h-3 w-3"
+									aria-hidden="true"
+								>
+									{#if settingsIndicator.pulse}
+										<span
+											class="absolute inline-flex h-full w-full animate-ping rounded-full bg-primary-400 opacity-75"
+										></span>
+									{/if}
+									<span
+										class="relative inline-flex h-3 w-3 rounded-full ring-2 ring-surface-50 dark:ring-surface-800 {settingsIndicator.tone ===
+										'error'
+											? 'bg-error-500'
+											: 'bg-primary-500'}"
+									></span>
+								</span>
+							{/if}
 						</div>
 					</AppRailAnchor>
 				</svelte:fragment>

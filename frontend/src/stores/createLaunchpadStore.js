@@ -214,12 +214,33 @@ function updateSummary(launchpads, launchpadId, fields) {
   );
 }
 
-// The summary of a freshly loaded entry list, oldest first.
-const summaryOfEntries = (entries) => ({
-  EntryCount: entries.length,
-  LastStatusCode: entries.at(-1)?.StatusCode || null,
-  NewestEntryID: entries.at(-1)?.ID ?? null,
-});
+// The newest of `entries` by capture: the highest pair number. Entry order
+// is the researcher's, so the last entry need not be the newest. Among
+// entries without a number, the later one wins.
+function newestByCapture(entries) {
+  const rank = (entry) => entry.Number ?? -Infinity;
+  return (entries || []).reduce(
+    (newest, entry) => (!newest || rank(entry) >= rank(newest) ? entry : newest),
+    null,
+  );
+}
+
+/** The launchpad's newest loaded entry by capture, or null. */
+export function newestEntryOf(state, launchpadId) {
+  return newestByCapture(state.entriesByLaunchpad[launchpadId]);
+}
+
+// The summary of a freshly loaded entry list. Like Marasi's LastStatusCode,
+// it follows the newest entry by capture, and a status code of 0 or below
+// (awaiting, or -1 for a launch that ended without a response) is none.
+function summaryOfEntries(entries) {
+  const newest = newestByCapture(entries);
+  return {
+    EntryCount: entries.length,
+    LastStatusCode: newest?.StatusCode > 0 ? newest.StatusCode : null,
+    NewestEntryID: newest?.ID ?? null,
+  };
+}
 
 // The launchpad a launched pair belongs to, from its launch: launch events
 // and this store's own launches name it. Pair metadata is not read, since

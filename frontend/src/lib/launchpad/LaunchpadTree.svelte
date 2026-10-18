@@ -10,7 +10,7 @@
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate, onDestroy, tick } from "svelte";
 	import { ArrowDown, Ban, ChevronDown, CircleAlert, LoaderCircle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
-	import { isDraftDirty, isEntrySelected, launchOf, pendingEntryIds, pendingLaunchOf, selectedEntryIds } from "../../stores/launchpadStore";
+	import { isDraftDirty, isEntrySelected, launchOf, newestEntryOf, pendingEntryIds, pendingLaunchOf, selectedEntryIds } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { dropTarget, moveRefusal } from "./entryMove.js";
 	import { jumpTarget } from "./jumpTarget.js";
@@ -399,7 +399,7 @@
 				{@const open = searching || expanded[launchpad.ID]}
 				{@const unseen = state.unseenByLaunchpad[launchpad.ID] || 0}
 				{@const summary = launchpadSummary(launchpad)}
-				{@const newest = entries?.at(-1)}
+				{@const newest = newestEntryOf(state, launchpad.ID)}
 				{@const newestLaunch = newest ? launchOf(state, newest.ID, newest) : null}
 				{@const awaiting = Boolean(pendingLaunchOf(state, launchpad.ID)) || newestLaunch?.Status === "pending"}
 				{@const selectedEntryId = state.selectedEntryByLaunchpad[launchpad.ID]}

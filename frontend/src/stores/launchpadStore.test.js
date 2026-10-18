@@ -6,6 +6,7 @@ import {
   dirtyLaunchpadIds,
   isDraftDirty,
   launchOf,
+  newestEntryOf,
   pendingLaunchOf,
 } from "./createLaunchpadStore.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
@@ -789,6 +790,42 @@ test("loading a launchpad's entries refreshes its summary", async () => {
   api.getEntries = async () => [entry("c"), { ...entry("x"), StatusCode: 302 }];
   await store.loadEntries("lp2");
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 302 });
+});
+
+test("the summary follows the newest entry by capture, not the last in entry order", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  // Entry order: the newest pair (Number 3) was moved to the top.
+  api.getEntries = async () => [
+    { ...entry("n"), Number: 3, StatusCode: 404 },
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+    { ...entry("x"), Number: 2, StatusCode: 302 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: 404 });
+  assert.equal(newestEntryOf(get(store), "lp2")?.ID, "n");
+});
+
+test("a pending or cancelled newest entry leaves the last status empty", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.getEntries = async () => [
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+    { ...entry("n"), Number: 3, StatusCode: 0 },
+    { ...entry("x"), Number: 2, StatusCode: 302 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: null });
+  // Marasi stores a cancelled launch's status code as -1.
+  api.getEntries = async () => [
+    { ...entry("n"), Number: 3, StatusCode: -1, Metadata: { launch: { status: "cancelled" } } },
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: null });
+  assert.equal(launchOf(get(store), newestEntryOf(get(store), "lp2").ID)?.Status, "cancelled");
 });
 
 test("a new launchpad starts with no entries", async () => {

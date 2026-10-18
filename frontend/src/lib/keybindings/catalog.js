@@ -20,6 +20,11 @@ function primary(...keys) {
   };
 }
 
+// The same keys on every platform.
+function both(...keys) {
+  return { [MACOS]: keys, [WINDOWS_LINUX]: keys };
+}
+
 function action(id, label, description, keywords, defaults, context = "global") {
   return { id, context, label, description, keywords, defaults };
 }
@@ -145,8 +150,14 @@ export const FACTORY_ACTIONS = [
   ]),
   // Esc, which collapses the entry selection, is reserved for the page
   // (gate.js), so the tree handles it itself.
+  // The ⌥ arrows move the entry selection, as its context menu's Order
+  // items do: ⌥ on both platforms, so not primary().
   ...pageActions("launchpad.tree", [
     ["select-all-entries", "Select All Entries", "Select every entry of the focused launchpad", "select, all, entries", primary("a"), { yieldsToEditors: true }],
+    ["move-entries-up", "Move Entries Up", "Move the selected entries above the entry before them", "move, up, order, reorder, entries", both("alt+arrowup"), { yieldsToEditors: true }],
+    ["move-entries-down", "Move Entries Down", "Move the selected entries below the entry after them", "move, down, order, reorder, entries", both("alt+arrowdown"), { yieldsToEditors: true }],
+    ["move-entries-top", "Move Entries to Top", "Move the selected entries to the start of their launchpad", "move, top, first, order, reorder, entries", both("alt+shift+arrowup"), { yieldsToEditors: true }],
+    ["move-entries-bottom", "Move Entries to Bottom", "Move the selected entries to the end of their launchpad", "move, bottom, last, end, order, reorder, entries", both("alt+shift+arrowdown"), { yieldsToEditors: true }],
   ]),
   ...pageActions("checkpoint", [
     ["toggle-settings", "Toggle Checkpoint Settings", "Toggle Settings Accordian", "settings, toggle", primary("p")],

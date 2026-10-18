@@ -700,6 +700,25 @@ export function createLaunchpadStore(api) {
       ),
     collapseEntrySelection: () => updateEntrySelection(selecting.collapse),
 
+    // Remove from launchpad: unlinks the entries; their pairs stay in the
+    // project. The launchpad reloads, refused or not: a refusal means this
+    // view was stale, and one for a pending launch also reads the pending
+    // launches, so the menu shows them launching. Returns how many Marasi
+    // removed; the error goes on.
+    removeEntries: async (launchpadId, ids) => {
+      const version = projectStateVersion;
+      let count;
+      try {
+        count = await api.unlinkEntries(launchpadId, ids);
+      } catch (err) {
+        await Promise.all([loadEntries(launchpadId), pendingLaunchIDs(err) ? loadPendingLaunches() : null]);
+        throw err;
+      }
+      await loadEntries(launchpadId);
+      if (version === projectStateVersion) updateEntrySelection(() => selecting.NO_ENTRY_SELECTION);
+      return count;
+    },
+
     // Drag and drop and the entry menu both move through this.
     moveEntries,
 

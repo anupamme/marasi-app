@@ -241,8 +241,8 @@ function launchingCount(pairs, pendingLaunches, launchpadId = null) {
   return pairs.filter((pair) => ids.has(String(pair.ID))).length;
 }
 
-// Greys an item whose pairs include `launching` still launching.
-const unlessLaunching = (launching) => (launching ? { disabled: true, hint: `${launching} launching` } : {});
+/** Greys an item whose pairs include `launching` still launching. */
+export const unlessLaunching = (launching) => (launching ? { disabled: true, hint: `${launching} launching` } : {});
 
 /**
  * The menu for `pairs`, the selected pairs the table has loaded, in table

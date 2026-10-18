@@ -12,6 +12,7 @@
 	import { Check, GitCompare, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
 	import { lineWrap, marasiConfig } from "../../stores";
 	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
+	import { DELETE_LAUNCHPAD_PENDING_HINT } from "../launchPending.js";
 	import { compareView } from "./compare.js";
 	import { launchEndText, primaryVariant, statusClass } from "./format.js";
 	import LaunchpadCompare from "./LaunchpadCompare.svelte";
@@ -196,7 +197,8 @@
 			<button
 				class="btn btn-sm variant-soft px-2"
 				aria-label="Delete launchpad"
-				title="Delete launchpad"
+				title={pending ? DELETE_LAUNCHPAD_PENDING_HINT : "Delete launchpad"}
+				disabled={pending}
 				on:click={onDelete}
 			>
 				<Trash2 size={16} />

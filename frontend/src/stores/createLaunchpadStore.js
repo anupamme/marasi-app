@@ -4,6 +4,7 @@
 import { writable } from "svelte/store";
 import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
+import { pendingLaunchIDs } from "../lib/launchPending.js";
 
 // Entry search through Marasi: `matches` holds entry ids by launchpad id,
 // `status` is idle, loading, done or error.
@@ -645,8 +646,15 @@ export function createLaunchpadStore(api) {
     },
 
     // Deletes without asking: confirming a dirty draft is the page's job.
+    // Marasi refuses while a launch from it is pending (marasi ADR-0049);
+    // the store then learns that launch, so Delete shows it launching.
     deleteLaunchpad: async (id) => {
-      await api.deleteLaunchpad(id);
+      try {
+        await api.deleteLaunchpad(id);
+      } catch (err) {
+        if (pendingLaunchIDs(err)) await loadPendingLaunches();
+        throw err;
+      }
       const index = current.launchpads.findIndex((launchpad) => launchpad.ID === id);
       update((state) => ({
         ...state,

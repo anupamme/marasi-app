@@ -21,3 +21,6 @@ export function pendingLaunchText(count, verb) {
   const pairs = count === 1 ? "1 pair is" : `${count.toLocaleString()} pairs are`;
   return `${pairs} still launching; nothing was ${verb}`;
 }
+
+/** Why a launchpad with a pending launch cannot be deleted. */
+export const DELETE_LAUNCHPAD_PENDING_HINT = "Launching: cancel or wait";

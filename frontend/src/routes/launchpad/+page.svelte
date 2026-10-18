@@ -38,6 +38,7 @@
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
+    import { DELETE_LAUNCHPAD_PENDING_HINT, pendingLaunchIDs } from "../../lib/launchPending.js";
 
     const modalStore = getModalStore();
     const toastStore = getToastStore();
@@ -134,11 +135,29 @@
         const state = get(launchpadStore);
         const launchpad = state.launchpads.find((l) => l.ID === state.selectedLaunchpadId);
         if (!launchpad) return;
+        // Marasi refuses while a launch from it is pending (marasi ADR-0049).
+        if (pendingLaunchOf(state, launchpad.ID)) return warnLaunching();
         confirm(
             `Delete ${launchpad.Name}?`,
             isDraftDirty(state, launchpad.ID) ? "Its unsaved draft will be discarded." : undefined,
-            () => launchpadStore.deleteLaunchpad(launchpad.ID),
+            () =>
+                launchpadStore.deleteLaunchpad(launchpad.ID).catch((err) => {
+                    if (pendingLaunchIDs(err)) return warnLaunching();
+                    console.error("Deleting the launchpad failed:", err);
+                    toastStore.trigger({
+                        message: "Failed to delete the launchpad",
+                        background: "variant-filled-error",
+                    });
+                }),
         );
+    }
+
+    function warnLaunching() {
+        toastStore.trigger({
+            message: DELETE_LAUNCHPAD_PENDING_HINT,
+            background: "variant-filled-warning",
+            timeout: 2000,
+        });
     }
 
     async function launch() {

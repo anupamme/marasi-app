@@ -571,6 +571,23 @@ test("deleting the open launchpad drops its draft and opens its neighbour", asyn
   assert.equal(state.selectedEntryByLaunchpad.lp2, "c");
 });
 
+test("a delete Marasi refuses for a launch still pending keeps the launchpad and learns the launch", async () => {
+  const api = twoLaunchpads();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.updateDraft("lp1", "edited");
+  // Launched elsewhere (another window); this store has not heard of it.
+  api.pending.push({ ID: "d", LaunchpadID: "lp1", Status: "pending" });
+  api.deleteLaunchpad = async (id) => {
+    throw new Error(`deleting launchpad: launch_pending (d): a launch from ${id} is pending`);
+  };
+  await assert.rejects(store.deleteLaunchpad("lp1"), /launch_pending/);
+  const state = get(store);
+  assert.deepEqual(state.launchpads.map((launchpad) => launchpad.ID), ["lp1", "lp2"]);
+  assert.equal(state.draftsByLaunchpad.lp1.raw, "edited");
+  assert.equal(pendingLaunchOf(state, "lp1")?.ID, "d", "its Delete now shows it launching");
+});
+
 test("dirty launchpads are listed for the close and quit prompts", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();

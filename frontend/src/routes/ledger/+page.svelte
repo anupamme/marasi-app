@@ -71,6 +71,7 @@
 	import { select } from "../../lib/storeSelect.js";
 	import { toastError as showError } from "../../lib/toasts.js";
 	import { incompleteJobs, incompleteText } from "../../lib/ledger/selectionIncomplete.js";
+	import { pendingLaunchIDs, pendingLaunchText } from "../../lib/launchPending.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
@@ -260,6 +261,18 @@
 		});
 	}
 
+	// A delete or removal Marasi refused for pairs still launching (marasi
+	// ADR-0049): nothing changed, the store selected the loaded ones, and
+	// the launchpads are read again so the menu greys it next time. False
+	// for any other error.
+	function launchingRefused(error, verb) {
+		const ids = pendingLaunchIDs(error);
+		if (!ids) return false;
+		refreshLaunchpads();
+		toastStore.trigger({ message: pendingLaunchText(ids.length, verb), background: "variant-filled-warning" });
+		return true;
+	}
+
 	// A toast with a button that leaves for another page.
 	function toastJump(message, label, path) {
 		const toastId = toastStore.trigger({
@@ -405,6 +418,7 @@
 				background: handoffBackground,
 			});
 		} catch (error) {
+			if (launchingRefused(error, "removed")) return;
 			bulkFailed(`Failed to remove ${describeTarget(target)} from "${name}"`, error, () =>
 				removeFromLaunchpad(target, launchpadId, name),
 			);
@@ -501,6 +515,7 @@
 					if (!count) return unchanged(target, { type: "delete" });
 					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
+					if (launchingRefused(error, "deleted")) return;
 					bulkFailed(`Failed to delete ${what}`, error, remove);
 				}
 			},
@@ -703,6 +718,7 @@
 		findings: $findingStore,
 		testCases: $testCaseStore,
 		palette: $highlightPalette,
+		pendingLaunches: Object.values($launchpadStore.launchesById ?? {}).filter((launch) => launch.Status === "pending"),
 		all: Boolean(rowMenu.target?.all),
 		count: rowMenu.target?.all ? $liveSize : null,
 	};

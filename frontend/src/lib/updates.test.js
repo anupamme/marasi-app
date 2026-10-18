@@ -5,12 +5,15 @@ import {
   channelSwitchNotice,
   cancellable,
   checkResultNotice,
+  downloadedAmount,
   installFailureMessage,
-  installProgressLabel,
   progressPercent,
   showsUpdateIndicator,
   updateIndicatorLabel,
+  updatePanelFailure,
+  updatePanelSteps,
   updateStatusLine,
+  withCheckResult,
   withFailure,
   withInstallResult,
   withInstallStarted,
@@ -80,15 +83,6 @@ test("download progress is a whole percentage, or unknown without a size", () =>
   assert.equal(progressPercent({ Received: 200, Total: 200 }), 100);
   assert.equal(progressPercent({ Received: 5, Total: 0 }), null);
   assert.equal(progressPercent(null), null);
-});
-
-test("the progress line names the step the install is on", () => {
-  assert.equal(installProgressLabel({ Step: "download", Received: 101, Total: 200 }), "Downloading… 50%");
-  assert.equal(installProgressLabel({ Step: "download", Received: 5, Total: 0 }), "Downloading…");
-  assert.equal(installProgressLabel({ Step: "verify", Received: 200, Total: 200 }), "Verifying…");
-  assert.equal(installProgressLabel({ Step: "install", Received: 200, Total: 200 }), "Installing…");
-  // Install chosen, before Go reports the first step.
-  assert.equal(installProgressLabel(null), "Downloading…");
 });
 
 test("only the download can be cancelled", () => {
@@ -245,4 +239,130 @@ test("Settings → Updates says a release with no build for this platform", () =
 
 test("Settings → Updates says a development build does not check", () => {
   assert.equal(updateStatusLine({ Status: "unavailable", Update: null }), "Development builds don't check for updates");
+});
+
+// The panel's steps as "label:mark" pairs, for compact assertions.
+const marks = (state) => updatePanelSteps(state).steps.map((step) => `${step.label}:${step.mark}`);
+const update = { Version: "17.10.2026", ReleasePage: "https://example.test/17.10.2026" };
+
+test("an available update opens the panel at Details, with the later steps still to come", () => {
+  const state = { Status: "available", Update: update, CanInstall: true };
+  assert.equal(updatePanelSteps(state).current, "details");
+  assert.deepEqual(marks(state), ["Details:current", "Download:todo", "Verify:todo", "Install:todo", "Restart:todo"]);
+});
+
+test("a running install ticks the finished steps and outlines the running one with its -ing label", () => {
+  const at = (Step) => ({ Status: "downloading", Update: update, Progress: { Step, Received: 5, Total: 10 } });
+  assert.deepEqual(marks({ Status: "downloading", Update: update, Progress: null }), [
+    "Details:done", "Downloading:current", "Verify:todo", "Install:todo", "Restart:todo",
+  ]);
+  assert.deepEqual(marks(at("verify")), ["Details:done", "Download:done", "Verifying:current", "Install:todo", "Restart:todo"]);
+  assert.deepEqual(marks(at("install")), ["Details:done", "Download:done", "Verify:done", "Installing:current", "Restart:todo"]);
+  assert.equal(updatePanelSteps(at("install")).current, "install");
+});
+
+test("an installed update waiting for a restart is at Restart, with every earlier step ticked", () => {
+  const state = { Status: "restart-pending", Update: update };
+  assert.equal(updatePanelSteps(state).current, "restart");
+  assert.deepEqual(marks(state), ["Details:done", "Download:done", "Verify:done", "Install:done", "Restart:current"]);
+});
+
+test("a failed install stops the steps, in red with its plain label, at the step it failed at", () => {
+  const failedAt = (Kind, Step) => ({ Status: "failed", Update: update, Failure: { Kind, Step, Reason: "r" } });
+  assert.deepEqual(marks(failedAt("network", "download")), [
+    "Details:done", "Download:failed", "Verify:todo", "Install:todo", "Restart:todo",
+  ]);
+  assert.deepEqual(marks(failedAt("signature", "verify")), [
+    "Details:done", "Download:done", "Verify:failed", "Install:todo", "Restart:todo",
+  ]);
+  assert.deepEqual(marks(failedAt("install", "install")), [
+    "Details:done", "Download:done", "Verify:done", "Install:failed", "Restart:todo",
+  ]);
+  const signature = updatePanelSteps(failedAt("signature", "verify"));
+  assert.equal(signature.current, "verify");
+  assert.equal(signature.failed, true);
+});
+
+test("a Marasi that can't replace itself stops at Install, with Download and Verify skipped", () => {
+  const skipped = ["Details:done", "Download:skipped", "Verify:skipped", "Install:failed", "Restart:todo"];
+  // Found before Install is offered.
+  assert.deepEqual(
+    marks({ Status: "available", Update: update, CanInstall: false, CannotInstallReason: "Marasi cannot write to /Applications" }),
+    skipped,
+  );
+  // Found when the install started.
+  assert.deepEqual(
+    marks({ Status: "failed", Update: update, Failure: { Kind: "permissions", Step: "install", Reason: "r" } }),
+    skipped,
+  );
+});
+
+test("the panel shows no failure while an update is available, installing or installed", () => {
+  for (const Status of ["available", "downloading", "restart-pending"]) {
+    assert.equal(updatePanelFailure({ Status, Update: update, CanInstall: true }), null, Status);
+  }
+});
+
+test("a failed install says what failed and offers Try again", () => {
+  const failure = { Kind: "network", Step: "download", Reason: "connection reset" };
+  assert.deepEqual(updatePanelFailure({ Status: "failed", Update: update, Failure: failure }), {
+    message: "Download failed: connection reset",
+    retry: true,
+  });
+});
+
+test("a Marasi that can't replace itself says why, without Try again", () => {
+  assert.deepEqual(
+    updatePanelFailure({ Status: "available", Update: update, CanInstall: false, CannotInstallReason: "Move Marasi to Applications to enable updates" }),
+    { message: "Move Marasi to Applications to enable updates", retry: false },
+  );
+  assert.deepEqual(
+    updatePanelFailure({
+      Status: "failed",
+      Update: update,
+      Failure: { Kind: "permissions", Step: "install", Reason: "Marasi cannot write to /opt, where it is installed" },
+    }),
+    { message: "Marasi cannot write to /opt, where it is installed", retry: false },
+  );
+});
+
+test("a check that finds no update leaves none, so the panel closes", () => {
+  const available = { Status: "available", Update: update, Failure: null };
+  const after = withCheckResult(available, { Outcome: "none", Channel: "release" });
+  assert.equal(after.Status, "idle");
+  assert.equal(after.Update, null);
+  assert.equal(showsUpdateIndicator(after), false);
+});
+
+test("a check never forgets an update downloading or waiting for a restart", () => {
+  for (const Status of ["downloading", "restart-pending"]) {
+    const state = { Status, Update: update };
+    assert.equal(withCheckResult(state, { Outcome: "none" }), state, Status);
+  }
+});
+
+test("a check that fails keeps the known update", () => {
+  const available = { Status: "available", Update: update };
+  assert.equal(withCheckResult(available, { Outcome: "failed", Reason: "offline" }), available);
+});
+
+test("a check that finds an update records it", () => {
+  const next = { Version: "18.10.2026" };
+  const after = withCheckResult({ Status: "idle", Update: null }, { Outcome: "available", Update: next });
+  assert.equal(after.Status, "available");
+  assert.equal(after.Update, next);
+});
+
+test("the Download step shows the amount downloaded in megabytes, of the size when it is known", () => {
+  assert.equal(downloadedAmount({ Step: "download", Received: 12_582_912, Total: 30_932_992 }), "12.0 of 29.5 MB");
+  assert.equal(downloadedAmount({ Step: "download", Received: 1_572_864, Total: 0 }), "1.5 MB");
+  assert.equal(downloadedAmount(null), "0.0 MB");
+});
+
+test("a release with no build for this platform is not offered again", () => {
+  const failure = { Kind: "no-build", Step: "download", Reason: "this release has no build for your platform (marasi-app)" };
+  assert.deepEqual(updatePanelFailure({ Status: "failed", Update: update, Failure: failure }), {
+    message: "This release has no build for your platform",
+    retry: false,
+  });
 });

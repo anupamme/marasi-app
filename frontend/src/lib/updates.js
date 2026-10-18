@@ -93,22 +93,15 @@ export function progressPercent(progress) {
   return Math.floor((progress.Received * 100) / progress.Total);
 }
 
-/**
- * The panel's progress line for a running install (UpdateState.Progress):
- * the step it is on (Go's InstallStep: download, verify, install) and, while
- * downloading, how far. No progress yet is the download starting.
- */
-export function installProgressLabel(progress) {
-  switch (progress?.Step) {
-    case "verify":
-      return "Verifying…";
-    case "install":
-      return "Installing…";
-    default: {
-      const percent = progressPercent(progress);
-      return percent === null ? "Downloading…" : `Downloading… ${percent}%`;
-    }
+const megabyte = 1024 * 1024;
+
+/** How much of the build has downloaded, in megabytes, of its size when known. */
+export function downloadedAmount(progress) {
+  const received = ((progress?.Received ?? 0) / megabyte).toFixed(1);
+  if (!progress?.Total) {
+    return `${received} MB`;
   }
+  return `${received} of ${(progress.Total / megabyte).toFixed(1)} MB`;
 }
 
 /** Whether Cancel can stop the running install: only while it downloads. */
@@ -143,6 +136,86 @@ export function installFailureMessage(failure) {
   return `${installFailureTitle(failure)}: ${failure?.Reason || "unknown error"}`;
 }
 
+// The update panel's steps: each step's id, its label, and its label while it runs.
+const panelSteps = [
+  ["details", "Details", "Details"],
+  ["download", "Download", "Downloading"],
+  ["verify", "Verify", "Verifying"],
+  ["install", "Install", "Installing"],
+  ["restart", "Restart", "Restart"],
+];
+
+/**
+ * The update panel's steps for state: the step it is on (current), whether
+ * the install failed there, and each step's mark: done (ticked), current
+ * (outlined, with its -ing label), failed (red, with its plain label), todo
+ * (dimmed) or skipped (passed over without running).
+ */
+export function updatePanelSteps(state) {
+  let current = "details";
+  let failed = false;
+  if (cannotReplaceItself(state)) {
+    current = "install";
+    failed = true;
+  } else if (state?.Status === "downloading") {
+    current = state.Progress?.Step || "download";
+  } else if (state?.Status === "restart-pending") {
+    current = "restart";
+  } else if (state?.Status === "failed") {
+    current = state.Failure?.Step || "install";
+    failed = true;
+  }
+  // A Marasi that can't replace itself is found out before anything
+  // downloads: the steps before Install never ran.
+  const skipsToInstall = failed && cannotReplaceItself(state);
+  const index = panelSteps.findIndex(([id]) => id === current);
+  return {
+    current,
+    failed,
+    steps: panelSteps.map(([id, label, runningLabel], i) => {
+      let mark = "todo";
+      if (i === index) {
+        mark = failed ? "failed" : "current";
+      } else if (i < index) {
+        mark = skipsToInstall && i > 0 ? "skipped" : "done";
+      }
+      return { id, label: mark === "current" ? runningLabel : label, mark };
+    }),
+  };
+}
+
+/**
+ * The update panel's error box for state, or null when nothing failed:
+ * what failed (message), and whether Try again could help (retry). It
+ * cannot where Marasi can't replace itself or the release has no build for
+ * this platform.
+ */
+export function updatePanelFailure(state) {
+  if (state?.Status === "available" && state.CanInstall === false) {
+    return { message: state.CannotInstallReason || "Marasi cannot replace itself", retry: false };
+  }
+  if (state?.Status !== "failed") {
+    return null;
+  }
+  const failure = state.Failure;
+  if (failure?.Kind === "permissions") {
+    return { message: failure.Reason || "Marasi cannot replace itself", retry: false };
+  }
+  return { message: installFailureMessage(failure), retry: failure?.Kind !== "no-build" };
+}
+
+/**
+ * Whether the update cannot be installed because Marasi cannot replace
+ * itself: found before Install is offered (CanInstall), or when the install
+ * started (a permissions failure).
+ */
+function cannotReplaceItself(state) {
+  if (state?.Status === "available") {
+    return state.CanInstall === false;
+  }
+  return state?.Status === "failed" && state.Failure?.Kind === "permissions";
+}
+
 /** The status row of Settings → Updates: where the researcher stands for state. */
 export function updateStatusLine(state) {
   if (state?.Status === "unavailable") {
@@ -174,6 +247,26 @@ export function withUpdateFound(state, update) {
     return state;
   }
   return { ...state, Status: "available", Update: update, Progress: null, Failure: null };
+}
+
+/**
+ * The state after "Check for updates…" returns its UpdateCheck. Like Go, a
+ * check that finds nothing forgets the known update (so the panel closes),
+ * unless it is downloading or waiting for a restart; a failed check changes
+ * nothing.
+ */
+export function withCheckResult(state, check) {
+  switch (check?.Outcome) {
+    case "available":
+      return withUpdateFound(state, check.Update);
+    case "none":
+      if (state?.Status === "downloading" || state?.Status === "restart-pending") {
+        return state;
+      }
+      return { ...state, Status: "idle", Update: null, Progress: null, Failure: null };
+    default:
+      return state;
+  }
 }
 
 /** The state once the researcher chose Install, before any progress. */

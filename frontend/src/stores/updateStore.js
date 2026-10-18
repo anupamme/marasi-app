@@ -10,6 +10,7 @@ import {
   SetUpdateChannel,
 } from "../lib/wailsjs/go/main/App";
 import {
+  withCheckResult,
   withFailure,
   withInstallResult,
   withInstallStarted,
@@ -52,14 +53,13 @@ export function dismissUpdate() {
 }
 
 /**
- * "Check for updates…": resolves with the UpdateCheck, after recording an
- * update it found. The caller shows the toast or opens the details panel.
+ * "Check for updates…": resolves with the UpdateCheck, after recording what
+ * it found (an update, or none, which closes an open panel). The caller shows
+ * the toast or opens the details panel.
  */
 export function checkForUpdates() {
   return CheckForUpdate().then((check) => {
-    if (check.Outcome === "available") {
-      onUpdateAvailable(check.Update);
-    }
+    updateState.update((state) => withCheckResult(state, check));
     return check;
   });
 }

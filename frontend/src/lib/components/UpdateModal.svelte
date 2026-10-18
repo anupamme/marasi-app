@@ -1,14 +1,17 @@
 <script>
-	// The update details panel: the running version, the update's version and
-	// its release notes (a release) or a "changes since your build" compare
-	// link (a nightly), opened from the update indicator or by "Check for
-	// updates…" when it finds an update. From here the researcher installs the
-	// update (with progress and Cancel), then chooses Restart now or Later, or
-	// dismisses it until a newer build is published. A failed install says
-	// what failed; where Marasi cannot replace itself the panel offers only the
-	// release page. A link opens the Channel setting.
-	import { getModalStore, getToastStore, ProgressBar } from "@skeletonlabs/skeleton";
-	import { Download, ExternalLink, RotateCw, Settings, X } from "lucide-svelte";
+	// The update panel, two panes. The left pane lists the install's steps
+	// (Details, Download, Verify, Install, Restart), stopping in red where a
+	// failure stopped them, and the build facts: the running version, the
+	// update's version and its Channel, which links to the Channel setting.
+	// The right pane shows only the current step: the release notes (or a
+	// nightly's compare link) with Dismiss and Install, the download with
+	// Cancel, verifying and installing, then Restart now or Later. A failure
+	// shows what failed, the release page and, where it could help, Try again.
+	//
+	// The panel exists only for an update: it closes when the update goes
+	// away (a check that finds none, a Channel switch, Dismiss).
+	import { getModalStore, getToastStore, modeCurrent, ProgressBar } from "@skeletonlabs/skeleton";
+	import { AlertTriangle, Check, Download, ExternalLink, RotateCw, X } from "lucide-svelte";
 	import { goto } from "$app/navigation";
 	import { BrowserOpenURL } from "../wailsjs/runtime/runtime";
 	import {
@@ -21,10 +24,13 @@
 	import {
 		cancellable,
 		channelSettingPath,
-		installFailureMessage,
-		installProgressLabel,
+		downloadedAmount,
 		progressPercent,
+		showsUpdateIndicator,
+		updatePanelFailure,
+		updatePanelSteps,
 	} from "../updates.js";
+	import { primaryVariant } from "../launchpad/format.js";
 	import { toastError } from "../toasts";
 
 	export let parent;
@@ -32,26 +38,21 @@
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
 
+	// Without an update there is nothing to show.
+	$: if (!showsUpdateIndicator($updateState) && $modalStore[0]?.component === "Update") {
+		parent.onClose();
+	}
+
 	// The Channel setting lives in Settings → Updates.
 	function openChannelSetting() {
 		parent.onClose();
 		goto(channelSettingPath);
 	}
 
+	// Dismissing leaves no update, which closes the panel.
 	function dismiss() {
-		dismissUpdate()
-			.then(() => parent.onClose())
-			.catch((err) => toastError(toastStore, "Could not dismiss the update", err));
+		dismissUpdate().catch((err) => toastError(toastStore, "Could not dismiss the update", err));
 	}
-
-	$: update = $updateState.Update;
-	$: running = $updateState.Running;
-	$: status = $updateState.Status;
-	$: progress = $updateState.Progress;
-	// Verify and install have no measure of their own: their bar is indeterminate.
-	$: percent = cancellable(progress) ? progressPercent(progress) : null;
-	$: canInstall =
-		$updateState.CanInstall && (status === "available" || status === "failed");
 
 	let restartError = "";
 
@@ -62,167 +63,194 @@
 		});
 	}
 
-	$: heading =
-		status === "restart-pending"
-			? "Update installed"
-			: status === "downloading"
-				? "Installing update"
-				: update
-					? "Update available"
-					: "No update available";
+	$: update = $updateState.Update;
+	$: running = $updateState.Running;
+	$: progress = $updateState.Progress;
+	$: panel = updatePanelSteps($updateState);
+	$: failure = updatePanelFailure($updateState);
+	// Buttons as elsewhere in the app: primary as in Launchpad and the
+	// Ledger, the rest as Home's Open Project.
+	$: primary = primaryVariant($modeCurrent);
+	$: neutral = $modeCurrent ? "variant-ghost border-0 ring-0" : "variant-filled";
+
+	const headings = {
+		details: "What's new",
+		download: "Downloading",
+		verify: "Verifying",
+		install: "Installing",
+		restart: "Ready to restart",
+	};
 </script>
 
-{#if $modalStore[0]}
+{#if $modalStore[0] && update}
 	<div
-		class="card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token"
+		class="card w-modal-wide shadow-xl bg-surface-50-800-token text-surface-900-50-token flex overflow-hidden"
+		style="min-height: 24rem"
 	>
-		<header class="flex items-center justify-between">
-			<h2 class="h3">{heading}</h2>
-			<button
-				type="button"
-				class="btn-icon btn-icon-sm"
-				aria-label="Close"
-				on:click={parent.onClose}
-			>
-				<X size={16} />
-			</button>
-		</header>
-
-		<dl class="grid grid-cols-[auto_1fr] gap-x-4 gap-y-1 text-sm">
-			<dt class="opacity-70">Running</dt>
-			<dd class="font-mono">{running?.Version ?? "unknown"}</dd>
-			{#if update}
-				<dt class="opacity-70">Update</dt>
-				<dd class="font-mono">{update.Version}</dd>
-				<dt class="opacity-70">Channel</dt>
-				<dd class="capitalize">{update.Channel}</dd>
-			{/if}
-		</dl>
-		<button
-			type="button"
-			class="anchor text-sm inline-flex items-center gap-1"
-			on:click={openChannelSetting}
-		>
-			<Settings size={14} />
-			<span>Channel setting</span>
-		</button>
-
-		{#if status === "downloading"}
-			<section class="space-y-2" aria-live="polite">
-				<ProgressBar
-					value={percent ?? undefined}
-					max={100}
-					height="h-2"
-				/>
-				<p class="text-sm opacity-70">{installProgressLabel(progress)}</p>
-			</section>
-		{:else if status === "restart-pending"}
-			<p class="text-sm">
-				Marasi {update?.Version} is installed. Restart now to run it, or
-				later: the next launch runs it either way.
-			</p>
-			{#if restartError}
-				<p class="text-sm text-error-500">{restartError}</p>
-			{/if}
-		{:else if update}
-			{#if status === "failed" && $updateState.Failure}
-				<aside class="alert variant-soft-error text-sm" role="alert">
-					<p>
-						{installFailureMessage($updateState.Failure)}. Your installed
-						Marasi was left as it was; you can install the update by hand
-						from the release page.
-					</p>
-				</aside>
-			{/if}
-			{#if !$updateState.CanInstall}
-				<aside class="alert variant-soft-warning text-sm">
-					<p>
-						{$updateState.CannotInstallReason}. Install the update from
-						the release page.
-					</p>
-				</aside>
-			{/if}
-			{#if update.CompareURL}
-				<section class="space-y-2">
-					<h3 class="h5">Changes since your build</h3>
+		<aside class="w-72 shrink-0 border-r border-surface-300 dark:border-surface-600 p-5 flex flex-col">
+			<h2 class="h4">Update</h2>
+			<ol class="mt-5" aria-label="Update steps">
+				{#each panel.steps as step, i (step.id)}
+					<li
+						class="relative flex gap-3 pb-5 last:pb-0"
+						aria-current={step.mark === "current" || step.mark === "failed" ? "step" : undefined}
+					>
+						{#if i < panel.steps.length - 1}
+							<span
+								class="absolute left-[9px] top-5 h-full w-px {step.mark === 'done'
+									? 'bg-primary-500'
+									: 'bg-surface-300 dark:bg-surface-600'}"
+							></span>
+						{/if}
+						<span
+							class="relative z-10 flex h-5 w-5 shrink-0 items-center justify-center rounded-full text-[10px] font-bold
+							{step.mark === 'failed'
+								? 'bg-error-500 text-white'
+								: step.mark === 'done'
+									? 'bg-primary-500 text-white'
+									: step.mark === 'current'
+										? 'ring-2 ring-primary-500 bg-surface-50 dark:bg-surface-800'
+										: 'bg-surface-300 dark:bg-surface-600'}"
+						>
+							{#if step.mark === "failed"}!{:else if step.mark === "done"}<Check size={12} />{/if}
+						</span>
+						<p
+							class="text-sm leading-5 {step.mark === 'failed'
+								? 'font-semibold text-error-600 dark:text-error-400'
+								: step.mark === 'current'
+									? 'font-semibold'
+									: step.mark === 'done'
+										? ''
+										: 'opacity-60'}"
+						>
+							{step.label}
+						</p>
+					</li>
+				{/each}
+			</ol>
+			<dl class="mt-auto grid grid-cols-[auto_1fr] gap-x-3 gap-y-1 pt-6 text-xs">
+				<dt class="opacity-60">Running</dt>
+				<dd class="font-mono break-words">{running?.Version ?? "unknown"}</dd>
+				<dt class="opacity-60">Update</dt>
+				<dd class="font-mono break-words">{update.Version}</dd>
+				<dt class="opacity-60">Channel</dt>
+				<dd>
 					<button
 						type="button"
-						class="anchor text-sm inline-flex items-center gap-1"
-						on:click={() => BrowserOpenURL(update.CompareURL)}
+						class="anchor capitalize"
+						title="Channel setting"
+						on:click={openChannelSetting}>{update.Channel}</button
 					>
-						<span>Compare your build with this nightly on GitHub</span>
-						<ExternalLink size={14} />
-					</button>
-				</section>
-			{:else}
-				<section class="space-y-2">
-					<h3 class="h5">Release notes</h3>
-					{#if update.Notes}
+				</dd>
+			</dl>
+		</aside>
+
+		<section class="flex min-w-0 flex-1 flex-col p-5">
+			<header class="flex items-center justify-between">
+				<h3 class="h5">{failure ? "Failed" : headings[panel.current]}</h3>
+				<button
+					type="button"
+					class="btn-icon btn-icon-sm"
+					aria-label="Close"
+					on:click={parent.onClose}
+				>
+					<X size={16} />
+				</button>
+			</header>
+
+			<div class="mt-3 flex-1 overflow-y-auto text-sm" aria-live="polite">
+				{#if failure}
+					<aside class="alert variant-soft-error" role="alert">
+						<AlertTriangle size={18} />
+						<p>{failure.message}. Your installed Marasi is unchanged.</p>
+					</aside>
+				{:else if panel.current === "details"}
+					{#if update.CompareURL}
+						<button
+							type="button"
+							class="anchor inline-flex items-center gap-1"
+							on:click={() => BrowserOpenURL(update.CompareURL)}
+						>
+							<span>Changes since your build</span>
+							<ExternalLink size={14} />
+						</button>
+					{:else if update.Notes}
 						<pre
-							class="whitespace-pre-wrap break-words text-sm p-3 rounded-container-token bg-surface-100-800-token max-h-80 overflow-auto font-sans">{update.Notes}</pre>
+							class="whitespace-pre-wrap break-words font-sans">{update.Notes}</pre>
 					{:else}
-						<p class="text-sm opacity-70">This release has no notes.</p>
+						<p class="opacity-60">No release notes.</p>
 					{/if}
-				</section>
-			{/if}
-		{/if}
-
-		<footer class="flex justify-end gap-2">
-			{#if update?.ReleasePage}
-				<button
-					type="button"
-					class="btn variant-ghost-surface btn-sm"
-					on:click={() => BrowserOpenURL(update.ReleasePage)}
-				>
-					<ExternalLink size={14} />
-					<span>Release page</span>
-				</button>
-			{/if}
-			{#if status === "downloading" && cancellable(progress)}
-				<button
-					type="button"
-					class="btn variant-ghost-surface btn-sm"
-					on:click={cancelUpdateDownload}>Cancel</button
-				>
-			{:else if status === "restart-pending"}
-				<button
-					type="button"
-					class="btn variant-ghost-surface btn-sm"
-					on:click={parent.onClose}>Later</button
-				>
-				<button
-					type="button"
-					class="btn variant-filled-primary btn-sm"
-					on:click={restart}
-				>
-					<RotateCw size={14} />
-					<span>Restart now</span>
-				</button>
-			{:else}
-				{#if update}
-					<button
-						type="button"
-						class="btn variant-ghost-surface btn-sm"
-						title="Hide this update until a newer build is published"
-						on:click={dismiss}>Dismiss</button
-					>
+				{:else if panel.current === "download"}
+					<div class="flex h-full flex-col justify-center gap-3">
+						<p class="text-3xl font-bold font-mono">{progressPercent(progress) ?? 0}%</p>
+						<ProgressBar
+							value={progressPercent(progress) ?? undefined}
+							max={100}
+							height="h-2"
+							meter="bg-primary-500"
+						/>
+						<p class="opacity-60 font-mono text-xs">{downloadedAmount(progress)}</p>
+					</div>
+				{:else if panel.current === "verify"}
+					<div class="flex h-full flex-col justify-center gap-3">
+						<p>Checking the signature and checksum.</p>
+						<ProgressBar height="h-2" meter="bg-primary-500" />
+					</div>
+				{:else if panel.current === "install"}
+					<div class="flex h-full flex-col justify-center gap-3">
+						<p>Replacing Marasi.</p>
+						<ProgressBar height="h-2" meter="bg-primary-500" />
+					</div>
+				{:else}
+					<div class="flex h-full flex-col justify-center gap-1">
+						<p class="font-mono text-lg break-words">{update.Version}</p>
+						<p class="opacity-70">Installed. Runs on next launch.</p>
+						{#if restartError}
+							<p class="text-error-500">{restartError}</p>
+						{/if}
+					</div>
 				{/if}
-				{#if canInstall}
-					<button
-						type="button"
-						class="btn variant-filled-primary btn-sm"
-						on:click={installUpdate}
-					>
+			</div>
+
+			<footer class="mt-4 flex justify-end gap-2">
+				{#if failure}
+					<button type="button" class="btn btn-sm {neutral}" on:click={dismiss}>Dismiss</button>
+					{#if update.ReleasePage}
+						<button
+							type="button"
+							class="btn btn-sm {neutral}"
+							on:click={() => BrowserOpenURL(update.ReleasePage)}
+						>
+							<ExternalLink size={14} />
+							<span>Release page</span>
+						</button>
+					{/if}
+					{#if failure.retry}
+						<button type="button" class="btn btn-sm {primary}" on:click={installUpdate}>
+							<Download size={14} />
+							<span>Try again</span>
+						</button>
+					{/if}
+				{:else if $updateState.Status === "downloading"}
+					{#if cancellable(progress)}
+						<button type="button" class="btn btn-sm {neutral}" on:click={cancelUpdateDownload}
+							>Cancel</button
+						>
+					{/if}
+				{:else if $updateState.Status === "restart-pending"}
+					<button type="button" class="btn btn-sm {neutral}" on:click={parent.onClose}>Later</button>
+					<button type="button" class="btn btn-sm {primary}" on:click={restart}>
+						<RotateCw size={14} />
+						<span>Restart now</span>
+					</button>
+				{:else}
+					<button type="button" class="btn btn-sm {neutral}" on:click={dismiss}>Dismiss</button>
+					<button type="button" class="btn btn-sm {primary}" on:click={installUpdate}>
 						<Download size={14} />
-						<span>{status === "failed" ? "Try again" : "Install"}</span>
+						<span>Install</span>
 					</button>
 				{/if}
-				<button
-					type="button"
-					class="btn variant-filled btn-sm"
-					on:click={parent.onClose}>Close</button
-				>
-			{/if}
-		</footer>
+			</footer>
+		</section>
 	</div>
 {/if}

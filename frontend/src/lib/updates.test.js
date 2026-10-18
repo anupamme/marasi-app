@@ -293,11 +293,31 @@ test("a Marasi that can't replace itself stops at Install, with Download and Ver
     marks({ Status: "available", Update: update, CanInstall: false, CannotInstallReason: "Marasi cannot write to /Applications" }),
     skipped,
   );
-  // Found when the install started.
+  // Found when the install started, before anything downloaded.
   assert.deepEqual(
-    marks({ Status: "failed", Update: update, Failure: { Kind: "permissions", Step: "install", Reason: "r" } }),
+    marks({ Status: "failed", Update: update, Failure: { Kind: "permissions", Step: "install", Reason: "r", BeforeDownload: true } }),
     skipped,
   );
+});
+
+test("a build without a signing key stops at Verify, with Download skipped", () => {
+  assert.deepEqual(
+    marks({ Status: "failed", Update: update, Failure: { Kind: "signature", Step: "verify", Reason: "r", BeforeDownload: true } }),
+    ["Details:done", "Download:skipped", "Verify:failed", "Install:todo", "Restart:todo"],
+  );
+});
+
+test("a permission error after the download stops at Install, with Download and Verify ticked", () => {
+  const state = {
+    Status: "failed",
+    Update: update,
+    Failure: { Kind: "permissions", Step: "install", Reason: "could not replace Marasi: permission denied" },
+  };
+  assert.deepEqual(marks(state), ["Details:done", "Download:done", "Verify:done", "Install:failed", "Restart:todo"]);
+  assert.deepEqual(updatePanelFailure(state), {
+    message: "Marasi cannot replace itself: could not replace Marasi: permission denied",
+    retry: true,
+  });
 });
 
 test("the panel shows no failure while an update is available, installing or installed", () => {
@@ -323,9 +343,17 @@ test("a Marasi that can't replace itself says why, without Try again", () => {
     updatePanelFailure({
       Status: "failed",
       Update: update,
-      Failure: { Kind: "permissions", Step: "install", Reason: "Marasi cannot write to /opt, where it is installed" },
+      Failure: { Kind: "permissions", Step: "install", Reason: "Marasi cannot write to /opt, where it is installed", BeforeDownload: true },
     }),
     { message: "Marasi cannot write to /opt, where it is installed", retry: false },
+  );
+  assert.deepEqual(
+    updatePanelFailure({
+      Status: "failed",
+      Update: update,
+      Failure: { Kind: "signature", Step: "verify", Reason: "this build has no Marasi signing key", BeforeDownload: true },
+    }),
+    { message: "this build has no Marasi signing key", retry: false },
   );
 });
 

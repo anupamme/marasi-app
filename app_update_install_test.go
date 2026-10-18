@@ -332,6 +332,7 @@ func TestUnwritableInstallLocationOffersOnlyTheReleasePage(t *testing.T) {
 		t.Fatalf("installing: %v", err)
 	}
 	assertFailed(t, app, events, result, UpdateFailurePermissions, InstallStepInstall, "cannot write to "+dir)
+	assertFoundBeforeDownloading(t, result)
 	if releases.requestCount() != requests {
 		t.Fatalf("wanted nothing downloaded, got %v", releases.requested())
 	}
@@ -367,6 +368,7 @@ func TestBuildWithoutASigningKeyCannotInstall(t *testing.T) {
 		t.Fatalf("installing: %v", err)
 	}
 	assertFailed(t, app, events, result, UpdateFailureSignature, InstallStepVerify, "no Marasi signing key")
+	assertFoundBeforeDownloading(t, result)
 }
 
 func TestInstallWithoutAnUpdateIsRefused(t *testing.T) {
@@ -649,6 +651,42 @@ func TestAPlatformThatCannotReplaceItselfStopsAtTheInstallStepWithoutDownloading
 	}
 	if progressEvents(events) != nil {
 		t.Fatalf("wanted no step reported before the failure, got %+v", progressEvents(events))
+	}
+	assertFoundBeforeDownloading(t, result)
+}
+
+// assertFoundBeforeDownloading fails unless the failed install says it was
+// stopped by the check before anything downloads, so trying again won't help.
+func assertFoundBeforeDownloading(t *testing.T, result UpdateInstall) {
+	t.Helper()
+	if !result.Failure.BeforeDownload {
+		t.Fatalf("wanted the failure marked as found before anything downloaded, got %+v", result.Failure)
+	}
+}
+
+// lockedOutInstaller is the Linux installer with a swap refused for lack of
+// rights, as when the install directory turns read-only during the download.
+type lockedOutInstaller struct{ binaryInstaller }
+
+func (lockedOutInstaller) swap(staged, location string) error {
+	return fmt.Errorf("renaming %s: %w", staged, os.ErrPermission)
+}
+
+func TestAPermissionErrorAfterTheDownloadStopsAtTheInstallStepAfterDownloading(t *testing.T) {
+	releases := newFakeReleaseServer(t)
+	keys := newSigningKeys(t)
+	publishSignedRelease(releases, keys, "17.10.2026", updateBinary)
+	app, events := newInstallApp(t, releases, keys)
+	app.installer = lockedOutInstaller{binaryInstaller{assetName: "marasi-app"}}
+
+	result, err := app.InstallUpdate()
+
+	if err != nil {
+		t.Fatalf("installing: %v", err)
+	}
+	assertFailed(t, app, events, result, UpdateFailurePermissions, InstallStepInstall, "could not replace Marasi")
+	if result.Failure.BeforeDownload {
+		t.Fatalf("wanted a failure after the download not marked as found before it, got %+v", result.Failure)
 	}
 }
 

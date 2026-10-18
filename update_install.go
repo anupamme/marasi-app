@@ -162,6 +162,11 @@ type UpdateFailure struct {
 	Reason string
 	// ReleasePage is where the build can be installed by hand.
 	ReleasePage string
+	// BeforeDownload: the check that this build can install updates at all
+	// (a signing key, a platform installer, a writable install location)
+	// stopped the install before anything downloaded, as CanInstall reports
+	// in UpdateState. Trying again cannot help until that changes.
+	BeforeDownload bool
 }
 
 // UpdateProgress is the step a running install is on and how far the
@@ -185,10 +190,13 @@ type UpdateInstall struct {
 
 // installError is a failed install step and its kind. step, when set, is
 // the step the failure is reported at instead of the running one.
+// beforeDownload marks a failure of the check that this build can install
+// updates (App.replaceable).
 type installError struct {
-	kind UpdateFailureKind
-	step InstallStep
-	err  error
+	kind           UpdateFailureKind
+	step           InstallStep
+	beforeDownload bool
+	err            error
 }
 
 func (e *installError) Error() string { return e.err.Error() }
@@ -342,6 +350,7 @@ func (a *App) finishInstall(ctx context.Context, update *Update, err error) Upda
 		var stepErr *installError
 		if errors.As(err, &stepErr) {
 			result.Failure.Kind = stepErr.kind
+			result.Failure.BeforeDownload = stepErr.beforeDownload
 			if step, ok := failureSteps[stepErr.kind]; ok {
 				result.Failure.Step = step
 			}
@@ -440,7 +449,7 @@ func (a *App) install(ctx context.Context, update *Update) error {
 func (a *App) replaceable() (platformInstaller, string, error) {
 	switch {
 	case a.signingKey == nil:
-		return nil, "", failed(UpdateFailureSignature, "this build has no Marasi signing key to verify updates with")
+		return nil, "", atInstallStep(failed(UpdateFailureSignature, "this build has no Marasi signing key to verify updates with"))
 	case a.installer == nil:
 		return nil, "", atInstallStep(failed(UpdateFailurePermissions, "Marasi cannot replace itself on this platform"))
 	case a.installLocation == "":
@@ -459,6 +468,7 @@ func (a *App) replaceable() (platformInstaller, string, error) {
 func atInstallStep(err error) error {
 	var stepErr *installError
 	if errors.As(err, &stepErr) {
+		stepErr.beforeDownload = true
 		if _, ok := failureSteps[stepErr.kind]; !ok {
 			stepErr.step = InstallStepInstall
 		}

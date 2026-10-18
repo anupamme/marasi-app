@@ -217,7 +217,7 @@ const panelSteps = [
 export function updatePanelSteps(state) {
   let current = "details";
   let failed = false;
-  if (cannotReplaceItself(state)) {
+  if (state?.Status === "available" && state.CanInstall === false) {
     current = "install";
     failed = true;
   } else if (state?.Status === "downloading") {
@@ -228,9 +228,9 @@ export function updatePanelSteps(state) {
     current = state.Failure?.Step || "install";
     failed = true;
   }
-  // A Marasi that can't replace itself is found out before anything
-  // downloads: the steps before Install never ran.
-  const skipsToInstall = failed && cannotReplaceItself(state);
+  // A build that can't install updates is found out before anything
+  // downloads: the steps before the one it stopped at never ran.
+  const skipped = cannotInstall(state);
   const index = panelSteps.findIndex(([id]) => id === current);
   return {
     current,
@@ -240,7 +240,7 @@ export function updatePanelSteps(state) {
       if (i === index) {
         mark = failed ? "failed" : "current";
       } else if (i < index) {
-        mark = skipsToInstall && i > 0 ? "skipped" : "done";
+        mark = skipped && i > 0 ? "skipped" : "done";
       }
       return { id, label: mark === "current" ? runningLabel : label, mark };
     }),
@@ -250,8 +250,8 @@ export function updatePanelSteps(state) {
 /**
  * The update panel's error box for state, or null when nothing failed:
  * what failed (message), and whether Try again could help (retry). It
- * cannot where Marasi can't replace itself or the release has no build for
- * this platform.
+ * cannot where this build can't install updates at all or the release has
+ * no build for this platform.
  */
 export function updatePanelFailure(state) {
   if (state?.Status === "available" && state.CanInstall === false) {
@@ -261,22 +261,23 @@ export function updatePanelFailure(state) {
     return null;
   }
   const failure = state.Failure;
-  if (failure?.Kind === "permissions") {
-    return { message: failure.Reason || "Marasi cannot replace itself", retry: false };
+  if (failure?.BeforeDownload) {
+    return { message: failure.Reason || installFailureTitle(failure), retry: false };
   }
   return { message: installFailureMessage(failure), retry: failure?.Kind !== "no-build" };
 }
 
 /**
- * Whether the update cannot be installed because Marasi cannot replace
- * itself: found before Install is offered (CanInstall), or when the install
- * started (a permissions failure).
+ * Whether this build can't install updates at all (no signing key, no
+ * installer for the platform, an install location it cannot write to):
+ * found before Install is offered (CanInstall), or by the same check when
+ * the install started, before anything downloaded (BeforeDownload).
  */
-function cannotReplaceItself(state) {
+function cannotInstall(state) {
   if (state?.Status === "available") {
     return state.CanInstall === false;
   }
-  return state?.Status === "failed" && state.Failure?.Kind === "permissions";
+  return state?.Status === "failed" && Boolean(state.Failure?.BeforeDownload);
 }
 
 /** The status row of Settings → Updates: where the researcher stands for state. */

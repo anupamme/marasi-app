@@ -6,6 +6,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/tfkr-ae/marasi/domain"
 )
 
 // filledLaunchpad creates a launchpad called name holding one new pair per
@@ -135,5 +136,16 @@ func TestMoveLaunchpadEntriesMovesToTheEndOfAnotherLaunchpad(t *testing.T) {
 	}
 	if got := launchpadPairIDs(app, source); !slices.Equal(got, []uuid.UUID{p[1]}) {
 		t.Fatalf("wanted only b left in the source, got %v", got)
+	}
+}
+
+func TestDeleteLaunchpadRefusesWhileALaunchFromItIsPending(t *testing.T) {
+	app, launchpad, launch := pendingLaunch(t)
+
+	err := app.DeleteLaunchpad(launchpad)
+
+	wantLaunchPending(t, err, launch)
+	if !slices.ContainsFunc(app.GetLaunchpads(), func(l *domain.Launchpad) bool { return l.ID == launchpad }) {
+		t.Fatal("wanted the launchpad kept")
 	}
 }

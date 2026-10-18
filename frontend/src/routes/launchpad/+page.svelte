@@ -110,11 +110,14 @@
         );
     }
 
-    // A Move from the tree. Marasi's refusals (the view was stale) and
+    // A Move from the tree or the entry menu. The draft follows its entry,
+    // so a move that would replace the target's dirty draft asks first;
+    // Cancel cancels the move. Marasi's refusals (the view was stale) and
     // failures become toasts; the store has reloaded both launchpads.
-    async function moveEntries(move) {
+    async function moveEntries(move, options = {}) {
         try {
-            const result = await launchpadStore.moveEntries(move);
+            const result = await launchpadStore.moveEntries(move, options);
+            if (result.needsConfirm) return confirmMove(move);
             if (result.refused) {
                 toastStore.trigger({ message: result.refused, background: "variant-filled-warning" });
             }
@@ -124,6 +127,20 @@
             toastError(toastStore, "Failed to move the entries", err);
             return { moved: null, refused: null };
         }
+    }
+
+    // Resolves once the researcher answers, so the caller can show the moved
+    // entries; a cancelled move resolves as nothing moved.
+    function confirmMove(move) {
+        return new Promise((resolve) => {
+            modalStore.trigger({
+                type: "confirm",
+                title: "Discard the draft?",
+                body: "The target launchpad's draft has unsaved edits. The draft moving with its entry replaces them.",
+                response: (ok) =>
+                    resolve(ok ? moveEntries(move, { force: true }) : { moved: null, refused: null }),
+            });
+        });
     }
 
     // ⌘⇧↓ selects the open launchpad's last entry through the usual

@@ -479,6 +479,12 @@ export function createLaunchpadStore(api) {
     if (version !== projectStateVersion) return;
     // A draft survives launchpad switches; only a missing one is seeded.
     if (current.draftsByLaunchpad[launchpadId]) return;
+    await seedFromLast(launchpadId, entries);
+  }
+
+  // Seeds the launchpad's draft from its last entry, or a blank one when it
+  // has none.
+  async function seedFromLast(launchpadId, entries) {
     if (entries.length > 0) {
       await seedDraft(launchpadId, entries[entries.length - 1].ID);
       return;
@@ -594,15 +600,45 @@ export function createLaunchpadStore(api) {
     return { found: true, entryId, needsConfirm };
   }
 
+  // The draft follows its entry: the source's draft, dirty or not, replaces
+  // the target's, and the source starts a fresh one from what it has left.
+  // The workspace follows the draft: an open source opens the target.
+  async function carryDraft(sourceId, targetId) {
+    if (current.selectedLaunchpadId === sourceId) openLaunchpad(targetId);
+    update((state) => {
+      const draft = state.draftsByLaunchpad[sourceId];
+      return {
+        ...state,
+        selectedEntryByLaunchpad: {
+          ...without(state.selectedEntryByLaunchpad, sourceId),
+          [targetId]: draft.seededFrom,
+        },
+        draftsByLaunchpad: {
+          ...without(state.draftsByLaunchpad, sourceId),
+          [targetId]: draft,
+        },
+      };
+    });
+    await seedFromLast(sourceId, current.entriesByLaunchpad[sourceId] || []);
+  }
+
   // Move: takes `ids` (in entry order) out of `sourceId` and puts them
   // before `before` in `targetId`, at the end when `before` is null; the
   // target may be the source. Marasi moves all or none. Both launchpads are
   // reloaded either way, and after a move the Entry selection is the moved
   // entries. Returns { moved, refused }: the moved ids in entry order, or
   // why Marasi refused (its view was stale). Other failures throw.
-  async function moveEntries({ sourceId, targetId, ids, before = null }) {
+  // The draft follows its entry (carryDraft). When that would replace a
+  // dirty target draft, it returns { needsConfirm: true } without moving
+  // unless `force` is set.
+  async function moveEntries({ sourceId, targetId, ids, before = null }, { force = false } = {}) {
     if (sourceId === targetId && leavesOrder(entryIdsOf(current, sourceId), ids, before)) {
       return { moved: ids, refused: null };
+    }
+    const draft = current.draftsByLaunchpad[sourceId];
+    const followsDraft = sourceId !== targetId && Boolean(draft?.seededFrom) && ids.includes(draft.seededFrom);
+    if (followsDraft && !force && isDraftDirty(current, targetId)) {
+      return { moved: null, refused: null, needsConfirm: true };
     }
     const version = projectStateVersion;
     const reload = () =>
@@ -619,6 +655,8 @@ export function createLaunchpadStore(api) {
     }
     if (version !== projectStateVersion) return { moved, refused: null };
     await reload();
+    if (version !== projectStateVersion) return { moved, refused: null };
+    if (followsDraft) await carryDraft(sourceId, targetId);
     updateEntrySelection((selection) => ({
       launchpadId: targetId,
       ids: moved,

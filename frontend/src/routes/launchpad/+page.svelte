@@ -56,6 +56,7 @@
         toastLaunchingRefusal,
         warnLaunching,
     } from "../../lib/launchPending.js";
+    import { UNTITLED_LAUNCHPAD } from "../../lib/launchpad/format.js";
     import { toastError } from "../../lib/toasts.js";
 
     const modalStore = getModalStore();
@@ -201,7 +202,7 @@
     }
 
     async function removeEntries(launchpadId, ids) {
-        const name = get(launchpadStore).launchpads.find((l) => l.ID === launchpadId)?.Name || "Untitled launchpad";
+        const name = get(launchpadStore).launchpads.find((l) => l.ID === launchpadId)?.Name || UNTITLED_LAUNCHPAD;
         try {
             const count = await launchpadStore.removeEntries(launchpadId, ids);
             toastStore.trigger({

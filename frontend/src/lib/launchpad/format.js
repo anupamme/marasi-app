@@ -1,5 +1,8 @@
 // Display helpers for the Launchpad page.
 
+/** What a launchpad without a name is called, here and in the Ledger. */
+export const UNTITLED_LAUNCHPAD = "Untitled launchpad";
+
 /** Marasi's primary variant: ghost in light mode, filled in dark. */
 export const primaryVariant = (lightMode) =>
   lightMode ? "variant-ghost-primary ring-0 shadow-none" : "variant-filled-primary";

@@ -20,6 +20,7 @@ import { shortType } from "./table.js";
 import { effectivePalette } from "./highlights.js";
 import { LAUNCHPADS_EACH_MAX } from "./pairs.js";
 import { launchingIds, unlessLaunching } from "../launchPending.js";
+import { UNTITLED_LAUNCHPAD } from "../launchpad/format.js";
 
 const unique = (values) => [...new Set(values)];
 
@@ -341,7 +342,7 @@ export function menuFor(
           hint: "No launchpads yet",
           sub: launchpads.map((launchpad) => ({
             id: `lp-${launchpad.ID}`,
-            label: launchpad.Name || "Untitled launchpad",
+            label: launchpad.Name || UNTITLED_LAUNCHPAD,
             action: { type: "add-to-launchpad", id: launchpad.ID, name: launchpad.Name },
           })),
         },
@@ -355,7 +356,7 @@ export function menuFor(
                 icon: "unlink",
                 sub: launchpads.map((launchpad) => ({
                   id: `lpu-${launchpad.ID}`,
-                  label: launchpad.Name || "Untitled launchpad",
+                  label: launchpad.Name || UNTITLED_LAUNCHPAD,
                   ...unlessLaunching(launching(launchpad.ID)),
                   action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
                 })),

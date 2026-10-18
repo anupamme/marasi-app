@@ -80,7 +80,7 @@
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { positionLabel, rowHighlight } from "../../lib/ledger/table.js";
 	import { launchpadStore } from "../../stores/launchpadStore";
-	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import { primaryVariant, UNTITLED_LAUNCHPAD } from "../../lib/launchpad/format.js";
 	import { highlightMigrating, highlightPalette, renameHighlight } from "../../stores/highlightsStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
@@ -410,9 +410,9 @@
 		try {
 			const count = await ledgerStore.removeFromLaunchpad(target.selection, launchpadId);
 			refreshLaunchpads();
-			if (!count) return unchanged(target, { type: "remove-from-launchpad", name: name || "Untitled launchpad" });
+			if (!count) return unchanged(target, { type: "remove-from-launchpad", name: name || UNTITLED_LAUNCHPAD });
 			toastStore.trigger({
-				message: `Removed ${requestCount(count)} from "${name || "Untitled launchpad"}"`,
+				message: `Removed ${requestCount(count)} from "${name || UNTITLED_LAUNCHPAD}"`,
 				background: handoffBackground,
 			});
 		} catch (error) {

@@ -9,6 +9,7 @@
 //   { type: "reorder", before }        within the launchpad; before null is the end
 //   { type: "remove" }                 unlink from the launchpad
 import { unlessLaunching } from "../launchPending.js";
+import { UNTITLED_LAUNCHPAD } from "./format.js";
 import { moveRefusal } from "./entryMove.js";
 
 const entriesLabel = (n) => (n === 1 ? "" : ` ${n.toLocaleString()}`);
@@ -64,7 +65,7 @@ export function entryMenuFor({
   const targets = launchpads
     .filter((launchpad) => launchpad.ID !== launchpadId)
     .map((launchpad) => {
-      const name = launchpad.Name || "Untitled launchpad";
+      const name = launchpad.Name || UNTITLED_LAUNCHPAD;
       const refused = moveRefusal({
         sourceId: launchpadId,
         ids: picked,

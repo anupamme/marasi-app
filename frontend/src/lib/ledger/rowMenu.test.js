@@ -317,6 +317,35 @@ test("Delete from project comes last and names the count", () => {
   assert.equal(item(menuFor([pair("a"), pair("b")], context()), "delete").label, "Delete 2 from project…");
 });
 
+// The launchpad store's pending launches: each launch's ID is its pair's.
+const launching = (...launches) => ({
+  pendingLaunches: launches.map(([id, launchpadId]) => ({ ID: id, LaunchpadID: launchpadId, Status: "pending" })),
+});
+
+test("Delete is greyed with the count when the selection holds pairs still launching", () => {
+  const menu = menuFor([pair("a"), pair("b"), pair("c")], context(launching(["a", "L1"], ["c", "L2"], ["z", "L1"])));
+  assert.equal(item(menu, "delete").disabled, true);
+  assert.equal(item(menu, "delete").hint, "2 launching");
+  assert.ok(!item(menuFor([pair("b")], context(launching(["a", "L1"]))), "delete").disabled);
+});
+
+test("a ⌘A selection's Delete stays enabled: Marasi says which pairs are launching", () => {
+  const menu = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200, ...launching(["a", "L1"]) }));
+  assert.ok(!item(menu, "delete").disabled);
+  assert.ok(!item(menu, "lpu-L1").disabled);
+});
+
+test("Remove from a launchpad is greyed for the pairs launched from it, not from others", () => {
+  const launchpads = [
+    { ID: "L1", Name: "Login" },
+    { ID: "L2", Name: "Signup" },
+  ];
+  const menu = menuFor([pair("a"), pair("b")], context({ launchpads, ...launching(["a", "L1"], ["b", "L1"]) }));
+  assert.equal(item(menu, "lpu-L1").disabled, true);
+  assert.equal(item(menu, "lpu-L1").hint, "2 launching");
+  assert.ok(!item(menu, "lpu-L2").disabled, "a pair launched from Login can leave Signup");
+});
+
 test("a ⌘A selection names its count, and actions that need each pair wait for them all", () => {
   const menu = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
   assert.equal(item(menu, "lp-new").label, "New launchpad with 1,200 entries");

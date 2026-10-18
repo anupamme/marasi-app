@@ -229,13 +229,30 @@ export function isPartialSelection(pairs, { all = false, count = null } = {}) {
   return all && !(count != null && count <= pairs.length);
 }
 
+// How many of `pairs` are still launching, from `launchpadId` when given.
+// Marasi refuses to delete such a pair or remove it from the launchpad it
+// was launched from (marasi ADR-0049).
+function launchingCount(pairs, pendingLaunches, launchpadId = null) {
+  const ids = new Set(
+    pendingLaunches
+      .filter((launch) => launchpadId == null || launch.LaunchpadID === launchpadId)
+      .map((launch) => String(launch.ID)),
+  );
+  return pairs.filter((pair) => ids.has(String(pair.ID))).length;
+}
+
+// Greys an item whose pairs include `launching` still launching.
+const unlessLaunching = (launching) => (launching ? { disabled: true, hint: `${launching} launching` } : {});
+
 /**
  * The menu for `pairs`, the selected pairs the table has loaded, in table
  * order. `context` holds what the app already knows: { launchpads,
  * findings, testCases, palette (the effective highlight
- * palette), all, count }. `all` marks a ⌘A selection, whose `count` pairs
- * (null until counted) can be more than the loaded ones; actions that need
- * each pair are disabled then.
+ * palette), pendingLaunches (the launchpad store's, each { ID, LaunchpadID }
+ * with its pair's ID), all, count }. `all` marks a ⌘A selection, whose
+ * `count` pairs (null until counted) can be more than the loaded ones;
+ * actions that need each pair are disabled then, and Delete and Remove from
+ * launchpad stay enabled for Marasi to refuse what is still launching.
  */
 export function menuFor(
   pairs,
@@ -244,6 +261,7 @@ export function menuFor(
     findings = [],
     testCases = [],
     palette = effectivePalette(),
+    pendingLaunches = [],
     all = false,
     count = null,
   } = {},
@@ -252,6 +270,7 @@ export function menuFor(
   // Some selected pairs aren't loaded: only bulk actions can reach them.
   const partial = isPartialSelection(pairs, { all, count });
   const n = partial ? count : pairs.length;
+  const launching = (launchpadId) => (partial ? 0 : launchingCount(pairs, pendingLaunches, launchpadId));
   const many = n == null ? "all" : n.toLocaleString();
   const one = n === 1 ? pairs[0] : null;
   const hosts = unique(pairs.map((pair) => pair.Host));
@@ -347,6 +366,7 @@ export function menuFor(
                 sub: launchpads.map((launchpad) => ({
                   id: `lpu-${launchpad.ID}`,
                   label: launchpad.Name || "Untitled launchpad",
+                  ...unlessLaunching(launching(launchpad.ID)),
                   action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
                 })),
               },
@@ -564,6 +584,7 @@ export function menuFor(
       label: one ? "Delete from project…" : `Delete ${many} from project…`,
       icon: "trash",
       danger: true,
+      ...unlessLaunching(launching()),
       action: { type: "delete" },
     },
   ];

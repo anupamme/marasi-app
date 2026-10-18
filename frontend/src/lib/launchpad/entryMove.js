@@ -60,8 +60,8 @@ export function moveRefusal({ sourceId, ids, target, targetName, targetIds, pend
 // Codes the Go side puts in a refused move's error (launchpad_move.go): the
 // app's view of the launchpads was stale.
 const STALE = [
-  ["already_linked", ({ targetName }) => `A pair is already in ${targetName}`],
-  ["not_linked", ({ sourceName }) => `A pair is no longer in ${sourceName}`],
+  ["already_linked", ({ targetName }) => `An entry is already in ${targetName}`],
+  ["not_linked", ({ sourceName }) => `An entry is no longer in ${sourceName}`],
   ["invalid_placement", () => "The launchpad changed"],
 ];
 
@@ -71,7 +71,7 @@ const STALE = [
  */
 export function marasiMoveRefusal(error, names) {
   const pending = pendingLaunchIDs(error);
-  if (pending) return pendingLaunchText(pending.length, "moved");
+  if (pending) return pendingLaunchText(pending.length, "moved", "entry");
   const text = String(error ?? "");
   const stale = STALE.find(([code]) => text.includes(`${code}:`));
   return stale ? `${stale[1](names)}; nothing was moved` : null;

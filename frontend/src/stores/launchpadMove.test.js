@@ -87,14 +87,14 @@ test("a pending launch Marasi refuses to move says how many, and refreshes both 
   fake.lists.lp2.push("late");
   fake.refuse = new Error("moving launchpad entries: launch_pending (b, d): a launch is pending");
   const result = await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["b", "d"] });
-  assert.deepEqual(result, { moved: null, refused: "2 pairs are still launching; nothing was moved" });
+  assert.deepEqual(result, { moved: null, refused: "2 entries are still launching; nothing was moved" });
   assert.deepEqual(idsOf(store, "lp2"), ["x", "late"]);
 });
 
 test("Marasi's stale-view refusals say why and refresh both launchpads", async () => {
   for (const [code, why] of [
-    ["already_linked", "A pair is already in Search; nothing was moved"],
-    ["not_linked", "A pair is no longer in Login; nothing was moved"],
+    ["already_linked", "An entry is already in Search; nothing was moved"],
+    ["not_linked", "An entry is no longer in Login; nothing was moved"],
     ["invalid_placement", "The launchpad changed; nothing was moved"],
   ]) {
     const { store, fake } = await populated();

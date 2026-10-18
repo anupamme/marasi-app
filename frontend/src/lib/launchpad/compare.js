@@ -41,7 +41,7 @@ export function compareEscape(state) {
 
 /**
  * The open launchpad's compare, ready to render: A and B as { entry,
- * number } (number is the 1-based timeline position), whether the diff can
+ * number } (number is its 1-based place in entry order), whether the diff can
  * show, and the quick picks for B. Null when the open launchpad is not
  * being compared.
  */

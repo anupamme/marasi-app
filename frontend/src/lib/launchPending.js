@@ -39,10 +39,15 @@ export const unlessLaunching = (launching) => (launching ? { disabled: true, hin
 /** "2 launching": why a Move, Remove or Delete is greyed. */
 export const launchingHint = (count) => `${count.toLocaleString()} launching`;
 
-/** "3 pairs are still launching; nothing was deleted". */
-export function pendingLaunchText(count, verb) {
-  const pairs = count === 1 ? "1 pair is" : `${count.toLocaleString()} pairs are`;
-  return `${pairs} still launching; nothing was ${verb}`;
+const PLURALS = { pair: "pairs", entry: "entries" };
+
+/**
+ * "3 pairs are still launching; nothing was deleted". On a launchpad the
+ * `noun` is "entry": "2 entries are still launching; nothing was moved".
+ */
+export function pendingLaunchText(count, verb, noun = "pair") {
+  const what = count === 1 ? `1 ${noun} is` : `${count.toLocaleString()} ${PLURALS[noun]} are`;
+  return `${what} still launching; nothing was ${verb}`;
 }
 
 /** Why a launchpad with a pending launch cannot be deleted. */

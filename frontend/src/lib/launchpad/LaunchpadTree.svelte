@@ -304,7 +304,7 @@
 		scroller?.querySelector(`[data-entry="${CSS.escape(entryId)}"]`)?.scrollIntoView({ block: "nearest", behavior: "smooth" });
 	}
 	// The floating button only scrolls; it never changes the selection.
-	export function jumpToLatest() {
+	export function jumpToEnd() {
 		if (!jump) return;
 		const last = scroller.querySelector(`[data-list="${CSS.escape(jump.list)}"][data-last="true"]`);
 		last?.scrollIntoView({ block: "end", behavior: "smooth" });
@@ -619,7 +619,7 @@
 		{#if jump}
 			<!-- Opaque backing: the light-mode ghost variant is translucent. -->
 			<div class="absolute bottom-3 left-1/2 z-20 max-w-[90%] -translate-x-1/2 bg-surface-50 shadow-lg dark:bg-surface-900">
-				<button class="btn btn-sm {primary} w-full" title="Jump to the end of {jump.label}" on:click={jumpToLatest}>
+				<button class="btn btn-sm {primary} w-full" title="Jump to the end of {jump.label}" on:click={jumpToEnd}>
 					<ArrowDown size={14} />
 					<span class="truncate">End of {jump.label}</span>
 				</button>

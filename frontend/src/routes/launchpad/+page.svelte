@@ -207,7 +207,7 @@
             const pending = pendingLaunchIDs(err);
             if (pending) {
                 toastStore.trigger({
-                    message: pendingLaunchText(pending.length, "removed"),
+                    message: pendingLaunchText(pending.length, "removed", "entry"),
                     background: "variant-filled-warning",
                 });
                 return;
@@ -235,7 +235,7 @@
     // ⌘⇧↓ selects the open launchpad's last entry through the usual
     // draft guard. While that launchpad is compared, it only scrolls, so A
     // and B stay as picked.
-    async function jumpToLatest() {
+    async function jumpToEnd() {
         const state = get(launchpadStore);
         const last = lastEntry(state);
         if (!last) return;
@@ -414,7 +414,7 @@
             icon: FolderTreeIcon,
             handler: () => (groupByStatus = !groupByStatus),
         },
-        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: jumpToLatest },
+        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: jumpToEnd },
         { actionId: "launchpad.toggle-compare", icon: GitCompareIcon, handler: () => workspace?.toggleCompare() },
         {
             actionId: "launchpad.toggle-compare-view",

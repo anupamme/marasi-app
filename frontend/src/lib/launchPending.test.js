@@ -18,3 +18,8 @@ test("the text says how many pairs are launching and that nothing changed", () =
   assert.equal(pendingLaunchText(3, "deleted"), "3 pairs are still launching; nothing was deleted");
   assert.equal(pendingLaunchText(1, "removed"), "1 pair is still launching; nothing was removed");
 });
+
+test("on a launchpad the text counts entries", () => {
+  assert.equal(pendingLaunchText(2, "moved", "entry"), "2 entries are still launching; nothing was moved");
+  assert.equal(pendingLaunchText(1, "removed", "entry"), "1 entry is still launching; nothing was removed");
+});

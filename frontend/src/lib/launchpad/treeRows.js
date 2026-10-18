@@ -73,8 +73,9 @@ const byStatus = (a, b) => statusRank(a) - statusRank(b);
 
 /**
  * The rows under one open launchpad: its Launchpad entries in entry order,
- * numbered by position (`index`), windowed to the last `WINDOW` (plus whatever
- * `shownByList[list]` adds, and widened to keep `selectedEntryId` in view).
+ * each numbered by it (`index`, from 0), windowed to the last `WINDOW` (plus
+ * whatever `shownByList[list]` adds, and widened to keep `selectedEntryId`
+ * in view).
  * With `groupByStatus`, they are filed into
  * status folders, each windowed the same way. A folder is open when
  * `openGroups` says so, else when it holds `selectedEntryId`.

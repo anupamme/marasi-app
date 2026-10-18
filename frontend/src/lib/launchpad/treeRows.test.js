@@ -22,7 +22,7 @@ test("a long launchpad shows an earlier-entries row, then its last 10 in entry o
   ]);
 });
 
-test("rows are numbered by position in entry order, not by pair number", () => {
+test("rows are numbered in entry order, not by pair number", () => {
   const entries = [{ ID: "x", Number: 42 }, { ID: "y", Number: 7 }, { ID: "z", Number: 19 }];
   const rows = entryRows({ launchpad, entries });
   assert.deepEqual(rows.map((row) => [row.entry.Number, `#${row.index + 1}`]), [[42, "#1"], [7, "#2"], [19, "#3"]]);

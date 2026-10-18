@@ -41,9 +41,8 @@
 		ToggleFlag,
 		ToggleIntercept,
 	} from "../../wailsjs/go/main/App";
-	import { checkResultNotice, updatePanelModal } from "../../updates.js";
-	import { checkForUpdates as checkForUpdate } from "../../../stores/updateStore";
-	import { toastError } from "../../toasts.js";
+	import { updatePanelModal } from "../../updates.js";
+	import { checkForUpdatesAndShowResult } from "../../../stores/updateStore";
 	import {
 		extensions,
 		extensions_ui,
@@ -123,21 +122,11 @@
 	};
 
 	// "Check for updates…": an update opens the details panel; otherwise a
-	// toast says the build is the latest on its channel, or why the check
-	// failed.
+	// toast says why there is none.
 	function checkForUpdates() {
-		return checkForUpdate()
-			.then((check) => {
-				const notice = checkResultNotice(check);
-				if (notice) {
-					toastStore.trigger(notice);
-					return;
-				}
-				toggleModal(updatePanelModal());
-			})
-			.catch((err) =>
-				toastError(toastStore, "Could not check for updates", err),
-			);
+		return checkForUpdatesAndShowResult(toastStore, () =>
+			toggleModal(updatePanelModal()),
+		);
 	}
 
 	const icons = {

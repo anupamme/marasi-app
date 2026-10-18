@@ -9,7 +9,9 @@ import {
   RestartToUpdate,
   SetUpdateChannel,
 } from "../lib/wailsjs/go/main/App";
+import { toastError } from "../lib/toasts.js";
 import {
+  checkResultNotice,
   withCheckResult,
   withFailure,
   withInstallResult,
@@ -53,15 +55,23 @@ export function dismissUpdate() {
 }
 
 /**
- * "Check for updates…": resolves with the UpdateCheck, after recording what
- * it found (an update, or none, which closes an open panel). The caller shows
- * the toast or opens the details panel.
+ * "Check for updates…" from the menu or Settings → Updates: checks, records
+ * what it found (an update, or none, which closes an open panel), then calls
+ * openPanel for an update, or toasts that the build is the latest on its
+ * channel, or why the check failed. Resolves once that is shown.
  */
-export function checkForUpdates() {
-  return CheckForUpdate().then((check) => {
-    updateState.update((state) => withCheckResult(state, check));
-    return check;
-  });
+export function checkForUpdatesAndShowResult(toastStore, openPanel) {
+  return CheckForUpdate()
+    .then((check) => {
+      updateState.update((state) => withCheckResult(state, check));
+      const notice = checkResultNotice(check);
+      if (notice) {
+        toastStore.trigger(notice);
+      } else {
+        openPanel();
+      }
+    })
+    .catch((err) => toastError(toastStore, "Could not check for updates", err));
 }
 
 /** Records an update found by a check (the update-available event). */

@@ -37,13 +37,12 @@
 	import { goto } from "$app/navigation";
 	import {
 		channelSwitchNotice,
-		checkResultNotice,
 		showsUpdateIndicator,
 		updatePanelModal,
 		updateStatusLine,
 	} from "../../lib/updates.js";
 	import {
-		checkForUpdates,
+		checkForUpdatesAndShowResult,
 		reinstallLatestRelease,
 		setUpdateChannel,
 		updateState,
@@ -299,17 +298,9 @@
 	function checkNow() {
 		if (checking) return;
 		checking = true;
-		checkForUpdates()
-			.then((check) => {
-				const notice = checkResultNotice(check);
-				if (notice) {
-					toastStore.trigger(notice);
-				} else {
-					modalStore.trigger(updatePanelModal());
-				}
-			})
-			.catch((error) => toastError(toastStore, "Could not check for updates", error))
-			.finally(() => (checking = false));
+		checkForUpdatesAndShowResult(toastStore, () => modalStore.trigger(updatePanelModal())).finally(
+			() => (checking = false),
+		);
 	}
 
 	// "Reinstall latest release": Go shows the warning about newer projects,

@@ -58,11 +58,12 @@ test("moving the draft's entry to another launchpad takes the draft with it", as
   assert.deepEqual(draftOf(store, "lp2"), { raw: EDITED_B, seededFrom: "b", useHttps: false });
 });
 
-// The source's draft left with its entry, so the new one starts fresh.
+// The source's draft left with its entry, so the new one starts fresh, over
+// the scheme the source used.
 test("the source reseeds from its last entry once the draft's entry has moved out", async () => {
   const { store } = await editingB();
   await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["b"] });
-  assert.deepEqual(draftOf(store, "lp1"), { raw: rawOf("e"), seededFrom: "e", useHttps: true });
+  assert.deepEqual(draftOf(store, "lp1"), { raw: rawOf("e"), seededFrom: "e", useHttps: false });
   assert.equal(get(store).selectedEntryByLaunchpad.lp1, "e");
 });
 
@@ -72,13 +73,13 @@ test("a source whose last entry is still launching reseeds from the request as s
   store.onRequest({ ID: "L", Method: "GET", Path: "/sent", Raw: "GET /sent HTTP/1.1\n\n" });
   await store.selectEntry("lp1", "b", { force: true });
   await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["b"] });
-  assert.deepEqual(draftOf(store, "lp1"), { raw: "GET /sent HTTP/1.1\n\n", seededFrom: "L", useHttps: true });
+  assert.deepEqual(draftOf(store, "lp1"), { raw: "GET /sent HTTP/1.1\n\n", seededFrom: "L", useHttps: false });
 });
 
 test("a source left empty gets a blank draft", async () => {
   const { store } = await editingB();
   await store.moveEntries({ sourceId: "lp1", targetId: "lp2", ids: ["a", "b", "c", "d", "e"] });
-  assert.deepEqual(draftOf(store, "lp1"), { raw: BLANK_REQUEST, seededFrom: null, useHttps: true });
+  assert.deepEqual(draftOf(store, "lp1"), { raw: BLANK_REQUEST, seededFrom: null, useHttps: false });
   assert.equal(get(store).selectedEntryByLaunchpad.lp1, undefined);
 });
 

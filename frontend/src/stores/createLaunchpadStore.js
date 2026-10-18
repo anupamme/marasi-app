@@ -446,7 +446,9 @@ export function createLaunchpadStore(api) {
   }
 
   // Selects the entry and replaces the launchpad's draft with its request.
-  async function seedDraft(launchpadId, entryId) {
+  // The new draft keeps `previous`'s HTTPS choice, the launchpad's own
+  // draft's by default.
+  async function seedDraft(launchpadId, entryId, previous = current.draftsByLaunchpad[launchpadId]) {
     const version = projectStateVersion;
     const row = await ensureDetails(entryId);
     if (version !== projectStateVersion) return;
@@ -458,11 +460,7 @@ export function createLaunchpadStore(api) {
       },
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: makeDraft(
-          row?.Request?.Raw ?? "",
-          entryId,
-          state.draftsByLaunchpad[launchpadId],
-        ),
+        [launchpadId]: makeDraft(row?.Request?.Raw ?? "", entryId, previous),
       },
     }));
   }
@@ -491,18 +489,20 @@ export function createLaunchpadStore(api) {
     await seedFromLast(launchpadId, entries);
   }
 
-  // Seeds the launchpad's draft from its last entry, or a blank one when it
-  // has none.
-  async function seedFromLast(launchpadId, entries) {
+  // Seeds the launchpad's draft from its last entry, or a blank one with no
+  // entry selected when it has none. The new draft keeps `previous`'s HTTPS
+  // choice, the launchpad's own draft's by default.
+  async function seedFromLast(launchpadId, entries, previous = current.draftsByLaunchpad[launchpadId]) {
     if (entries.length > 0) {
-      await seedDraft(launchpadId, entries[entries.length - 1].ID);
+      await seedDraft(launchpadId, entries[entries.length - 1].ID, previous);
       return;
     }
     update((state) => ({
       ...state,
+      selectedEntryByLaunchpad: without(state.selectedEntryByLaunchpad, launchpadId),
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: makeDraft(BLANK_REQUEST, null),
+        [launchpadId]: makeDraft(BLANK_REQUEST, null, previous),
       },
     }));
   }
@@ -610,25 +610,24 @@ export function createLaunchpadStore(api) {
   }
 
   // The draft follows its entry: the source's draft, dirty or not, replaces
-  // the target's, and the source starts a fresh one from what it has left.
-  // The workspace follows the draft: an open source opens the target.
+  // the target's, and the source starts a fresh one from what it has left,
+  // over the same scheme. The workspace follows the draft: an open source
+  // opens the target.
   async function carryDraft(sourceId, targetId) {
     if (current.selectedLaunchpadId === sourceId) openLaunchpad(targetId);
-    update((state) => {
-      const draft = state.draftsByLaunchpad[sourceId];
-      return {
-        ...state,
-        selectedEntryByLaunchpad: {
-          ...without(state.selectedEntryByLaunchpad, sourceId),
-          [targetId]: draft.seededFrom,
-        },
-        draftsByLaunchpad: {
-          ...without(state.draftsByLaunchpad, sourceId),
-          [targetId]: draft,
-        },
-      };
-    });
-    await seedFromLast(sourceId, current.entriesByLaunchpad[sourceId] || []);
+    const draft = current.draftsByLaunchpad[sourceId];
+    update((state) => ({
+      ...state,
+      selectedEntryByLaunchpad: {
+        ...without(state.selectedEntryByLaunchpad, sourceId),
+        [targetId]: draft.seededFrom,
+      },
+      draftsByLaunchpad: {
+        ...without(state.draftsByLaunchpad, sourceId),
+        [targetId]: draft,
+      },
+    }));
+    await seedFromLast(sourceId, current.entriesByLaunchpad[sourceId] || [], draft);
   }
 
   // Move: takes `ids` (in entry order) out of `sourceId` and puts them

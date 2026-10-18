@@ -716,8 +716,18 @@ export function createLaunchpadStore(api) {
     // view was stale, and one for a pending launch also reads the pending
     // launches, so the menu shows them launching. Removing the entry the
     // draft was seeded from, or the selected one, reseeds the draft as a
-    // move does. Returns how many Marasi removed; the error goes on.
-    removeEntries: async (launchpadId, ids) => {
+    // move does; when that would replace a dirty draft, it returns
+    // { needsConfirm: true } without removing unless `force` is set.
+    // Returns { removed, needsConfirm }: how many Marasi removed. The error
+    // goes on.
+    removeEntries: async (launchpadId, ids, { force = false } = {}) => {
+      const removed = new Set(ids);
+      const reseeds = () =>
+        removed.has(current.draftsByLaunchpad[launchpadId]?.seededFrom) ||
+        removed.has(current.selectedEntryByLaunchpad[launchpadId]);
+      if (!force && reseeds() && isDraftDirty(current, launchpadId)) {
+        return { removed: 0, needsConfirm: true };
+      }
       const version = projectStateVersion;
       let count;
       try {
@@ -727,14 +737,10 @@ export function createLaunchpadStore(api) {
         throw err;
       }
       const entries = await loadEntries(launchpadId);
-      if (version !== projectStateVersion) return count;
+      if (version !== projectStateVersion) return { removed: count, needsConfirm: false };
       updateEntrySelection(() => selecting.NO_ENTRY_SELECTION);
-      const removed = new Set(ids);
-      const draft = current.draftsByLaunchpad[launchpadId];
-      if (removed.has(draft?.seededFrom) || removed.has(current.selectedEntryByLaunchpad[launchpadId])) {
-        await seedFromLast(launchpadId, entries);
-      }
-      return count;
+      if (reseeds()) await seedFromLast(launchpadId, entries);
+      return { removed: count, needsConfirm: false };
     },
 
     // Drag and drop and the entry menu both move through this.

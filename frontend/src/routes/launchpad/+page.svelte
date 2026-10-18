@@ -201,10 +201,20 @@
         if (moved?.length) await tree?.showEntry(targetId, moved[0]);
     }
 
-    async function removeEntries(launchpadId, ids) {
+    // Removing the entry a dirty draft came from would replace the draft,
+    // so it asks first; Cancel removes nothing.
+    async function removeEntries(launchpadId, ids, options = {}) {
         const name = get(launchpadStore).launchpads.find((l) => l.ID === launchpadId)?.Name || UNTITLED_LAUNCHPAD;
         try {
-            const count = await launchpadStore.removeEntries(launchpadId, ids);
+            const { removed: count, needsConfirm } = await launchpadStore.removeEntries(launchpadId, ids, options);
+            if (needsConfirm) {
+                confirm(
+                    "Discard the draft?",
+                    "This launchpad's draft has unsaved edits. Removing the entry it came from replaces them.",
+                    () => removeEntries(launchpadId, ids, { force: true }),
+                );
+                return;
+            }
             toastStore.trigger({
                 message: `Removed ${count === 1 ? "1 entry" : `${count} entries`} from "${name}"`,
                 background: "variant-filled-success",

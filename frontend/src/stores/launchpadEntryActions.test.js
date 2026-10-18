@@ -44,7 +44,7 @@ test("removing unlinks the entries from the launchpad, reloads it with its count
   const api = fakeApi();
   const store = await populated(api);
   store.selectAllEntries("lp1");
-  assert.equal(await store.removeEntries("lp1", ["a", "c"]), 2);
+  assert.deepEqual(await store.removeEntries("lp1", ["a", "c"]), { removed: 2, needsConfirm: false });
   assert.deepEqual(api.calls, [["unlinkEntries", "lp1", ["a", "c"]]]);
   assert.deepEqual(order(store, "lp1"), ["b", "d", "e"]);
   assert.equal(get(store).launchpads[0].EntryCount, 3);
@@ -80,6 +80,33 @@ test("removing the selected entry reseeds even when the draft came from another"
   await store.removeEntries("lp1", ["b"]);
   assert.equal(get(store).selectedEntryByLaunchpad.lp1, "e");
   assert.equal(get(store).draftsByLaunchpad.lp1.seededFrom, "e");
+});
+
+// The house rule: ask only before destroying a dirty draft.
+test("removing a dirty draft's entry asks first: Marasi is not called and nothing changes", async () => {
+  const api = fakeApi();
+  const store = await onLastEntry(api);
+  store.updateDraft("lp1", "GET /e-edited HTTP/1.1\n\n");
+  store.toggleEntry("lp1", "e");
+  assert.deepEqual(await store.removeEntries("lp1", ["e"]), { removed: 0, needsConfirm: true });
+  assert.deepEqual(api.calls, []);
+  const state = get(store);
+  assert.equal(state.draftsByLaunchpad.lp1.raw, "GET /e-edited HTTP/1.1\n\n");
+  assert.deepEqual(state.entrySelection.ids, ["e"]);
+});
+
+test("a confirmed removal replaces the dirty draft", async () => {
+  const store = await onLastEntry();
+  store.updateDraft("lp1", "GET /e-edited HTTP/1.1\n\n");
+  assert.deepEqual(await store.removeEntries("lp1", ["e"], { force: true }), { removed: 1, needsConfirm: false });
+  assert.deepEqual(get(store).draftsByLaunchpad.lp1, { raw: "GET /d HTTP/1.1\n\n", seededFrom: "d", useHttps: false });
+});
+
+test("a dirty draft does not ask when its entry stays", async () => {
+  const store = await onLastEntry();
+  store.updateDraft("lp1", "GET /e-edited HTTP/1.1\n\n");
+  assert.deepEqual(await store.removeEntries("lp1", ["a"]), { removed: 1, needsConfirm: false });
+  assert.equal(get(store).draftsByLaunchpad.lp1.raw, "GET /e-edited HTTP/1.1\n\n");
 });
 
 test("removing other entries leaves the draft and the selected entry", async () => {

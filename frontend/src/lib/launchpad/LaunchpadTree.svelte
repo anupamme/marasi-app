@@ -5,18 +5,17 @@
 
 <script>
 	// The Launchpad file tree: one scroll container, sticky launchpad rows,
-	// each list windowed to its original entry plus the latest entries.
+	// each list in entry order, windowed to its last entries.
 	// Row building lives in treeRows.js; this component only renders.
 	import { modeCurrent, SlideToggle } from "@skeletonlabs/skeleton";
 	import { afterUpdate, tick } from "svelte";
 	import { ArrowDown, Ban, ChevronDown, CircleAlert, LoaderCircle, ChevronRight, ChevronsDownUp, ChevronsUpDown, Folder, FolderOpen, Plus, Search } from "lucide-svelte";
-	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
+	import { isDraftDirty, isEntrySelected, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
 	import { entryRows, launchpadSummary, searchLaunchpads, STEP, WINDOW } from "./treeRows.js";
 	import { jumpTarget } from "./jumpTarget.js";
 	import { autoExpand, collapseAll, expandAll, revealEntry } from "./treeExpansion.js";
 	import { COMPARE_SIDES, compareSideOf } from "./compare.js";
 	import { launchEndText, primaryVariant, shortTime, statusClass } from "./format.js";
-	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
 	export let pickLaunchpad;
@@ -93,7 +92,28 @@
 	const rowKey = (row) =>
 		row.kind === "entry" ? row.entry.ID : row.kind === "group" ? row.id : `more:${row.list}`;
 
-	// Floating "Latest in …": measured after every render and on scroll.
+	// Entry selection: a plain click selects one entry and seeds the draft
+	// (the page's pickEntry), ⌘/Ctrl toggles and ⇧ selects a range. Grouped
+	// or searching, a range covers only the rows shown. The click focuses the
+	// tree, where ⌘A and Esc work: WebKit does not focus a clicked button.
+	function clickEntry(event, launchpadId, entryId, rows) {
+		scroller?.focus({ preventScroll: true });
+		if (event.metaKey || event.ctrlKey) return store.toggleEntry(launchpadId, entryId);
+		if (event.shiftKey) {
+			const shown = groupByStatus || searching ? rows.filter((row) => row.kind === "entry").map((row) => row.entry.ID) : null;
+			return store.extendEntrySelection(launchpadId, entryId, shown);
+		}
+		pickEntry(launchpadId, entryId);
+	}
+	// Esc is the page's key (gate.js), so the tree collapses the selection
+	// itself; with one entry selected, Esc goes on to the page (closing compare).
+	function onTreeKeydown(event) {
+		if (event.key !== "Escape" || event.defaultPrevented || state.entrySelection.ids.length < 2) return;
+		event.preventDefault();
+		store.collapseEntrySelection();
+	}
+
+	// Floating "End of …": measured after every render and on scroll.
 	// Synchronous on purpose: scroll events already arrive once per frame,
 	// and requestAnimationFrame never fires while the window is hidden.
 	let scroller;
@@ -199,7 +219,15 @@
 	</header>
 
 	<div class="relative min-h-0 flex-1">
-		<div class="lp-scroll h-full overflow-y-auto pb-12" bind:this={scroller} on:scroll={updateJump}>
+		<!-- svelte-ignore a11y-no-noninteractive-tabindex a11y-no-static-element-interactions -->
+		<div
+			class="lp-scroll h-full overflow-y-auto pb-12 focus:outline-none"
+			data-launchpad-tree
+			tabindex="-1"
+			bind:this={scroller}
+			on:scroll={updateJump}
+			on:keydown={onTreeKeydown}
+		>
 			{#if results.length === 0 && !(searching && entrySearch.status === "loading")}
 				<p class="p-4 text-center text-sm opacity-60">
 					{searching ? "No matching launchpads or entries" : "No launchpads yet"}
@@ -333,20 +361,24 @@
 								{@const entry = row.entry}
 								{@const inCompare = compare?.launchpadId === launchpad.ID}
 								{@const active = isSelected && selectedEntryId === entry.ID && !inCompare}
+								{@const picked = isEntrySelected(state, launchpad.ID, entry.ID)}
 								{@const side = inCompare ? compareSideOf(compare, entry.ID) : null}
 								{@const launch = launchOf(state, entry.ID, entry)}
 								{@const endText = launchEndText(launch)}
 								<button
-									class="lp-entry group relative flex w-full items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
+									class="lp-entry group relative flex w-full select-none items-center gap-2 py-[3px] pr-3 text-left font-mono text-[11px] {row.depth ===
 									2
 										? 'pl-14'
 										: 'pl-10'} {active
 										? 'bg-primary-500/20'
-										: inCompare && compare.picking
-											? 'hover:bg-primary-500/15'
-											: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
+										: picked
+											? 'bg-primary-500/15'
+											: inCompare && compare.picking
+												? 'hover:bg-primary-500/15'
+												: 'hover:bg-surface-100 dark:hover:bg-surface-800'}"
+									data-selected={picked ? "true" : undefined}
 									data-compare={side ? COMPARE_SIDES[side].label : undefined}
-									title="#{row.index + 1} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
+									title="#{row.index + 1} · pair #{entry.Number} · {entry.Method} {entry.Host}{entry.Path} · {shortTime(entry.RequestedAt)}{endText
 										? ` · ${endText}`
 										: ''}"
 									data-launch={launch?.Status}
@@ -357,12 +389,12 @@
 									data-last={row.last ? "true" : undefined}
 									data-label={row.label}
 									use:reveal={active}
-									on:click={() => pickEntry(launchpad.ID, entry.ID)}
+									on:click={(event) => clickEntry(event, launchpad.ID, entry.ID, rows)}
 								>
+									{#if picked}<span class="absolute bottom-0 left-0 top-0 w-[3px] bg-primary-500"></span>{/if}
 									<span class="absolute bottom-0 left-[1.15rem] top-0 border-l border-surface-500/30"></span>
 									{#if row.depth === 2}<span class="absolute bottom-0 left-[2.4rem] top-0 border-l border-surface-500/30"></span>{/if}
 									<span class="flex w-9 flex-none items-center justify-end gap-1 opacity-60">
-										{#if row.index === 0}<OriginIcon size={12} class="text-primary-500" />{/if}
 										{row.index + 1}
 									</span>
 									<span class="w-11 flex-none opacity-60">{entry.Method}</span>
@@ -403,9 +435,9 @@
 		{#if jump}
 			<!-- Opaque backing: the light-mode ghost variant is translucent. -->
 			<div class="absolute bottom-3 left-1/2 z-20 max-w-[90%] -translate-x-1/2 bg-surface-50 shadow-lg dark:bg-surface-900">
-				<button class="btn btn-sm {primary} w-full" title="Jump to the latest entry in {jump.label}" on:click={jumpToLatest}>
+				<button class="btn btn-sm {primary} w-full" title="Jump to the end of {jump.label}" on:click={jumpToLatest}>
 					<ArrowDown size={14} />
-					<span class="truncate">Latest in {jump.label}</span>
+					<span class="truncate">End of {jump.label}</span>
 				</button>
 			</div>
 		{/if}

@@ -15,6 +15,7 @@
         Columns2Icon,
         FolderTreeIcon,
         GitCompareIcon,
+        ListChecksIcon,
         LockIcon,
         PanelLeftIcon,
         PenIcon,
@@ -34,7 +35,7 @@
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
     import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
-    import { latestEntry } from "../../lib/launchpad/jumpTarget.js";
+    import { lastEntry } from "../../lib/launchpad/jumpTarget.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
     import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
@@ -108,15 +109,15 @@
         );
     }
 
-    // ⌘⇧↓ selects the open launchpad's newest entry through the usual
+    // ⌘⇧↓ selects the open launchpad's last entry through the usual
     // draft guard. While that launchpad is compared, it only scrolls, so A
     // and B stay as picked.
     async function jumpToLatest() {
         const state = get(launchpadStore);
-        const latest = latestEntry(state);
-        if (!latest) return;
-        if (state.compare?.launchpadId !== latest.launchpadId) await pickEntry(latest.launchpadId, latest.entryId);
-        await tree?.showEntry(latest.launchpadId, latest.entryId);
+        const last = lastEntry(state);
+        if (!last) return;
+        if (state.compare?.launchpadId !== last.launchpadId) await pickEntry(last.launchpadId, last.entryId);
+        await tree?.showEntry(last.launchpadId, last.entryId);
     }
 
     // Esc cancels a chip re-pick, then closes compare. Editors, inputs and
@@ -266,6 +267,14 @@
         if (compare?.leftId && compare.rightId) launchpadStore.swapCompare();
     }
 
+    // ⌘A in the tree: the focused launchpad is the entry selection's, else
+    // the open one.
+    function selectAllEntries() {
+        const { entrySelection, selectedLaunchpadId } = get(launchpadStore);
+        const id = entrySelection.launchpadId ?? selectedLaunchpadId;
+        if (id) launchpadStore.selectAllEntries(id);
+    }
+
     // Catalog actions keep their pre-redesign IDs (ADR-0001):
     // toggle-settings renames, *-tab steps launchpads.
     const launchpadMenu = [
@@ -290,6 +299,7 @@
             handler: () => workspace?.toggleCompareView(),
         },
         { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
+        { actionId: "launchpad.tree.select-all-entries", icon: ListChecksIcon, handler: selectAllEntries },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },
         { actionId: "launchpad.previous-tab", icon: ArrowLeftIcon, handler: () => stepLaunchpad(-1) },
         { actionId: "launchpad.next-entry", icon: ArrowDownIcon, handler: () => stepEntry(1) },

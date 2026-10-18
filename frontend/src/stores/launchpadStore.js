@@ -21,9 +21,11 @@ export {
   BLANK_REQUEST,
   dirtyLaunchpadIds,
   isDraftDirty,
+  isEntrySelected,
   launchOf,
   pendingLaunchOf,
   seededRaw,
+  selectedEntryIds,
 } from "./createLaunchpadStore.js";
 
 export const launchpadStore = createLaunchpadStore({

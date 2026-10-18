@@ -16,7 +16,6 @@
 	import { compareView } from "./compare.js";
 	import { launchEndText, primaryVariant, statusClass } from "./format.js";
 	import LaunchpadCompare from "./LaunchpadCompare.svelte";
-	import OriginIcon from "./OriginIcon.svelte";
 
 	export let store;
 	export let onEditorFocus = () => {};
@@ -149,9 +148,6 @@
 						{launchpad.Description || "No description"}
 						{#if entries.length > 0}
 							· entry {entryIndex + 1} of {entries.length}
-						{/if}
-						{#if entryIndex === 0}
-							<span class="ml-1 inline-flex items-center gap-1 text-primary-500"><OriginIcon size={12} /> original</span>
 						{/if}
 					</p>
 				{/if}

@@ -141,6 +141,17 @@ export const CONTEXTS = [
     state: "Page",
     isEligible: onRoute(`/${id}`),
   })),
+  // The Launchpad tree while it has focus; the layout reports that as
+  // `state.launchpadTreeFocused`. The page stays eligible beside it.
+  {
+    id: "launchpad.tree",
+    tier: "page",
+    label: "Launchpad tree",
+    page: "Launchpad",
+    state: "Tree focused",
+    overlaps: ["launchpad"],
+    isEligible: (state) => onRoute("/launchpad")(state) && Boolean(state.launchpadTreeFocused),
+  },
 ];
 
 function decodedRoute(route) {

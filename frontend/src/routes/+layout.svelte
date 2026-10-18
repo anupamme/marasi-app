@@ -222,6 +222,7 @@
 			drawer: get(drawerStore),
 			ledgerDrawer: drawerKeybindingState(get(ledgerStore)),
 			websocketTab: get(websocketTab),
+			launchpadTreeFocused: Boolean(document.activeElement?.closest?.("[data-launchpad-tree]")),
 			capturing: get(keybindingCapture),
 		};
 	}

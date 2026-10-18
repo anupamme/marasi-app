@@ -120,13 +120,25 @@ const (
 	InstallStepInstall InstallStep = "install"
 )
 
-// failureSteps is the step a failure of each kind stops at wherever it is
-// found. Other kinds stop at the step running when they occur.
-var failureSteps = map[UpdateFailureKind]InstallStep{
-	UpdateFailureNetwork:   InstallStepDownload,
-	UpdateFailureSignature: InstallStepVerify,
-	UpdateFailureChecksum:  InstallStepVerify,
-	UpdateFailureTeam:      InstallStepVerify,
+// failureStep is the step a failed install is reported at. The first that
+// applies decides:
+//  1. a network, signature, checksum or team failure stops at its own step
+//     wherever it is found (a missing signing key, or a bad signature
+//     checked before the build downloads, still stops at verify);
+//  2. a build that cannot install updates, found before anything downloads
+//     (beforeDownload), stops at install, where it would fail;
+//  3. any other failure stops at the step running when it occurred.
+func failureStep(kind UpdateFailureKind, beforeDownload bool, running InstallStep) InstallStep {
+	switch kind {
+	case UpdateFailureNetwork:
+		return InstallStepDownload
+	case UpdateFailureSignature, UpdateFailureChecksum, UpdateFailureTeam:
+		return InstallStepVerify
+	}
+	if beforeDownload {
+		return InstallStepInstall
+	}
+	return running
 }
 
 // UpdateFailureKind is what an install failed at, so the panel can say
@@ -188,13 +200,11 @@ type UpdateInstall struct {
 	Failure *UpdateFailure
 }
 
-// installError is a failed install step and its kind. step, when set, is
-// the step the failure is reported at instead of the running one.
-// beforeDownload marks a failure of the check that this build can install
-// updates (App.replaceable).
+// installError is a failed install step and its kind. beforeDownload marks
+// a failure of the check that this build can install updates
+// (App.replaceable).
 type installError struct {
 	kind           UpdateFailureKind
-	step           InstallStep
 	beforeDownload bool
 	err            error
 }
@@ -346,18 +356,14 @@ func (a *App) finishInstall(ctx context.Context, update *Update, err error) Upda
 		a.updates.status = UpdateStatusAvailable
 	default:
 		result.Outcome = InstallOutcomeFailed
-		result.Failure = &UpdateFailure{Kind: UpdateFailureInstall, Step: running, Reason: err.Error(), ReleasePage: update.ReleasePage}
+		failure := UpdateFailure{Kind: UpdateFailureInstall, Reason: err.Error(), ReleasePage: update.ReleasePage}
 		var stepErr *installError
 		if errors.As(err, &stepErr) {
-			result.Failure.Kind = stepErr.kind
-			result.Failure.BeforeDownload = stepErr.beforeDownload
-			if step, ok := failureSteps[stepErr.kind]; ok {
-				result.Failure.Step = step
-			}
-			if stepErr.step != "" {
-				result.Failure.Step = stepErr.step
-			}
+			failure.Kind = stepErr.kind
+			failure.BeforeDownload = stepErr.beforeDownload
 		}
+		failure.Step = failureStep(failure.Kind, failure.BeforeDownload, running)
+		result.Failure = &failure
 		a.updates.status = UpdateStatusFailed
 		a.updates.failure = result.Failure
 	}
@@ -405,7 +411,7 @@ func (a *App) install(ctx context.Context, update *Update) error {
 	// The signed checksums are checked before the build downloads, so a bad
 	// signature wastes no download. It is instant, so the install shows the
 	// verify step only once the build is in; a failure here still stops at
-	// verify (failureSteps).
+	// verify (failureStep).
 	sums, err := verifyChecksums(*a.signingKey, checksums, signature)
 	if err != nil {
 		return err
@@ -449,29 +455,24 @@ func (a *App) install(ctx context.Context, update *Update) error {
 func (a *App) replaceable() (platformInstaller, string, error) {
 	switch {
 	case a.signingKey == nil:
-		return nil, "", atInstallStep(failed(UpdateFailureSignature, "this build has no Marasi signing key to verify updates with"))
+		return nil, "", foundBeforeDownload(failed(UpdateFailureSignature, "this build has no Marasi signing key to verify updates with"))
 	case a.installer == nil:
-		return nil, "", atInstallStep(failed(UpdateFailurePermissions, "Marasi cannot replace itself on this platform"))
+		return nil, "", foundBeforeDownload(failed(UpdateFailurePermissions, "Marasi cannot replace itself on this platform"))
 	case a.installLocation == "":
-		return nil, "", atInstallStep(failed(UpdateFailurePermissions, "Marasi could not find where it is installed"))
+		return nil, "", foundBeforeDownload(failed(UpdateFailurePermissions, "Marasi could not find where it is installed"))
 	}
 	if err := a.installer.checkReplaceable(a.installLocation); err != nil {
-		return nil, "", atInstallStep(asInstallError(err, "Marasi cannot replace itself"))
+		return nil, "", foundBeforeDownload(asInstallError(err, "Marasi cannot replace itself"))
 	}
 	return a.installer, a.installLocation, nil
 }
 
-// atInstallStep reports a Marasi that cannot replace itself at the install
-// step, where it would fail, though it is found out before anything
-// downloads. A failure kind with a step of its own (a missing signing key is
-// a signature failure, at verify) keeps that step.
-func atInstallStep(err error) error {
+// foundBeforeDownload marks err, an *installError, as found by the check
+// that this build can install updates, before anything downloads.
+func foundBeforeDownload(err error) error {
 	var stepErr *installError
 	if errors.As(err, &stepErr) {
 		stepErr.beforeDownload = true
-		if _, ok := failureSteps[stepErr.kind]; !ok {
-			stepErr.step = InstallStepInstall
-		}
 	}
 	return err
 }

@@ -803,9 +803,12 @@
 										fill="none"
 										stroke-width="3"
 										class={settingsIndicator.spinning
-											? "stroke-primary-500/40"
+											? "stroke-primary-500"
 											: "stroke-surface-300 dark:stroke-surface-600"}
 									/>
+									<!-- Downloading: the arc is the progress. Verifying and
+									     installing: the ring is full, and a brighter quarter
+									     arc spins round it. -->
 									<circle
 										cx="20"
 										cy="20"
@@ -813,7 +816,9 @@
 										fill="none"
 										stroke-width="3"
 										stroke-linecap="round"
-										class="stroke-primary-500 transition-all"
+										class="{settingsIndicator.spinning
+											? 'stroke-primary-200'
+											: 'stroke-primary-500'} transition-all"
 										stroke-dasharray={ringLength}
 										stroke-dashoffset={settingsIndicator.spinning
 											? ringLength * 0.75

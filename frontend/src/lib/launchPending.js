@@ -2,19 +2,11 @@
 // launchpad it was launched from, and to delete that launchpad, and changes
 // nothing (marasi ADR-0053). The app's Go side reports it as
 // "launch_pending (<id>, <id>)" inside the error's text, which is all Wails
-// passes on. The ids are the pending launches' pairs.
-
-const CODE = /launch_pending \(([^)]*)\)/;
+// passes on (errorCodes.js). The ids are the pending launches' pairs.
+import { codeIDs } from "./errorCodes.js";
 
 /** The pending pairs a refusal names, or null for any other error. */
-export function pendingLaunchIDs(error) {
-  const match = CODE.exec(String(error ?? ""));
-  if (!match) return null;
-  return match[1]
-    .split(",")
-    .map((id) => id.trim())
-    .filter(Boolean);
-}
+export const pendingLaunchIDs = (error) => codeIDs(error, "launch_pending");
 
 /**
  * The ids of `ids` whose launch in `launches` ({ ID, LaunchpadID, Status })

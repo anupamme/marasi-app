@@ -2,6 +2,7 @@
 // Pure, like treeRows.js: the tree measures rows and passes what it found.
 // A place is { launchpadId, before }: the moved entries go before the entry
 // `before`, or at the end when it is null (Marasi's MoveLaunchpadEntries).
+import { codeIDs } from "../errorCodes.js";
 import { launchingHint, pendingLaunchIDs, pendingLaunchText } from "../launchPending.js";
 
 // The first entry at or after `index` in `order` that is not moving, or null
@@ -72,8 +73,7 @@ const STALE = [
 export function marasiMoveRefusal(error, names) {
   const pending = pendingLaunchIDs(error);
   if (pending) return pendingLaunchText(pending.length, "moved", "entry");
-  const text = String(error ?? "");
-  const stale = STALE.find(([code]) => text.includes(`${code}:`));
+  const stale = STALE.find(([code]) => codeIDs(error, code));
   return stale ? `${stale[1](names)}; nothing was moved` : null;
 }
 

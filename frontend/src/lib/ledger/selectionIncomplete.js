@@ -2,9 +2,8 @@
 // query depends on is still building, and changes nothing: a text term needs
 // the search indexes, a sitemap condition the sitemap. The app's Go side
 // reports it as "selection_incomplete (traffic_index, annotation_index)"
-// inside the error's text, which is all Wails passes on.
-
-const CODE = /selection_incomplete \(([^)]*)\)/;
+// inside the error's text, which is all Wails passes on (errorCodes.js).
+import { codeIDs } from "../errorCodes.js";
 
 // What each job builds, in the researcher's words.
 const BUILDS = {
@@ -14,14 +13,7 @@ const BUILDS = {
 };
 
 /** The jobs a refused selection waits for, or null for any other error. */
-export function incompleteJobs(error) {
-  const match = CODE.exec(String(error ?? ""));
-  if (!match) return null;
-  return match[1]
-    .split(",")
-    .map((job) => job.trim())
-    .filter(Boolean);
-}
+export const incompleteJobs = (error) => codeIDs(error, "selection_incomplete");
 
 /** "Marasi is still building its search index and sitemap, so nothing changed." */
 export function incompleteText(jobs) {

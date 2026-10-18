@@ -61,11 +61,23 @@ _Avoid_: filter, content type filter
 ### Launchpad
 
 **Launchpad entry**:
-An ordinary request/response pair linked to a launchpad rather than copied. A launchpad's entries are a flat, oldest-first timeline; the first entry is the pair the launchpad was created from, and every Launch adds one more.
-_Avoid_: member, tab, request when referring to the linked pair
+An ordinary request/response pair linked to a launchpad rather than copied. A launchpad's entries are a flat list in the launchpad's entry order.
+_Avoid_: member, tab, request when referring to the linked pair, original
+
+**Entry order**:
+The order of a launchpad's entries, which only the researcher changes. Every entry a launchpad gains, by a Launch or a link, goes last; existing entries keep their capture order until the researcher reorders them.
+_Avoid_: position, index, sort, timeline
+
+**Entry selection**:
+The launchpad entries a researcher has picked in one launchpad, to move or remove together. It never spans two launchpads, and it is separate from the ledger's selection.
+_Avoid_: selection, checked entries
+
+**Move**:
+Taking launchpad entries out of one launchpad and putting them into another at a chosen place, or into a new place in the same launchpad. A moved pair is never left in both, so a move into a launchpad that already holds one of the pairs is refused. An entry whose Launch is still pending cannot move to another launchpad.
+_Avoid_: copy, transfer, relink
 
 **Launchpad draft**:
-The working request of a launchpad, held only in memory, seeded from one launchpad entry and sent by Launch. It is dirty when it differs from the request of the entry it was seeded from, and it is lost when the project closes.
+The working request of a launchpad, held only in memory, seeded from one launchpad entry and sent by Launch. It is dirty when it differs from the request of the entry it was seeded from, and it is lost when the project closes. When that entry moves to another launchpad, the draft moves with it.
 _Avoid_: edit, buffer, saved request
 
 ### Marasi menu keybindings

@@ -13,7 +13,6 @@
 	import { lineWrap, marasiConfig } from "../../stores";
 	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
 	import { DELETE_LAUNCHPAD_PENDING_HINT } from "../launchPending.js";
-	import { wrapsLines } from "../editorWrap.js";
 	import { compareView } from "./compare.js";
 	import { launchEndText, primaryVariant, statusClass } from "./format.js";
 	import LaunchpadCompare from "./LaunchpadCompare.svelte";
@@ -222,7 +221,7 @@
 							lang={lang(draft?.raw)}
 							{theme}
 							extensions={vimExtensions}
-							lineWrapping={wrapsLines(draft?.raw, $lineWrap)}
+							lineWrapping={$lineWrap}
 						/>
 					{/key}
 				</div>
@@ -252,7 +251,7 @@
 							lang={lang(details.Response.Raw)}
 							{theme}
 							extensions={vimExtensions}
-							lineWrapping={wrapsLines(details.Response.Raw, $lineWrap)}
+							lineWrapping={$lineWrap}
 						/>
 					{:else if selectedId}
 						<p class="p-4 text-sm opacity-60">Loading…</p>

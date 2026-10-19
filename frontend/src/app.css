@@ -31,6 +31,20 @@ body {
   background: transparent;
 }
 
+/* The Ledger's density for Skeleton parts whose own rules outrank
+   utilities: a button group's buttons (16px text, 20px side padding)
+   and table cells (14px text, 16px padding). Both are opt-in. */
+.btn-group.btn-group-sm > button,
+.btn-group.btn-group-sm > a {
+  @apply px-3 py-1 text-sm;
+}
+.table.table-dense thead th {
+  @apply px-2 py-1.5 text-[11px];
+}
+.table.table-dense tbody td {
+  @apply px-2 py-1 text-xs;
+}
+
 html.dark body {
   --ctx-menu-background: #2f343c;
   --ctx-menu-hover-bg: #cf595b;

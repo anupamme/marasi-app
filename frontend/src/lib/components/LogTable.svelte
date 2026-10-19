@@ -21,7 +21,7 @@
 </script>
 
 <div class="table-container">
-    <table class="table table-auto w-full">
+    <table class="table table-dense table-auto w-full">
         <thead>
             <tr>
                 <th>

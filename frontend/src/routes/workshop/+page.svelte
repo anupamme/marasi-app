@@ -94,15 +94,15 @@
 </script>
 
 <MarasiKeys menuOptions={workshopMenu} />
-<Accordion rounded="false" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
+<Accordion rounded="false" padding="py-3 px-3" regionControl="text-sm font-bold" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
     <AccordionItem bind:open={accOpened}>
-        <svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+        <svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
         <svelte:fragment slot="summary">Workshop Settings</svelte:fragment>
         <svelte:fragment slot="content">
-            <div class="flex justify-center mt-2 p-2">
+            <div class="flex justify-center mt-2 p-2 text-sm">
                 <button
                     type="button"
-                    class="btn {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
+                    class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
                     on:click={() => {
                         DoExtender($workshopCode);
                     }}>Execute</button
@@ -115,6 +115,7 @@
     <CodeMirror
         bind:value={$workshopCode}
         class="text-xs"
+        styles={{ "&": { fontSize: "11px" } }}
         theme={$modeCurrent ? githubLight : oneDark}
         extensions={$marasiConfig.VimEnabled
             ? [

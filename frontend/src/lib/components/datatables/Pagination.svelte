@@ -6,7 +6,7 @@
 </script>
 
 <!-- Desktop buttons -->
-<section class="btn-group variant-ghost-surface [&>*+*]:border-surface-500 h-10 hidden lg:block">
+<section class="btn-group btn-group-sm variant-ghost-surface [&>*+*]:border-surface-500 hidden lg:block">
 	<button
 		type="button"
 		class="hover:variant-soft-primary"
@@ -40,7 +40,7 @@
 <section class="lg:hidden">
 	<button
 		type="button"
-		class="btn variant-ghost-surface mr-2 mb-2 hover:variant-soft-primary"
+		class="btn btn-sm text-sm variant-ghost-surface mr-2 mb-2 hover:variant-soft-primary"
 		class:disabled={$pageNumber === 1}
 		on:click={() => handler.setPage('previous')}
 	>
@@ -48,7 +48,7 @@
 	</button>
 	<button
 		type="button"
-		class="btn variant-ghost-surface mb-2 hover:variant-soft-primary"
+		class="btn btn-sm text-sm variant-ghost-surface mb-2 hover:variant-soft-primary"
 		class:disabled={$pageNumber === $pageCount}
 		on:click={() => handler.setPage('next')}
 	>

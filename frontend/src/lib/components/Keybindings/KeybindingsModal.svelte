@@ -30,7 +30,7 @@
 
 	const modalStore = getModalStore();
 	const toastStore = getToastStore();
-	const inputClass = "bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
+	const inputClass = "h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
 
 	// The catalog and saved state as the modal opened.
 	const catalog = menuDispatcher.catalog;
@@ -224,13 +224,13 @@
 
 {#if $modalStore[0]}
 	<div
-		class="card relative flex h-[85vh] w-[75%] max-w-[95vw] flex-col gap-4 rounded-none border-t-4 border-primary-500 p-6 shadow-xl bg-surface-50-800-token text-surface-900-50-token"
+		class="card relative flex h-[85vh] w-[75%] max-w-[95vw] flex-col gap-3 rounded-none border-t-4 border-primary-500 p-4 text-sm shadow-xl bg-surface-50-800-token text-surface-900-50-token"
 		data-keybindings-modal
 	>
 		<header class="flex items-center justify-between p-2">
 			<div class="flex items-center gap-2">
-				<Keyboard size={24} class="text-primary-500" />
-				<h2 class="text-xl font-bold">Keybindings</h2>
+				<Keyboard size={18} class="text-primary-500" />
+				<h2 class="text-base font-bold">Keybindings</h2>
 			</div>
 			<button type="button" class="text-2xl leading-none" aria-label="Close" on:click={requestClose}><X /></button>
 		</header>
@@ -278,7 +278,7 @@
 						onReset={(actionId) => edit(resetAction(draft, target(actionId)))}
 					/>
 				{:else}
-					<p class="p-4 text-sm opacity-60">No actions match.</p>
+					<p class="p-4 text-xs opacity-60">No actions match.</p>
 				{/if}
 			</section>
 		</div>
@@ -319,12 +319,12 @@
 			<div class="flex shrink-0 gap-2">
 				<button
 					type="button"
-					class="btn {$modeCurrent ? 'variant-ghost-surface border-0 ring-0' : 'variant-ghost-surface'}"
+					class="btn btn-sm {$modeCurrent ? 'variant-ghost-surface border-0 ring-0' : 'variant-ghost-surface'}"
 					on:click={requestClose}>Cancel</button
 				>
 				<button
 					type="button"
-					class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+					class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 					disabled={!dirty || saving || problems.length > 0}
 					on:click={requestSave}>{saving ? "Saving..." : "Save"}</button
 				>
@@ -335,13 +335,13 @@
 			<ModalCard title={capture.label} data-key-capture>
 				<p>Press the new key combination.</p>
 				{#if capture.message}
-					<p class="text-sm text-warning-800 dark:text-warning-500">{capture.message}</p>
+					<p class="text-xs text-warning-800 dark:text-warning-500">{capture.message}</p>
 				{/if}
-				<p class="text-sm opacity-70">
+				<p class="text-xs opacity-70">
 					Marasi shortcuts are paused while recording. Press <kbd class="kbd">Esc</kbd> to cancel.
 				</p>
 				<svelte:fragment slot="footer">
-					<button type="button" class="btn variant-ghost-surface" on:click={() => (capture = null)}>Cancel</button>
+					<button type="button" class="btn btn-sm variant-ghost-surface" on:click={() => (capture = null)}>Cancel</button>
 				</svelte:fragment>
 			</ModalCard>
 		{/if}
@@ -349,10 +349,10 @@
 			<ModalCard title={confirmation.title}>
 				<p>{confirmation.body}</p>
 				<svelte:fragment slot="footer">
-					<button type="button" class="btn variant-ghost-surface" on:click={() => (confirmation = null)}>Cancel</button>
+					<button type="button" class="btn btn-sm variant-ghost-surface" on:click={() => (confirmation = null)}>Cancel</button>
 					<button
 						type="button"
-						class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+						class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 						on:click={() => {
 							const run = confirmation.run;
 							confirmation = null;

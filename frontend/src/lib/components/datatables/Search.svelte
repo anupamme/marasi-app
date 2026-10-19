@@ -6,7 +6,7 @@
 
 <input
 	id={id}
-	class="input sm:w-64 w-36 rounded-none"
+	class="input sm:w-64 w-36 rounded-none h-8 py-1 text-sm"
 	type="search"
 	placeholder="Search..."
 	bind:value

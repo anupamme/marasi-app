@@ -21,24 +21,24 @@
 <ul>
 	{#each rows as row (row.action.id)}
 		<li
-			class="flex items-center justify-between gap-4 border-b border-l-4 border-b-surface-300 px-3 py-2 dark:border-b-surface-600 {bar[row.status] ?? 'border-l-transparent'}"
+			class="flex items-center justify-between gap-4 border-b border-l-4 border-b-surface-300 px-3 py-1.5 dark:border-b-surface-600 {bar[row.status] ?? 'border-l-transparent'}"
 			data-action-id={row.action.id}
 			data-unavailable={row.available === false ? "" : undefined}
 		>
 			<div class="flex min-w-0 flex-col {row.available === false ? 'opacity-70' : ''}">
 				<span>{row.action.label}</span>
 				{#if row.action.description}
-					<span class="text-sm opacity-70">{row.action.description}</span>
+					<span class="text-xs opacity-70">{row.action.description}</span>
 				{/if}
 				{#if row.status === "conflict"}
-					<span class="text-sm text-error-600 dark:text-error-400">{row.problem}</span>
+					<span class="text-xs text-error-600 dark:text-error-400">{row.problem}</span>
 				{:else if row.status === "unbound"}
-					<span class="text-sm text-warning-800 dark:text-warning-500">Unbound</span>
+					<span class="text-xs text-warning-800 dark:text-warning-500">Unbound</span>
 				{:else if row.status === "shadowing"}
 					<!-- Allowed: the more specific context wins there. Not an error. -->
-					<span class="text-sm opacity-70" data-shadowing>{row.problem}</span>
+					<span class="text-xs opacity-70" data-shadowing>{row.problem}</span>
 				{:else if row.status === "unavailable"}
-					<span class="text-sm italic">{row.note}</span>
+					<span class="text-xs italic">{row.note}</span>
 				{/if}
 			</div>
 			<BindingChips

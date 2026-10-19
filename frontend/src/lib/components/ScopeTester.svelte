@@ -77,27 +77,27 @@
     })
   </script>
   
-  <div class="w-full">
+  <div class="w-full text-sm">
     <!-- Removed card class and p-4 padding -->
     <div class="w-full">
-      <div class="mb-4">
+      <div class="mb-3">
         <label for="urlInput" class="block mb-1">URL / Host to test:</label>
         <input
           id="urlInput"
           type="text"
           bind:value={$testerInput}
-          class="input w-full"
+          class="input h-8 w-full py-1 text-sm"
           placeholder="Enter a URL or Host (e.g., example.com or https://example.com/path)"
         />
-        <div class="text-sm mt-1">
+        <div class="text-xs opacity-70 mt-1">
           Include protocol (http://) if your rules specifically match against it. If omitted, https:// will be used.
         </div>
       </div>
       
-      <div class="text-center mb-4">
+      <div class="text-center mb-3">
         <button 
           on:click={testMatch} 
-          class="btn {$modeCurrent ? 'variant-ghost-primary' : 'variant-filled-primary'} border-0 ring-0"
+          class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary' : 'variant-filled-primary'} border-0 ring-0"
           disabled={loading}
         >
           {loading ? 'Testing...' : 'Test Rules'}
@@ -105,14 +105,14 @@
       </div>
       
       {#if error}
-        <div class="mt-4 p-2 bg-error-100 text-error-800 border border-error-300 dark:bg-error-700 dark:text-error-100 dark:border-error-600 rounded">
+        <div class="mt-3 p-2 bg-error-100 text-error-800 border border-error-300 dark:bg-error-700 dark:text-error-100 dark:border-error-600 rounded">
           {error}
         </div>
       {/if}
       
       {#if lastResult && !error}
         <!-- Add key attribute to force re-rendering -->
-        <div key={resultKey} class="mt-4 p-3 {getResultClass()}">
+        <div key={resultKey} class="mt-3 p-3 {getResultClass()}">
           <div class="mt-2">
             <p><b>Tested URL:</b> {lastResult.testedUrl}</p>
             

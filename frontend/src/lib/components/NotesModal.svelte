@@ -13,8 +13,8 @@
 
     const modalStore = getModalStore();
 
-    const cBase = "card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token";
-    const cForm = "space-y-4";
+    const cBase = "card p-4 w-modal shadow-xl space-y-3 text-sm bg-surface-50-800-token text-surface-900-50-token";
+    const cForm = "space-y-3";
 
     function saveNote() {
         UpdateNote($modalStore[0].requestID.toString(), content)
@@ -74,7 +74,7 @@
         {:else}
             <!-- Show modal content when not loading -->
             <header class="flex justify-between items-center">
-                <h2 class="text-xl font-bold">
+                <h2 class="text-base font-bold">
                     {$modalStore[0].title ?? "(title missing)"}
                 </h2>
                 <button
@@ -82,13 +82,13 @@
                     aria-label="Close"
                     on:click={modalStore.close}
                 >
-                    <X />
+                    <X size={16} />
                 </button>
             </header>
             <form class="modal-form {cForm}">
                 <label class="label">
                     <textarea
-                        class="textarea rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+                        class="textarea rounded-none text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
                         rows="10"
                         bind:value={content}
                         placeholder="Request notes here"
@@ -97,7 +97,7 @@
             </form>
             <!-- prettier-ignore -->
             <footer class="modal-footer {parent.regionFooter}">
-                <button class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}" on:click={saveNote}>Save</button>
+                <button class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}" on:click={saveNote}>Save</button>
             </footer>
         {/if}
     </div>

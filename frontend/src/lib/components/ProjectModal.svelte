@@ -11,9 +11,9 @@
     let filteredList = [];
     let selectedIndex = -1;
     const modalStore = getModalStore();
-    const cBase = 'card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token';
+    const cBase = 'card p-4 w-modal shadow-xl space-y-3 text-sm bg-surface-50-800-token text-surface-900-50-token';
     const cHeader = 'text-2xl font-bold';
-    const cForm = 'space-y-4';
+    const cForm = 'space-y-3';
     
     function onInput(selected) {
         if (selected && selected.detail) {
@@ -157,17 +157,17 @@
         } 
     }}>
 		<header class="flex justify-between items-center">
-			<h2 class="text-xl font-bold">
+			<h2 class="text-base font-bold">
 				{$modalStore[0].title ?? '(title missing)'}
 			</h2>
 			<button class="text-2xl leading-none" aria-label="Close" on:click={modalStore.close}>
-				<X />
+				<X size={16} />
 			</button>
 		</header>
         <form class="modal-form {cForm}" on:submit|preventDefault>
             <!-- SEARCH BAR AT TOP -->
             <div class="relative w-full mb-2">
-                <input class="input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+                <input class="input w-full h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
                        type="search"
                        name="project-name"
                        autocomplete="off"
@@ -198,17 +198,17 @@
                         {/each}
                     </ul>
                 {:else}
-                    <div class="p-4 text-center opacity-70">
+                    <div class="p-4 text-center text-xs opacity-70">
                         {input.trim() ? 'No matching projects found' : 'No recent projects'}
                     </div>
                 {/if}
             </div>
             
             <!-- PRIMARY ACTION BUTTON -->
-            <div class="w-full mt-4">
+            <div class="w-full mt-3">
                 <button 
                     type="button"
-                    class="btn w-full {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+                    class="btn btn-sm w-full {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
                     on:click={openSelected}
                 >
                     {filteredList.length > 0 ? 'Open Selected' : 'Create New Project'}
@@ -220,7 +220,7 @@
             <div class="w-full mt-2">
                 <button 
                     type="button"
-                    class="btn w-full {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+                    class="btn btn-sm w-full {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
                     on:click={openFileSelector}
                 >
                     Browse Files...
@@ -228,7 +228,7 @@
             </div>
             
             <!-- Simple information about project creation behavior -->
-            <div class="text-sm opacity-70 mt-2">
+            <div class="text-xs opacity-70 mt-2">
                 {#if !input.includes('/') && !input.includes('\\')}
                     New projects with just a name will be created in the default directory.
                 {/if}

@@ -81,9 +81,9 @@
 </script>
 
 <MarasiKeys {menuOptions} />
-<Accordion rounded="false">
+<Accordion rounded="false" padding="py-3 px-3" regionControl="text-sm font-bold">
     <AccordionItem bind:open={accOpened}>
-        <svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+        <svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
         <svelte:fragment slot="summary"
             >{extensionName} Settings</svelte:fragment
         >
@@ -118,8 +118,8 @@
 {:else}
     <div class="flex items-center justify-center text-surface-400">
         <div class="text-center">
-            <p class="text-lg font-semibold">No Interface Loaded</p>
-            <p class="text-sm">
+            <p class="text-base font-bold">No Interface Loaded</p>
+            <p class="text-xs">
                 This extension hasn't rendered to the "main" target yet.
             </p>
         </div>

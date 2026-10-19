@@ -102,30 +102,30 @@
 </script>
 
 <div class="no-select p-4">
-	<h2 class="text-2xl font-bold mb-6">
+	<h2 class="text-base font-bold mb-4">
 		{$activeProject} Project Dashboard
 	</h2>
 
 	<!-- Main metrics cards -->
-	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">
+	<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-3 mb-4">
 		<!-- Total Requests -->
 		<div
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-primary-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-primary-700)); color: rgb(var(--color-primary-200))"
 					>
-						<ActivityIcon size="24" />
+						<ActivityIcon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Total Requests
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if countsLoading}<span class={ghost}></span>{:else}{totalRequests.toLocaleString()}{/if}
 						</p>
 					</div>
@@ -138,19 +138,19 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-tertiary-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-tertiary-700)); color: rgb(var(--color-tertiary-200))"
 					>
-						<Edit2Icon size="24" />
+						<Edit2Icon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Notes
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if countsLoading}<span class={ghost}></span>{:else}{notes.toLocaleString()}{/if}
 						</p>
 					</div>
@@ -163,19 +163,19 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-surface-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-surface-700)); color: rgb(var(--color-surface-300))"
 					>
-						<SendIcon size="24" />
+						<SendIcon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Launchpads
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if countsLoading}<span class={ghost}></span>{:else}{launchpads.toLocaleString()}{/if}
 						</p>
 					</div>
@@ -188,21 +188,21 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-warning-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-warning-700)); color: rgb(var(--color-warning-200))"
 					>
-						<FlagIcon size="24" />
+						<FlagIcon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Intercepted
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if countsLoading}<span class={ghost}></span>{:else}{intercepted.toLocaleString()}{#if !interceptedComplete}<span
-										class="dashboard-counting ml-2 align-middle text-sm font-normal opacity-60"
+										class="dashboard-counting ml-2 align-middle text-xs font-normal opacity-60"
 										title="Marasi is still counting intercepted requests from before this version"
 										>counting…</span
 									>{/if}{/if}
@@ -213,25 +213,25 @@
 		</div>
 	</div>
 
-	<h2 class="text-2xl font-bold mb-6">Reporting</h2>
-	<div class="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-6">
+	<h2 class="text-sm font-bold mb-3">Reporting</h2>
+	<div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-4">
 		<div
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-tertiary-500))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-tertiary-700)); color: rgb(var(--color-tertiary-100))"
 					>
-						<BookCheck size="24" />
+						<BookCheck size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Test Cases
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{testCasesCount.toLocaleString()}
 						</p>
 					</div>
@@ -243,19 +243,19 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-primary-500))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-primary-700)); color: rgb(var(--color-primary-100))"
 					>
-						<ShieldAlert size="24" />
+						<ShieldAlert size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Findings
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{findingsCount.toLocaleString()}
 						</p>
 					</div>
@@ -264,30 +264,30 @@
 		</div>
 	</div>
 
-	<h2 class="text-2xl font-bold mb-6">Scope</h2>
-	<div class="grid grid-cols-1 sm:grid-cols-3 gap-4">
+	<h2 class="text-sm font-bold mb-3">Scope</h2>
+	<div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
 		<!-- Default Policy -->
 		<div
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-success-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-success-700)); color: rgb(var(--color-success-200))"
 					>
 						{#if !defaultAllow}
-							<Shield size="24" />
+							<Shield size="16" />
 						{:else}
-							<ShieldOff size="24" />
+							<ShieldOff size="16" />
 						{/if}
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Default Policy
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if scopeLoading}<span class={ghost}></span>{:else}{defaultAllow
 									? "Allow"
 									: "Deny"}{/if}
@@ -302,19 +302,19 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-secondary-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-secondary-700)); color: rgb(var(--color-surface-800))"
 					>
-						<CheckCircleIcon size="24" />
+						<CheckCircleIcon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Include Rules
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if scopeLoading}<span class={ghost}></span>{:else}{includeRulesCount.toLocaleString()}{/if}
 						</p>
 					</div>
@@ -327,19 +327,19 @@
 			class="card bg-surface-100-500-token text-surface-900-50-token border-l-4"
 			style="border-color: rgb(var(--color-primary-700))"
 		>
-			<div class="card-body p-4">
+			<div class="card-body p-3">
 				<div class="flex items-center">
 					<div
-						class="rounded-full p-3"
+						class="rounded-full p-2"
 						style="background-color: rgb(var(--color-primary-700)); color: rgb(var(--color-error-200))"
 					>
-						<XCircleIcon size="24" />
+						<XCircleIcon size="16" />
 					</div>
-					<div class="ml-4">
-						<p class="text-sm opacity-70">
+					<div class="ml-3">
+						<p class="text-xs opacity-70">
 							Exclude Rules
 						</p>
-						<p class="text-3xl font-bold">
+						<p class="text-xl font-bold">
 							{#if scopeLoading}<span class={ghost}></span>{:else}{excludeRulesCount.toLocaleString()}{/if}
 						</p>
 					</div>

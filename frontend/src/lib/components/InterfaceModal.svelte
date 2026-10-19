@@ -10,9 +10,9 @@
 	let selectedInterface = 0;
 	let port = $listener.port;
 	const modalStore = getModalStore();
-	const cBase = 'card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token';
+	const cBase = 'card p-4 w-modal shadow-xl space-y-3 text-sm bg-surface-50-800-token text-surface-900-50-token';
 	const cHeader = 'text-2xl font-bold';
-	const cForm = 'space-y-4';
+	const cForm = 'space-y-3';
     function onInput() {
         const response = {
             "addr": interfaceList[selectedInterface],
@@ -40,15 +40,15 @@
         } 
     }}>
 		<header class="flex justify-between items-center">
-			<h2 class="text-xl font-bold">
+			<h2 class="text-base font-bold">
 				{$modalStore[0].title ?? '(title missing)'}
 			</h2>
 			<button class="text-2xl leading-none" aria-label="Close" on:click={modalStore.close}>
-				<X />
+				<X size={16} />
 			</button>
 		</header>
 		<form class="modal-form {cForm}">
-			<select bind:value={selectedInterface} class="select bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0">
+			<select bind:value={selectedInterface} class="select h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0">
 				{#each interfaceList as proxyInterface, index}
 					<option value={index}
 						>{proxyInterface}</option
@@ -56,14 +56,14 @@
 				{/each}
 			</select>
 			<input
-				class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+				class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 				type="number"
 				bind:value={port}
 				placeholder="8080"
 			/>
             <!-- prettier-ignore -->
             <footer class="modal-footer {parent.regionFooter}">
-                <button class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}" on:click={onInput}>Continue</button>
+                <button class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}" on:click={onInput}>Continue</button>
             </footer>
         </form>
     </div>

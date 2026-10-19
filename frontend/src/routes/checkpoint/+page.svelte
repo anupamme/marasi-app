@@ -261,9 +261,9 @@
 </script>
 
 <MarasiKeys menuOptions={checkpointMenu} />
-<Accordion rounded="false">
+<Accordion rounded="false" padding="py-3 px-3" regionControl="text-sm font-bold">
 	<AccordionItem bind:open={accOpened}>
-		<svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+		<svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
 		<svelte:fragment slot="summary"
 			>Checkpoint Settings</svelte:fragment
 		>
@@ -271,6 +271,7 @@
 			<CodeMirror
 				bind:value={$checkpointCode}
 				class="text-xs"
+				styles={{ "&": { fontSize: "11px" } }}
 				theme={$modeCurrent ? githubLight : oneDark}
 				extensions={$marasiConfig.VimEnabled
 					? [
@@ -298,7 +299,7 @@
 			<div class="flex justify-end mt-2">
 				<button
 					type="button"
-					class="btn {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
+					class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
 					on:click={() => {
 						RunExtension(
 							"checkpoint",
@@ -333,8 +334,8 @@
 		</svelte:fragment>
 	</AccordionItem>
 </Accordion>
-<div class="p-1 flex flex-col items-center">
-	<div class={$modeCurrent ? "btn-group checkpoint-ghost-group" : "btn-group variant-filled-primary"}>
+<div class="p-1 flex flex-col items-center text-sm">
+	<div class={$modeCurrent ? "btn-group btn-group-sm checkpoint-ghost-group" : "btn-group btn-group-sm variant-filled-primary"}>
 		<button
 			class={$modeCurrent ? "variant-ghost-primary ring-0 shadow-none" : ""}
 			disabled={error !== "" || interceptedCount == 0}
@@ -374,14 +375,14 @@
 			}}>Drop</button
 		>
 	</div>
-	<div class="text-center">
+	<div class="mt-1 text-center text-sm">
 		{#if interceptedCount > 0}
 			<p>Intercept Queue: {interceptedCount}</p>
 		{:else}
 			<p>No items in interception queue</p>
 		{/if}
 	</div>
-	<div class="text-center">
+	<div class="text-center text-xs opacity-70">
 		{#if error === ""}
 			<p>No Error</p>
 		{:else}
@@ -395,6 +396,7 @@
 				on:ready={(event) => (interceptedEditor = event.detail)}
 				lang={getLang(intercepted)}
 				class="text-xs"
+				styles={{ "&": { fontSize: "11px" } }}
 				theme={$modeCurrent ? githubLight : oneDark}
 				extensions={$marasiConfig.VimEnabled
 					? [vim()]

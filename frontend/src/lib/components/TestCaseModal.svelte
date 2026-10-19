@@ -235,7 +235,7 @@
 {#if $modalStore[0]}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
-		class="card p-6 w-[75%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-tertiary-500 bg-surface-50-800-token text-surface-900-50-token"
+		class="card p-4 text-sm w-[75%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-tertiary-500 bg-surface-50-800-token text-surface-900-50-token"
 		on:keydown={(event) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
@@ -246,22 +246,22 @@
 		<header class="flex justify-between items-center p-2">
 			<div class="flex items-center gap-2">
 				<BookCheck
-					size={24}
+					size={18}
 					class="text-tertiary-500"
 				/>
-				<h2 class="text-xl font-bold">New Test Case</h2>
+				<h2 class="text-base font-bold">New Test Case</h2>
 			</div>
 
 			<button
-				class="text-2xl leading-none"
+				class="text-base leading-none"
 				aria-label="Close"
 				on:click={modalStore.close}
 			>
-				<X />
+				<X size={18} />
 			</button>
 		</header>
 		<form
-			class="overflow-y-auto grid grid-cols-4 gap-4 custom-scrollbar"
+			class="overflow-y-auto grid grid-cols-4 gap-3 custom-scrollbar"
 		>
 			{#if showTemplateSearch}
 				<label
@@ -271,11 +271,11 @@
 					<span>Predefined Test Cases</span>
 
 					<div
-						class="flex items-center gap-2 h-[42px]"
+						class="flex items-center gap-2 h-8"
 					>
 						<input
 							id="templateSearch"
-							class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+							class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 							type="search"
 							bind:value={
 								templateSearchInput
@@ -352,7 +352,7 @@
 				<label class="label col-span-4">
 					<button
 						type="button"
-						class="btn variant-soft-tertiary w-full border border-dashed border-surface-500/50 hover:variant-soft-tertiary transition-colors h-[42px]"
+						class="btn btn-sm variant-soft-tertiary w-full border border-dashed border-surface-500/50 hover:variant-soft-tertiary transition-colors h-8"
 						on:click={() => {
 							showTemplateSearch = true;
 							setTimeout(
@@ -378,7 +378,7 @@
 				<span>Title</span>
 				<input
 					id="titleInput"
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="text"
 					bind:value={testCase.Title}
 				/>
@@ -386,7 +386,7 @@
 			<label class="label col-span-4 md:col-span-1">
 				<span>Category</span>
 				<input
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="text"
 					bind:value={testCase.Category}
 				/>
@@ -394,7 +394,7 @@
 			<label class="label col-span-4">
 				<span>Description</span>
 				<input
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="text"
 					bind:value={testCase.Description}
 				/>
@@ -405,13 +405,13 @@
 					bind:value={testCase.Tags}
 					name="chips"
 					placeholder="Tags"
-					class="bg-white dark:bg-surface-700 border-0 ring-0 focus-within:border-0 focus-within:ring-0"
+					class="text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus-within:border-0 focus-within:ring-0"
 				/>
 			</label>
 			<label class="label col-span-4">
 				<span>Note</span>
 				<textarea
-					class="textarea rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="textarea text-sm rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					rows="10"
 					bind:value={testCase.Note}
 					placeholder="Request notes here"
@@ -422,7 +422,7 @@
 				<span>Linked Requests</span>
 
 				<input
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="search"
 					name="requestSearch"
 					bind:value={requestInput}
@@ -554,7 +554,7 @@
 					</Accordion>
 				{:else}
 					<div
-						class="mt-4 p-3 variant-soft rounded-token text-sm opacity-70 text-center"
+						class="mt-3 p-3 variant-soft rounded-token text-xs opacity-70 text-center"
 					>
 						No requests linked. Search above
 						to add one.
@@ -971,7 +971,7 @@
 								</AccordionItem>
 							{:else}
 								<div
-									class="flex justify-between items-center p-4 py-3 variant-soft rounded-token border-b border-surface-500/10"
+									class="flex justify-between items-center px-3 py-2 variant-soft rounded-token border-b border-surface-500/10"
 								>
 									<div
 										class="flex items-center gap-2 {art.Status ===
@@ -1084,7 +1084,7 @@
 					</Accordion>
 				{:else}
 					<div
-						class="mt-4 p-3 variant-soft rounded-token text-sm opacity-70 text-center"
+						class="mt-3 p-3 variant-soft rounded-token text-xs opacity-70 text-center"
 					>
 						No artifacts uploaded. Drop
 						files above to attach them.

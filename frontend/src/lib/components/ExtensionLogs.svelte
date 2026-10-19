@@ -24,7 +24,7 @@
         }
     })
 </script>
-<div class="text-center p-1">
+<div class="text-center p-1 text-sm font-bold">
     {extensionName} Logs
 </div>
 {#if logs?.length > 0}

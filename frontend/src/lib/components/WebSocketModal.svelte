@@ -204,7 +204,7 @@
 {#if $modalStore[0]}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
-		class="card p-4 w-[90%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-primary-500 bg-surface-50-800-token text-surface-900-50-token"
+		class="card p-4 text-sm w-[90%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-primary-500 bg-surface-50-800-token text-surface-900-50-token"
 		on:keydown={(event) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
@@ -214,8 +214,8 @@
 	>
 		<header class="flex justify-between items-center gap-3">
 			<div class="flex min-w-0 items-center gap-2">
-				<RadioIcon size={24} class={upgrade.iconClass} />
-				<h2 class="truncate text-base">
+				<RadioIcon size={18} class={upgrade.iconClass} />
+				<h2 class="truncate text-base font-bold">
 					{transport}://{host}{path}
 				</h2>
 				<span class="shrink-0 text-sm opacity-70"
@@ -239,7 +239,7 @@
 					disabled={upgrade.state !== "open" || closing}
 					on:click={closeConnection}
 				>
-					<Unplug size={16} class="mr-1" />
+					<Unplug size={14} class="mr-1" />
 					{closing
 						? "Closing…"
 						: "Close Connection"}
@@ -249,20 +249,20 @@
 					aria-label="Close modal"
 					on:click={modalStore.close}
 				>
-					<XIcon />
+					<XIcon size={16} />
 				</button>
 			</div>
 		</header>
 
 		<div class="mt-2 flex w-full justify-center">
-			<TabGroup>
+			<TabGroup padding="px-3 py-1" regionList="text-sm">
 				<Tab
 					bind:group={openTab}
 					name="stream"
 					value="stream"
 				>
 					<div class="flex items-center gap-2">
-						<RadioIcon size={16} />
+						<RadioIcon size={14} />
 						<span>Stream</span>
 					</div>
 				</Tab>
@@ -272,7 +272,7 @@
 					value="checkpoint"
 				>
 					<div class="flex items-center gap-2">
-						<FlagIcon size={16} />
+						<FlagIcon size={14} />
 						<span>Checkpoint</span>
 					</div>
 				</Tab>
@@ -282,7 +282,7 @@
 					value="inject"
 				>
 					<div class="flex items-center gap-2">
-						<SendIcon size={16} />
+						<SendIcon size={14} />
 						<span>Inject</span>
 					</div>
 				</Tab>
@@ -292,7 +292,7 @@
 					value="connection"
 				>
 					<div class="flex items-center gap-2">
-						<Info size={16} />
+						<Info size={14} />
 						<span>Connection</span>
 					</div>
 				</Tab>
@@ -314,7 +314,7 @@
 						/>
 					{:else}
 						<div
-							class="p-4 text-sm opacity-60"
+							class="p-4 text-xs opacity-60"
 						>
 							No request ID
 						</div>
@@ -331,7 +331,7 @@
 						/>
 					{:else}
 						<div
-							class="p-4 text-sm opacity-60"
+							class="p-4 text-xs opacity-60"
 						>
 							No request ID
 						</div>
@@ -348,7 +348,7 @@
 						/>
 					{:else}
 						<div
-							class="p-4 text-sm opacity-60"
+							class="p-4 text-xs opacity-60"
 						>
 							No request ID
 						</div>

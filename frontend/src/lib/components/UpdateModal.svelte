@@ -84,9 +84,9 @@
 		class="card w-modal-wide shadow-xl bg-surface-50-800-token text-surface-900-50-token flex overflow-hidden"
 		style="min-height: 24rem"
 	>
-		<aside class="w-72 shrink-0 border-r border-surface-300 dark:border-surface-600 p-5 flex flex-col">
-			<h2 class="h4">Update</h2>
-			<ol class="mt-5" aria-label="Update steps">
+		<aside class="w-72 shrink-0 border-r border-surface-300 dark:border-surface-600 p-4 flex flex-col">
+			<h2 class="text-base font-bold">Update</h2>
+			<ol class="mt-4" aria-label="Update steps">
 				{#each panel.steps as step, i (step.id)}
 					<li
 						class="relative flex gap-3 pb-5 last:pb-0"
@@ -142,9 +142,9 @@
 			</dl>
 		</aside>
 
-		<section class="flex min-w-0 flex-1 flex-col p-5">
+		<section class="flex min-w-0 flex-1 flex-col p-4">
 			<header class="flex items-center justify-between">
-				<h3 class="h5">{failure ? "Failed" : panel.heading}</h3>
+				<h3 class="text-sm font-bold">{failure ? "Failed" : panel.heading}</h3>
 				<button
 					type="button"
 					class="btn-icon btn-icon-sm"
@@ -181,7 +181,7 @@
 					{/if}
 				{:else if panel.current === UpdateStep.download}
 					<div class="flex h-full flex-col justify-center gap-3">
-						<p class="text-3xl font-bold font-mono">{progressPercent(progress) ?? 0}%</p>
+						<p class="text-xl font-bold font-mono">{progressPercent(progress) ?? 0}%</p>
 						<ProgressBar
 							value={progressPercent(progress) ?? undefined}
 							max={100}

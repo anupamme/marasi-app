@@ -121,9 +121,9 @@
 	$: neutral = neutralVariant($modeCurrent);
 	$: iconButton = `btn-icon inline-flex items-center justify-center p-1 w-auto h-auto ${primary}`;
 	const tableField =
-		"input w-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
+		"input h-8 w-full bg-white dark:bg-surface-700 border-0 py-1 text-sm ring-0 focus:border-0 focus:ring-0";
 	const row =
-		"flex items-center justify-between gap-8 py-4 border-b border-surface-300 dark:border-surface-600";
+		"flex items-center justify-between gap-8 py-3 border-b border-surface-300 dark:border-surface-600";
 	const control = "flex w-80 shrink-0";
 
 	$: keybindingSummary = (() => {
@@ -349,9 +349,9 @@
 	});
 </script>
 
-<div class="no-select flex h-full min-h-0 flex-col p-4 text-surface-900-50-token">
+<div class="no-select flex h-full min-h-0 flex-col p-4 text-sm text-surface-900-50-token">
 	<header class="mb-4 flex items-baseline gap-3">
-		<h2 class="text-2xl font-bold">Marasi Settings</h2>
+		<h2 class="text-base font-bold">Marasi Settings</h2>
 		{#if buildInfo}
 			<span
 				class="font-mono text-sm"
@@ -379,25 +379,25 @@
 					aria-current={section === entry.id ? "true" : undefined}
 					on:click={() => selectSection(entry.id)}
 				>
-					<svelte:component this={entry.icon} size={18} class="shrink-0 opacity-80" />
+					<svelte:component this={entry.icon} size={16} class="shrink-0 opacity-80" />
 					<span class="flex flex-col">
 						<span>{entry.name}</span>
-						<span class="text-sm opacity-70">{entry.hint}</span>
+						<span class="text-xs opacity-70">{entry.hint}</span>
 					</span>
 				</button>
 			{/each}
 		</nav>
 
-		<section class="min-w-0 flex-1 overflow-y-auto px-8 py-4">
+		<section class="min-w-0 flex-1 overflow-y-auto px-6 py-4">
 			{#if section === "editing"}
-				<h3 class="text-xl font-bold">Keyboard & Editor</h3>
+				<h3 class="text-sm font-bold">Keyboard & Editor</h3>
 				<div class={row}>
 					<div>
 						<p>Keybindings</p>
-						<p class="text-sm opacity-70">{keybindingSummary}</p>
+						<p class="text-xs opacity-70">{keybindingSummary}</p>
 					</div>
 					<div class={control}>
-						<button type="button" class="btn w-full {primary}" on:click={openKeybindings}
+						<button type="button" class="btn btn-sm w-full {primary}" on:click={openKeybindings}
 							>Configure Keybindings</button
 						>
 					</div>
@@ -405,7 +405,7 @@
 				<div class={row}>
 					<div>
 						<p>Vim mode</p>
-						<p class="text-sm opacity-70">Vim keys in every code editor</p>
+						<p class="text-xs opacity-70">Vim keys in every code editor</p>
 					</div>
 					<div class="{control} justify-end">
 						<SlideToggle
@@ -424,17 +424,17 @@
 				<div class={row}>
 					<div>
 						<p>Syntax highlighting</p>
-						<p class="text-sm opacity-70">
+						<p class="text-xs opacity-70">
 							Auto highlights requests and responses it recognises
 						</p>
 					</div>
-					<div class="{control} grid grid-cols-3" role="radiogroup" aria-label="Syntax highlighting">
+					<div class="{control} grid grid-cols-3 text-sm" role="radiogroup" aria-label="Syntax highlighting">
 						{#each syntaxModes as [value, label]}
 							<button
 								type="button"
 								role="radio"
 								aria-checked={$marasiConfig.SyntaxMode === value}
-								class="btn !border-0 !ring-0 {$marasiConfig.SyntaxMode === value
+								class="btn btn-sm !border-0 !ring-0 {$marasiConfig.SyntaxMode === value
 									? 'variant-filled-primary'
 									: 'variant-soft-primary !text-surface-900 dark:!text-surface-50'}"
 								on:click={() => setFlag("syntax_mode", value)}>{label}</button
@@ -443,18 +443,18 @@
 					</div>
 				</div>
 			{:else if section === "listener"}
-				<h3 class="text-xl font-bold">Listener</h3>
-				<p class="text-sm opacity-70">
+				<h3 class="text-sm font-bold">Listener</h3>
+				<p class="text-xs opacity-70">
 					Used when Marasi starts. Change the running listener from the dashboard.
 				</p>
 				<div class={row}>
 					<div>
 						<p>Default interface</p>
-						<p class="text-sm opacity-70">Address the proxy listens on</p>
+						<p class="text-xs opacity-70">Address the proxy listens on</p>
 					</div>
 					<div class={control}>
 						<input
-							class="input w-full"
+							class="input h-8 w-full py-1 text-sm"
 							type="text"
 							placeholder="Listener"
 							aria-label="Default interface"
@@ -466,11 +466,11 @@
 				<div class={row}>
 					<div>
 						<p>Default port</p>
-						<p class="text-sm opacity-70">Port the proxy listens on</p>
+						<p class="text-xs opacity-70">Port the proxy listens on</p>
 					</div>
 					<div class={control}>
 						<input
-							class="input w-full"
+							class="input h-8 w-full py-1 text-sm"
 							type="text"
 							placeholder="Listener"
 							aria-label="Default port"
@@ -480,10 +480,10 @@
 					</div>
 				</div>
 			{:else if section === "waypoints"}
-				<h3 class="text-xl font-bold">Waypoints</h3>
-				<p class="mb-4 text-sm opacity-70">Send traffic for a host to a different host:port.</p>
+				<h3 class="text-sm font-bold">Waypoints</h3>
+				<p class="mb-4 text-xs opacity-70">Send traffic for a host to a different host:port.</p>
 				<div class="table-container">
-					<table class="table">
+					<table class="table table-dense">
 						<thead>
 							<tr>
 								<th class="w-[40%]">Host</th>
@@ -540,7 +540,7 @@
 								<td>
 									<button
 										type="button"
-										class="btn w-full {primary}"
+										class="btn btn-sm w-full {primary}"
 										disabled={targetHost === "" ||
 											override === "" ||
 											(targetHost in $waypoints && selected !== targetHost)}
@@ -556,13 +556,13 @@
 				</div>
 			{:else if section === "content-types"}
 				<div class="sticky -top-4 z-10 -mt-4 bg-surface-50-900-token pb-3 pt-4">
-					<h3 class="text-xl font-bold">Content Types</h3>
-					<p class="mb-3 text-sm opacity-70">
+					<h3 class="text-sm font-bold">Content Types</h3>
+					<p class="mb-3 text-xs opacity-70">
 						The Ledger hides these types in every project that follows the app default. A project
 						whose list is edited in the Ledger's Types menu keeps its own until it is reset.
 					</p>
 					<div class="flex items-stretch gap-2">
-						<div class="input-group input-group-divider flex-1 grid-cols-[auto_minmax(0,1fr)]">
+						<div class="input-group input-group-divider h-8 flex-1 grid-cols-[auto_minmax(0,1fr)]">
 							<div class="input-group-shim"><Search size={15} /></div>
 							<input
 								id="settingsNewContentType"
@@ -580,7 +580,7 @@
 						</div>
 						<button
 							type="button"
-							class="btn shrink-0 {primary}"
+							class="btn btn-sm shrink-0 {primary}"
 							disabled={!contentTypeList.addable}
 							on:click={addDefaultContentType}
 							>{contentTypeList.addable ? `Add ${contentTypeList.addable}` : "Add"}</button
@@ -625,14 +625,14 @@
 							</ul>
 						</section>
 					{:else}
-						{#if !contentTypeFind.trim()}<p class="text-sm opacity-60">The Ledger hides no types.</p>{/if}
+						{#if !contentTypeFind.trim()}<p class="text-xs opacity-60">The Ledger hides no types.</p>{/if}
 					{/each}
 				</div>
 			{:else if section === "browser"}
-				<h3 class="text-xl font-bold">Browser</h3>
-				<p class="mb-4 text-sm opacity-70">Chrome that Marasi starts with the proxy configured.</p>
-				<div class="table-container mb-6">
-					<table class="table">
+				<h3 class="text-sm font-bold">Browser</h3>
+				<p class="mb-4 text-xs opacity-70">Chrome that Marasi starts with the proxy configured.</p>
+				<div class="table-container mb-4">
+					<table class="table table-dense">
 						<thead>
 							<tr>
 								<th>Chrome Path</th>
@@ -677,7 +677,7 @@
 								<td>
 									<button
 										type="button"
-										class="btn w-full {primary}"
+										class="btn btn-sm w-full {primary}"
 										disabled={selectedOS === "" || selectedPath === ""}
 										on:click={addChromePath}>Add Path</button
 									>
@@ -687,7 +687,7 @@
 					</table>
 				</div>
 				<div class="table-container">
-					<table class="table">
+					<table class="table table-dense">
 						<thead>
 							<tr>
 								<th>Chrome Profile</th>
@@ -722,7 +722,7 @@
 								<td>
 									<button
 										type="button"
-										class="btn w-full {primary}"
+										class="btn btn-sm w-full {primary}"
 										disabled={selectedProfile === ""}
 										on:click={addChromeProfile}>Add Profile</button
 									>
@@ -733,14 +733,14 @@
 				</div>
 			{:else if section === "highlights"}
 				<div class="flex items-baseline justify-between gap-4">
-					<h3 class="text-xl font-bold">Highlights</h3>
+					<h3 class="text-sm font-bold">Highlights</h3>
 					<button
 						type="button"
 						class="btn btn-sm variant-soft"
 						on:click={confirmResetHighlights}>Reset to defaults</button
 					>
 				</div>
-				<p class="text-sm opacity-70">
+				<p class="text-xs opacity-70">
 					Colours apply to every project. An empty label shows the colour's name. A
 					project can set its own label from the Ledger.
 				</p>
@@ -753,20 +753,20 @@
 							></span>
 							<div>
 								<p>Highlight {highlight.number}</p>
-								<p class="text-sm opacity-70">{highlight.appLabel ?? highlight.name}</p>
+								<p class="text-xs opacity-70">{highlight.appLabel ?? highlight.name}</p>
 							</div>
 						</div>
 						<div class="{control} items-center gap-2">
 							<input
 								type="color"
-								class="h-9 w-12 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
+								class="h-8 w-12 shrink-0 cursor-pointer rounded border-0 bg-transparent p-0"
 								aria-label="Highlight {highlight.number} colour"
 								value={highlight.color}
 								on:change={(event) =>
 									saveHighlight(highlight.number, { color: event.currentTarget.value })}
 							/>
 							<input
-								class="input w-full"
+								class="input h-8 w-full py-1 text-sm"
 								type="text"
 								aria-label="Highlight {highlight.number} label"
 								placeholder={highlight.name}
@@ -778,15 +778,15 @@
 					</div>
 				{/each}
 			{:else if section === "maintenance"}
-				<h3 class="text-xl font-bold">Maintenance</h3>
-				<p class="mb-4 text-sm opacity-70">
+				<h3 class="text-sm font-bold">Maintenance</h3>
+				<p class="mb-4 text-xs opacity-70">
 					Marasi keeps the open project's search index and sitemap up to date in the background.
 					After an upgrade it may still be catching up on older pairs.
 				</p>
 				<div class={row} id="settingsRebuildIndex">
 					<div>
 						<p>Search index</p>
-						<p class="text-sm opacity-70">
+						<p class="text-xs opacity-70">
 							Rebuild when text matches look wrong. This also makes older compressed bodies
 							searchable.
 						</p>
@@ -794,7 +794,7 @@
 					<div class={control}>
 						<button
 							type="button"
-							class="btn w-full variant-soft"
+							class="btn btn-sm w-full variant-soft"
 							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "index")}
 							on:click={() => confirmRebuild("index")}
 							>{groupBuilding($jobsStore, "index") ? "Building…" : "Rebuild"}</button
@@ -804,24 +804,24 @@
 				<div class={row} id="settingsRebuildSitemap">
 					<div>
 						<p>Sitemap</p>
-						<p class="text-sm opacity-70">Rebuild when sitemap counts look wrong.</p>
+						<p class="text-xs opacity-70">Rebuild when sitemap counts look wrong.</p>
 					</div>
 					<div class={control}>
 						<button
 							type="button"
-							class="btn w-full variant-soft"
+							class="btn btn-sm w-full variant-soft"
 							disabled={$jobsStore.rebuilding != null || groupBuilding($jobsStore, "sitemap")}
 							on:click={() => confirmRebuild("sitemap")}
 							>{groupBuilding($jobsStore, "sitemap") ? "Building…" : "Rebuild"}</button
 						>
 					</div>
 				</div>
-				<h4 class="mt-6 mb-2 font-bold">Background jobs</h4>
+				<h4 class="mt-4 mb-2 text-sm font-bold">Background jobs</h4>
 				{#if $jobsStore.error}
-					<p class="mb-2 text-sm text-error-500" role="alert">{$jobsStore.error}</p>
+					<p class="mb-2 text-xs text-error-500" role="alert">{$jobsStore.error}</p>
 				{/if}
 				<div class="table-container">
-					<table class="table" id="settingsJobs">
+					<table class="table table-dense" id="settingsJobs">
 						<thead>
 							<tr>
 								<th class="w-[60%]">Job</th>
@@ -845,7 +845,7 @@
 					</table>
 				</div>
 			{:else if section === "updates"}
-				<h3 class="text-xl font-bold">Updates</h3>
+				<h3 class="text-sm font-bold">Updates</h3>
 				{#if updateSettings?.Channel}
 					<div class={row}>
 						<p>Channel</p>
@@ -857,7 +857,7 @@
 									role="radio"
 									aria-checked={updateSettings.Channel === value}
 									disabled={switchingChannel}
-									class="flex-1 px-3 py-1.5 {updateSettings.Channel === value
+									class="flex-1 px-3 py-1 {updateSettings.Channel === value
 										? primary
 										: 'bg-surface-200 hover:bg-surface-300 dark:bg-surface-700 dark:hover:bg-surface-600'}"
 									on:click={() => chooseChannel(value)}>{label}</button
@@ -869,7 +869,7 @@
 				<div class={row}>
 					<div>
 						<p>{updateStatusLine($updateState)}</p>
-						<p class="text-sm opacity-60 font-mono">{buildInfo?.Version ?? "…"}</p>
+						<p class="text-xs opacity-60 font-mono">{buildInfo?.Version ?? "…"}</p>
 					</div>
 					<div class="{control} justify-end gap-2">
 						{#if showsUpdateIndicator($updateState)}
@@ -911,7 +911,7 @@
 					</div>
 				{/if}
 			{:else}
-				<h3 class="text-xl font-bold">About</h3>
+				<h3 class="text-sm font-bold">About</h3>
 				<div class={row}>
 					<p>Version</p>
 					<p class="{control} font-mono text-sm">{buildInfo?.Version ?? "…"}</p>

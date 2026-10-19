@@ -106,14 +106,14 @@
 </script>
 
 <div
-	class="flex h-full flex-col bg-surface-50 dark:bg-surface-800 text-surface-900-50-token"
+	class="flex h-full flex-col bg-surface-50 dark:bg-surface-800 text-surface-900-50-token text-sm"
 >
 	<header
-		class="flex items-center justify-between gap-4 border-b border-surface-500/20 px-5 py-4"
+		class="flex items-center justify-between gap-2 border-b border-surface-500/30 p-3"
 	>
-		<div class="flex min-w-0 items-center gap-3">
-			<FileText size={20} class="text-primary-500 shrink-0" />
-			<h2 class="truncate text-lg font-bold">
+		<div class="flex min-w-0 items-center gap-2">
+			<FileText size={16} class="text-primary-500 shrink-0" />
+			<h2 class="truncate text-sm font-bold">
 				Export Report
 			</h2>
 		</div>
@@ -123,18 +123,18 @@
 			disabled={restoringDefaultTemplate}
 			on:click={confirmDefaultTemplateRestore}
 		>
-			<RotateCcw size={16} class="mr-1" />
+			<RotateCcw size={14} class="mr-1" />
 			{restoringDefaultTemplate
 				? "Restoring..."
 				: "Restore Default Template"}
 		</button>
 	</header>
 
-	<div class="min-h-0 flex-1 space-y-3 overflow-y-auto px-5 py-4">
+	<div class="min-h-0 flex-1 space-y-3 overflow-y-auto p-3">
 			<label class="label">
 				<span>Templates</span>
 				<select
-					class="select"
+					class="select h-8 py-1 text-sm"
 					bind:value={selectedTemplate}
 					disabled={loadingTemplates ||
 						templates.length === 0}
@@ -149,7 +149,7 @@
 			<label class="label">
 				<span>Title</span>
 				<input
-					class="input"
+					class="input h-8 py-1 text-sm"
 					type="text"
 					bind:value={$reportMetadata.title}
 				/>
@@ -157,7 +157,7 @@
 			<label class="label">
 				<span>Client</span>
 				<input
-					class="input"
+					class="input h-8 py-1 text-sm"
 					type="text"
 					bind:value={$reportMetadata.client}
 				/>
@@ -165,7 +165,7 @@
 			<label class="label">
 				<span>Assessment Type</span>
 				<input
-					class="input"
+					class="input h-8 py-1 text-sm"
 					type="text"
 					bind:value={$reportMetadata.type}
 				/>
@@ -173,7 +173,7 @@
 			<label class="label">
 				<span>Scope</span>
 				<input
-					class="input"
+					class="input h-8 py-1 text-sm"
 					type="text"
 					bind:value={$reportMetadata.scope}
 				/>
@@ -181,7 +181,7 @@
 			<label class="label">
 				<span>Assessor</span>
 				<input
-					class="input"
+					class="input h-8 py-1 text-sm"
 					type="text"
 					bind:value={$reportMetadata.assessor}
 				/>
@@ -190,7 +190,7 @@
 				<label class="label">
 					<span>Start</span>
 					<input
-						class="input"
+						class="input h-8 py-1 text-sm"
 						type="date"
 						bind:value={$reportMetadata.start}
 					/>
@@ -198,7 +198,7 @@
 				<label class="label">
 					<span>End</span>
 					<input
-						class="input"
+						class="input h-8 py-1 text-sm"
 						type="date"
 						bind:value={$reportMetadata.end}
 					/>
@@ -239,11 +239,11 @@
 					/>
 					<span>Truncate Bodies</span>
 				</label>
-				<div class="ml-6 mt-1 min-h-[42px]">
+				<div class="ml-6 mt-1 min-h-[32px]">
 					{#if $reportMetadata.truncate_length > 0}
 						<div class="flex items-center gap-2">
 							<input
-								class="input w-32"
+								class="input w-32 h-8 py-1 text-sm"
 								type="number"
 								min="100"
 								bind:value={
@@ -258,16 +258,16 @@
 				</div>
 			</label>
 	</div>
-	<footer class="flex shrink-0 justify-end border-t border-surface-500/20 px-5 py-4">
+	<footer class="flex shrink-0 justify-end border-t border-surface-500/30 p-3">
 		<button
 			type="button"
-			class="btn w-fit {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
+			class="btn btn-sm w-fit {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
 			disabled={exporting}
 			on:click={() => exportReport()}
 		>
 			{#if exporting}
 				<ProgressRadial
-					width="w-5"
+					width="w-4"
 					stroke={100}
 					meter="stroke-surface-50"
 					track="stroke-primary-400"

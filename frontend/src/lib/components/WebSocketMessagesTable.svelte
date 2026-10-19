@@ -296,7 +296,7 @@
 	{/if}
 
 	{#if loading && messages.length === 0}
-		<div class="p-4 text-sm opacity-60">Loading…</div>
+		<div class="p-4 text-xs opacity-60">Loading…</div>
 	{:else}
 		<div class="flex min-h-0 w-full min-w-0 flex-1">
 			<!-- left: table -->

@@ -36,8 +36,8 @@
 	// click dismisses that instead of closing the modal.
 	export let pending = false;
 
-	const inputClass = "bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
-	const sideButton = "btn h-10 shrink-0 variant-soft-primary !border-0 !ring-0";
+	const inputClass = "h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0";
+	const sideButton = "btn btn-sm h-8 shrink-0 variant-soft-primary !border-0 !ring-0";
 
 	const toastStore = getToastStore();
 
@@ -190,7 +190,7 @@
 	}
 </script>
 
-<div class="grid grid-cols-2 gap-4">
+<div class="grid grid-cols-2 gap-3">
 	<div class="label">
 		<span id="keybindings-profile-label">Profile</span>
 		<div class="relative flex">
@@ -284,15 +284,15 @@
 				/>
 			</label>
 			{#if nameProblem}
-				<p class="text-sm text-error-600 dark:text-error-400">{nameProblem}</p>
+				<p class="text-xs text-error-600 dark:text-error-400">{nameProblem}</p>
 			{/if}
 		</form>
 		<svelte:fragment slot="footer">
-			<button type="button" class="btn variant-ghost-surface" on:click={() => (naming = null)}>Cancel</button>
+			<button type="button" class="btn btn-sm variant-ghost-surface" on:click={() => (naming = null)}>Cancel</button>
 			<button
 				type="submit"
 				form="keybindings-profile-name"
-				class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+				class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 				disabled={Boolean(nameProblem)}>{naming.label}</button
 			>
 		</svelte:fragment>
@@ -302,11 +302,11 @@
 {#if notice}
 	<ModalCard title={notice.title} data-profile-notice>
 		<p class="break-words">{notice.body}</p>
-		<p class="text-sm opacity-70">Your profiles are unchanged.</p>
+		<p class="text-xs opacity-70">Your profiles are unchanged.</p>
 		<svelte:fragment slot="footer">
 			<button
 				type="button"
-				class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+				class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 				on:click={() => (notice = null)}>OK</button
 			>
 		</svelte:fragment>

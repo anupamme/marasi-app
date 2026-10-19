@@ -5,8 +5,8 @@
     export let parent;
     let input = "";
 	const modalStore = getModalStore();
-	const cBase = 'card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token';
-	const cForm = 'space-y-4';
+	const cBase = 'card p-4 w-modal shadow-xl space-y-3 text-sm bg-surface-50-800-token text-surface-900-50-token';
+	const cForm = 'space-y-3';
     function onInput() {
         $modalStore[0].response(input);
         modalStore.close();
@@ -22,11 +22,11 @@
         } 
     }}>
 		<header class="flex justify-between items-center">
-			<h2 class="text-xl font-bold">
+			<h2 class="text-base font-bold">
 				{$modalStore[0].title ?? '(title missing)'}
 			</h2>
 			<button class="text-2xl leading-none" aria-label="Close" on:click={modalStore.close}>
-				<X />
+				<X size={16} />
 			</button>
 		</header>
 		{#if $modalStore[0].body}
@@ -34,11 +34,11 @@
 		{/if}
 		<form class="modal-form {cForm}" on:submit|preventDefault={onInput}>
 			<label class="label">
-				<input class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0" type="text" placeholder={$modalStore[0].meta?.placeholder ?? "Request No."} bind:value={input}/>
+				<input class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0" type="text" placeholder={$modalStore[0].meta?.placeholder ?? "Request No."} bind:value={input}/>
 			</label>
 		<!-- prettier-ignore -->
 		<footer class="modal-footer {parent.regionFooter}">
-			<button class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}">{$modalStore[0].buttonTextSubmit ?? "Continue"}</button>
+			<button class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}">{$modalStore[0].buttonTextSubmit ?? "Continue"}</button>
         </footer>
         </form>
     </div>

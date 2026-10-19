@@ -41,7 +41,7 @@
 {#if $modalStore[0]}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
-		class="card p-4 w-[65%] max-w-[95vw] shadow-xl rounded-0 flex flex-col max-h-[90vh] bg-surface-50-800-token text-surface-900-50-token"
+		class="card p-4 space-y-3 text-sm w-[65%] max-w-[95vw] shadow-xl rounded-0 flex flex-col max-h-[90vh] bg-surface-50-800-token text-surface-900-50-token"
 		on:keydown={(event) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
@@ -50,20 +50,20 @@
 		}}
 	>
 		<header class="flex justify-between items-center p-2">
-			<h2 class="text-xl font-bold">
+			<h2 class="text-base font-bold">
 				{mode === "link" ? "Link to" : "Unlink from"} test
 				case
 			</h2>
 			<button
-				class="text-2xl leading-none"
+				class="text-base leading-none"
 				aria-label="Close"
 				on:click={modalStore.close}
 			>
-				<X />
+				<X size={18} />
 			</button>
 		</header>
 		<input
-			class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+			class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 			type="search"
 			name="search"
 			bind:value={input}
@@ -149,7 +149,7 @@
 				/>
 			</div>
 		{:else}
-			<div class="p-4 text-center opacity-50 italic">
+			<div class="p-4 text-center text-xs opacity-50 italic">
 				No test cases found.
 			</div>
 		{/if}

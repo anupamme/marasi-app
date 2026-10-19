@@ -7,11 +7,11 @@
 
 <div class="absolute inset-0 z-30 grid place-items-center bg-surface-900/40" {...$$restProps}>
 	<div
-		class="card w-modal-slim space-y-4 rounded-none border-t-4 border-primary-500 p-4 shadow-xl bg-surface-50-800-token text-surface-900-50-token"
+		class="card w-modal-slim space-y-3 rounded-none border-t-4 border-primary-500 p-4 text-sm shadow-xl bg-surface-50-800-token text-surface-900-50-token"
 		role="alertdialog"
 		aria-label={title}
 	>
-		<h3 class="text-xl font-bold">{title}</h3>
+		<h3 class="text-base font-bold">{title}</h3>
 		<slot />
 		<footer class="modal-footer flex justify-end gap-2">
 			<slot name="footer" />

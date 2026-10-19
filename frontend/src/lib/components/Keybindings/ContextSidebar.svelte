@@ -43,7 +43,7 @@
 		if (!page.groups[0].id.startsWith("extension-page.")) return null;
 		const extension = loaded.find((candidate) => candidate.Name === page.page);
 		const icon = extension && ui[extension.Name]?.icon;
-		return icon ? { extension, schema: { ...icon, size: 18 } } : null;
+		return icon ? { extension, schema: { ...icon, size: 16 } } : null;
 	}
 	$: current = pages.find((page) => page.groups.some((group) => group.id === selected));
 
@@ -68,7 +68,7 @@
 				{#if own}
 					<span class="flex shrink-0 opacity-80"><ExtensionUI extensionData={own.extension} schema={own.schema} /></span>
 				{:else}
-					<svelte:component this={icons[page.page] ?? Puzzle} size={18} class="shrink-0 opacity-80" />
+					<svelte:component this={icons[page.page] ?? Puzzle} size={16} class="shrink-0 opacity-80" />
 				{/if}
 				<span class="truncate">{page.page}</span>
 			</span>

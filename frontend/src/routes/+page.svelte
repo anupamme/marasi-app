@@ -44,14 +44,14 @@
 
 <div class="content">
 	<div class="no-select dashboard-content">
-		<div class="container mx-auto p-8 space-y-8">
+		<div class="container mx-auto p-4 space-y-4 text-sm">
 			<div
-				class="header flex justify-between items-center mb-8"
+				class="header flex justify-between items-center"
 			>
-				<div class="btn-group {$modeCurrent ? 'light-ghost-group' : 'variant-filled'}">
+				<div class="btn-group btn-group-sm {$modeCurrent ? 'light-ghost-group' : 'variant-filled'}">
 					<button
 						type="button"
-						class="btn items-center flex {neutralVariant($modeCurrent)}"
+						class="btn btn-sm text-sm items-center flex {neutralVariant($modeCurrent)}"
 						on:click={() => {
 							if (!$modalStore[0]) modalStore.trigger(listenerModal(toastStore));
 						}}
@@ -70,13 +70,13 @@
 					</button>
 					<button
 						type="button"
-						class="btn flex items-center {neutralVariant($modeCurrent)}"
+						class="btn btn-sm text-sm flex items-center {neutralVariant($modeCurrent)}"
 						on:click={() => {
 							if (!$modalStore[0]) modalStore.trigger(projectModal(toastStore));
 						}}
 					>
 						<span class="mr-2"
-							><FolderOpen /></span
+							><FolderOpen size={16} /></span
 						>
 						<span>Open Project</span>
 					</button>
@@ -84,12 +84,12 @@
 				<div class="flex items-center gap-2">
 					<button
 						type="button"
-						class="btn {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+						class="btn btn-sm text-sm {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 						on:click={() => downloadCertificate(toastStore)}
 					>
 						<span
 							><Download
-								size={20}
+								size={16}
 							/></span
 						>
 						<span>Download Certificate</span
@@ -102,13 +102,13 @@
 						>
 							<button
 								type="button"
-								class="btn flex-1 {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+								class="btn btn-sm text-sm flex-1 {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 								class:rounded-none={chromeProfiles.length >
 									0}
 								on:click={() => startChrome("")}
 							>
 								<span
-									><ChromeIcon
+									><ChromeIcon size="16"
 									/></span
 								>
 								<span
@@ -120,13 +120,13 @@
 							{#if chromeProfiles.length > 0}
 								<button
 									type="button"
-									class="btn rounded-none px-3 {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
+									class="btn btn-sm text-sm rounded-none px-3 {$modeCurrent ? 'variant-ghost-primary border-0 ring-0' : 'variant-filled-primary'}"
 									use:popup={chromeProfilesPopup}
 									aria-label="Start Chrome with custom profile"
 									title="Start with custom profile"
 								>
 									<span
-										><ChevronDown
+										><ChevronDown size={16}
 										/></span
 									>
 								</button>
@@ -141,7 +141,7 @@
 								{#each chromeProfiles as profile}
 									<button
 										type="button"
-										class="w-full p-3 text-left text-sm hover:variant-soft-primary focus:variant-soft-primary"
+										class="w-full px-3 py-2 text-left text-sm hover:variant-soft-primary focus:variant-soft-primary"
 										on:click={() => startChrome(profile)}
 									>
 										{profile}

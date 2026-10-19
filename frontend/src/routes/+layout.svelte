@@ -484,10 +484,13 @@
 			<AppRail
 				class="no-select h-full nav-rail"
 				background="bg-surface-50-800-token"
-				aspectRatio="py-3"
+				aspectRatio="py-2.5 px-1.5"
+				width="w-[76px]"
+				spacing="space-y-0.5"
 			>
 				<!-- AppRailTiles -->
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname === "/"}
 					on:click={() => {
 						goto("/");
@@ -502,7 +505,7 @@
 							class="flex justify-center items-center w-full"
 						>
 							<Logo
-								size="75"
+								size="52"
 								mode={$page.url.pathname ===
 									"/" ||
 								$modeCurrent
@@ -516,6 +519,7 @@
 					<span></span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/ledger"}
 					on:click={() => {
@@ -530,12 +534,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<BookIcon />
+							<BookIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Ledger</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/compass"}
 					on:click={() => {
@@ -550,12 +555,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<CompassIcon />
+							<CompassIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Compass</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/checkpoint"}
 					on:click={() => {
@@ -570,12 +576,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<FlagIcon />
+							<FlagIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Checkpoint</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/launchpad"}
 					on:click={() => {
@@ -590,12 +597,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<SendIcon />
+							<SendIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Launchpad</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/armory"}
 					on:click={() => {
@@ -610,13 +618,14 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<Swords />
+							<Swords size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Armory</span>
 				</AppRailAnchor>
 
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/logbook"}
 					on:click={() => {
@@ -631,12 +640,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<BookOpenCheckIcon />
+							<BookOpenCheckIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Logbook</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/workshop"}
 					on:click={() => {
@@ -651,12 +661,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<ToolIcon />
+							<ToolIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Workshop</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/sveltechef"}
 					on:click={async () => {
@@ -673,12 +684,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<ChefHat />
+							<ChefHat size="20" />
 						</div>
 					</svelte:fragment>
 					<span>CyberChef</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/excalidraw"}
 					on:click={async () => {
@@ -695,12 +707,13 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<Brush />
+							<Brush size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Excalidraw</span>
 				</AppRailAnchor>
 				<AppRailAnchor
+					regionLabel="!text-[11px] !font-semibold leading-tight"
 					selected={$page.url.pathname ===
 						"/interact"}
 					on:click={async () => {
@@ -717,7 +730,7 @@
 						<div
 							class="flex justify-center items-center w-full"
 						>
-							<ZapIcon />
+							<ZapIcon size="20" />
 						</div>
 					</svelte:fragment>
 					<span>Interactsh</span>
@@ -728,6 +741,7 @@
 							?.icon}
 					{#if iconSchema}
 						<AppRailAnchor
+							regionLabel="!text-[11px] !font-semibold leading-tight"
 							selected={$page.url
 								.pathname ===
 								"/extension/" +
@@ -779,6 +793,7 @@
 					     failure, tertiary and pulsing for a restart), a ring filling with its download. While an
 					     update waits, the icon opens Settings → Updates. -->
 					<AppRailAnchor
+						regionLabel="!text-[11px] !font-semibold leading-tight"
 						selected={$page.url.pathname ===
 							"/settings"}
 						on:click={() => {
@@ -794,10 +809,10 @@
 						<div
 							class="relative flex justify-center items-center w-full"
 						>
-							<SettingsIcon />
+							<SettingsIcon size="20" />
 							{#if settingsIndicator?.kind === "ring"}
 								<svg
-									class="pointer-events-none absolute h-10 w-10 -rotate-90 {settingsIndicator.spinning
+									class="pointer-events-none absolute h-8 w-8 -rotate-90 {settingsIndicator.spinning
 										? 'animate-spin'
 										: ''}"
 									viewBox="0 0 40 40"
@@ -837,7 +852,7 @@
 								</svg>
 							{:else if settingsIndicator?.kind === "dot"}
 								<span
-									class="pointer-events-none absolute right-5 -top-1 flex h-3 w-3"
+									class="pointer-events-none absolute right-4 -top-1 flex h-3 w-3"
 									aria-hidden="true"
 								>
 									{#if settingsIndicator.pulse}

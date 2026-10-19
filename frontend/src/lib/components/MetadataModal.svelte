@@ -10,7 +10,7 @@
     export let parent;
     let content = '';
     const modalStore = getModalStore();
-    const cBase = 'card p-4 w-modal shadow-xl space-y-4 bg-surface-50-800-token text-surface-900-50-token';
+    const cBase = 'card p-4 w-modal shadow-xl space-y-3 text-sm bg-surface-50-800-token text-surface-900-50-token';
 
     // Reactive statement to update content when modalStore changes
     $: if ($modalStore[0] && $modalStore[0].content) {
@@ -37,11 +37,11 @@
         }
     }}>
 		<header class="flex justify-between items-center">
-			<h2 class="text-xl font-bold">
+			<h2 class="text-base font-bold">
 				{$modalStore[0].title ?? '(title missing)'}
 			</h2>
 			<button class="text-2xl leading-none" aria-label="Close" on:click={modalStore.close}>
-				<X />
+				<X size={16} />
 			</button>
 		</header>
         <CodeMirror

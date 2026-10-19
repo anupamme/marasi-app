@@ -133,7 +133,7 @@
 
 <div class="card overflow-hidden border border-surface-500/30 bg-white dark:bg-surface-800 text-surface-900-50-token">
     <header
-        class="bg-surface-100 dark:bg-surface-700 p-2 px-4 flex justify-between items-center text-surface-900 dark:text-white"
+        class="bg-surface-100 dark:bg-surface-700 px-3 py-2 flex justify-between items-center text-surface-900 dark:text-white"
     >
         <span
             class="text-sm font-bold uppercase tracking-widest text-primary-600 dark:text-primary-400"
@@ -145,9 +145,9 @@
     </header>
 
     <div
-        class="p-4 md:p-6 grid grid-cols-1 md:grid-cols-2 gap-x-12 gap-y-6 bg-white dark:bg-surface-50/5 w-full"
+        class="p-3 grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4 bg-white dark:bg-surface-50/5 w-full"
     >
-        <div class="space-y-6 w-full">
+        <div class="space-y-4 w-full">
             {#each leftMetrics as m}
                 <div class="space-y-2">
                     <p class="font-bold text-sm text-surface-800 dark:text-secondary-500">
@@ -176,7 +176,7 @@
             {/each}
         </div>
 
-        <div class="space-y-6 w-full">
+        <div class="space-y-4 w-full">
             {#each rightMetrics as m}
                 <div class="space-y-2">
                     <p class="font-bold text-sm text-surface-800 dark:text-secondary-500">
@@ -206,13 +206,13 @@
         </div>
     </div>
 
-    <footer class="p-4 border-t border-surface-500/20 bg-surface-100 dark:bg-surface-800/30">
+    <footer class="p-3 border-t border-surface-500/20 bg-surface-100 dark:bg-surface-800/30">
         <label class="label">
             <span class="text-xs opacity-60 mb-1 block uppercase font-bold"
                 >Manual Vector Override / Paste</span
             >
             <input
-                class="input font-mono text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+                class="input h-8 py-1 font-mono text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
                 type="text"
                 bind:value={vector}
                 placeholder="e.g. CVSS:3.1/AV:N/AC:L/PR:N/UI:N/S:U/C:H/I:H/A:H"

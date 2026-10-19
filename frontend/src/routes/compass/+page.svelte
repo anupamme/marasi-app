@@ -94,9 +94,9 @@
 </script>
 
 <MarasiKeys menuOptions={compassMenu} />
-<Accordion rounded="false" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
+<Accordion rounded="false" padding="py-3 px-3" regionControl="text-sm font-bold" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
     <AccordionItem bind:open={accOpened}>
-        <svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+        <svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
         <svelte:fragment slot="summary">Compass Settings</svelte:fragment>
         <svelte:fragment slot="content">
             <ScopeTester />
@@ -107,6 +107,7 @@
     <CodeMirror
         bind:value={$compassCode}
         class="text-xs"
+        styles={{ "&": { fontSize: "11px" } }}
         theme={$modeCurrent ? githubLight : oneDark}
         extensions={$marasiConfig.VimEnabled
             ? [

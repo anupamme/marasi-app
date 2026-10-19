@@ -747,38 +747,39 @@
 	});
 </script>
 
-<div class="flex h-full min-h-0 flex-col overflow-hidden">
+<div class="flex h-full min-h-0 flex-col overflow-hidden text-sm">
 	<MarasiKeys {menuOptions} />
-	<Accordion rounded="none" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
+	<Accordion rounded="none" padding="py-3 px-3" regionControl="text-sm font-bold" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
 		<AccordionItem bind:open={accOpened}>
-			<svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+			<svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
 			<svelte:fragment slot="summary">Armory Settings</svelte:fragment>
 			<svelte:fragment slot="content">Armory Settings</svelte:fragment>
 		</AccordionItem>
 	</Accordion>
-	<div class="grid min-h-0 flex-1 grid-cols-[20%_minmax(0,1fr)_30%] grid-rows-[8rem_minmax(0,1fr)_auto] overflow-hidden">
+	<div class="grid min-h-0 flex-1 grid-cols-[20%_minmax(0,1fr)_30%] grid-rows-[auto_minmax(0,1fr)_auto] overflow-hidden">
 			<header
-				class="col-start-1 row-start-1 h-32 space-y-3 border-b border-r border-surface-500/30 p-4"
+				class="col-start-1 row-start-1 space-y-2 border-b border-r border-surface-500/30 p-3"
 			>
-				<div class="flex h-9 items-center justify-between">
-					<h2 class="h3 font-bold">Templates</h2>
+				<div class="flex h-8 items-center justify-between gap-2">
+					<h2 class="text-sm font-bold">Templates</h2>
 					<button
 						type="button"
-						class="btn btn-sm-icon {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
+						class="btn btn-sm px-2 {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
 						aria-label="Create template"
 						on:click={createTemplate}
 					>
-						<Plus size={18} />
+						<Plus size={14} />
 					</button>
 				</div>
 				<div
-					class="input-group input-group-divider grid-cols-[auto_1fr]"
+					class="input-group input-group-divider h-8 grid-cols-[auto_1fr]"
 				>
 					<div class="input-group-shim">
-						<Search size={16} />
+						<Search size={14} />
 					</div>
 					<input
 						type="search"
+						class="text-sm"
 						placeholder="Search templates..."
 						bind:value={search}
 					/>
@@ -791,7 +792,7 @@
 			>
 				{#if filteredTemplates.length === 0}
 					<p
-						class="p-4 text-center text-sm opacity-60"
+						class="p-4 text-center text-xs opacity-60"
 					>
 						{query
 							? "No matching templates"
@@ -812,7 +813,7 @@
 								)}
 						>
 							<p
-								class="truncate font-bold"
+								class="truncate text-sm font-bold"
 							>
 								{template.Name}
 							</p>
@@ -830,11 +831,11 @@
 
 			{#if selectedTemplate}
 				<header
-					class="col-start-2 row-start-1 h-32 space-y-3 border-b border-surface-500/30 p-4"
+					class="col-start-2 row-start-1 space-y-2 border-b border-surface-500/30 p-3"
 				>
-					<div class="flex h-9 gap-2">
+					<div class="flex h-8 gap-2">
 						<input
-							class="input h-full flex-1"
+							class="input h-full flex-1 py-1 text-sm"
 							placeholder="Template name"
 							bind:value={name}
 						/>
@@ -844,18 +845,18 @@
 							disabled={saving}
 							on:click={saveTemplate}
 						>
-							<Save size={16} class="mr-1" /> Save
+							<Save size={14} class="mr-1" /> Save
 						</button>
 						<button
 							type="button"
-							class="btn btn-sm {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
+							class="btn btn-sm px-2 {$modeCurrent ? 'variant-ghost-primary ring-0 shadow-none' : 'variant-filled-primary'}"
 							on:click={deleteTemplate}
 						>
-							<Trash2 size={16} />
+							<Trash2 size={14} />
 						</button>
 					</div>
 					<input
-						class="input"
+						class="input h-8 py-1 text-sm"
 						placeholder="Description"
 						bind:value={description}
 					/>
@@ -895,13 +896,13 @@
 				</section>
 
 				<section
-					class="col-start-2 row-start-3 space-y-4 border-t border-surface-500/30 p-4"
+					class="col-start-2 row-start-3 space-y-3 border-t border-surface-500/30 p-3"
 				>
-					<div class="grid grid-cols-2 gap-4">
-						<label class="label">
+					<div class="grid grid-cols-2 gap-3">
+						<label class="label text-sm">
 							<span>Attack type</span>
 							<select
-								class="select"
+								class="select h-8 py-1 text-sm"
 								bind:value={
 									attackType
 								}
@@ -917,10 +918,10 @@
 								{attackDescriptions[attackType]}
 							</span>
 						</label>
-						<label class="label">
+						<label class="label text-sm">
 							<span>Concurrency</span>
 							<input
-								class="input"
+								class="input h-8 py-1 text-sm"
 								type="number"
 								min="1"
 								max="100"
@@ -952,7 +953,7 @@
 						</div>
 						<div class="flex max-h-24 flex-wrap gap-2 overflow-y-auto">
 							{#if selectedWordlists.length === 0}
-								<span class="text-sm opacity-60">No wordlists selected</span>
+								<span class="text-xs opacity-60">No wordlists selected</span>
 							{:else}
 								{#each selectedWordlists as wordlist, index}
 									<span class="chip variant-soft-primary inline-flex items-center gap-1 px-2 py-0.5 text-xs">
@@ -995,7 +996,7 @@
 								)}
 						>
 							<Rocket
-								size={16}
+								size={14}
 								class="mr-1"
 							/> Launch
 						</button>
@@ -1017,10 +1018,10 @@
 					class="col-start-2 row-start-1 row-span-3 flex h-full items-center justify-center p-8 text-center opacity-60"
 				>
 					<div>
-						<h2 class="h3 font-bold">
+						<h2 class="text-base font-bold">
 							No template selected
 						</h2>
-						<p class="mt-2 text-sm">
+						<p class="mt-1 text-xs">
 							Create or select a
 							template to begin.
 						</p>
@@ -1029,17 +1030,17 @@
 			{/if}
 
 				<header
-					class="col-start-3 row-start-1 flex h-32 items-center justify-between border-b border-l border-surface-500/30 p-4"
+					class="col-start-3 row-start-1 flex items-start justify-between gap-2 border-b border-l border-surface-500/30 p-3"
 				>
-					<h2 class="font-bold">Runs</h2>
+					<h2 class="flex h-8 items-center text-sm font-bold">Runs</h2>
 					<button
 						type="button"
-						class="btn btn-sm-icon variant-ghost"
+						class="btn btn-sm variant-ghost px-2"
 						aria-label="Refresh runs"
 						disabled={!selectedTemplateId}
 						on:click={refreshRuns}
 					>
-						<RefreshCw size={16} />
+						<RefreshCw size={14} />
 					</button>
 				</header>
 				<div
@@ -1048,7 +1049,7 @@
 				>
 					{#if runs.length === 0}
 						<p
-							class="p-4 text-center text-sm opacity-60"
+							class="p-4 text-center text-xs opacity-60"
 						>
 							No runs for this
 							template
@@ -1080,11 +1081,11 @@
 									class="flex items-center justify-between gap-2"
 								>
 									<span
-										class="font-bold capitalize"
+										class="text-sm font-bold capitalize"
 										>{run.AttackType}</span
 									>
 									<span
-										class="badge {statusClass(
+										class="badge text-[10px] {statusClass(
 											run.Status,
 										)}"
 										>{run.Status.replace(
@@ -1164,7 +1165,7 @@
 					class="flex items-center justify-between gap-2 border-b border-surface-500/30 p-3"
 				>
 					<div class="shrink-0">
-						<h2 class="font-bold">Traffic</h2>
+						<h2 class="text-sm font-bold">Traffic</h2>
 						{#if selectedRun}
 							<p class="whitespace-nowrap text-xs opacity-60">
 								{requests.length.toLocaleString()} items
@@ -1200,7 +1201,7 @@
 									title="Previous page"
 									aria-label="Previous page"
 								>
-									<ChevronLeft size={16} />
+									<ChevronLeft size={14} />
 								</button>
 								<button
 									type="button"
@@ -1212,7 +1213,7 @@
 									title="Next page"
 									aria-label="Next page"
 								>
-									<ChevronRight size={16} />
+									<ChevronRight size={14} />
 								</button>
 							</div>
 						</div>
@@ -1221,14 +1222,14 @@
 				<div class="min-h-0 flex-1 overflow-y-auto">
 					{#if !selectedRun}
 						<p
-							class="p-4 text-center text-sm opacity-60"
+							class="p-4 text-center text-xs opacity-60"
 						>
 							Select a run to view
 							traffic
 						</p>
 					{:else if requests.length === 0}
 						<p
-							class="p-4 text-center text-sm opacity-60"
+							class="p-4 text-center text-xs opacity-60"
 						>
 							No requests captured yet
 						</p>
@@ -1240,20 +1241,20 @@
 								tableRow.index}
 							<button
 								type="button"
-								class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-surface-500/20 p-3 text-left hover:bg-surface-100-800-token"
+								class="grid w-full grid-cols-[auto_1fr_auto] items-center gap-3 border-b border-surface-500/20 px-3 py-2 text-left hover:bg-surface-100-800-token"
 								on:click={() =>
 									openRequest(tableRow.original, absoluteIndex)}
 							>
 								<span
-									class="badge variant-soft-primary font-mono"
+									class="badge variant-soft-primary font-mono text-[10px]"
 									>{tableRow.original.Method}</span
 								>
 								<span
-									class="truncate text-sm"
+									class="truncate text-xs"
 									>{tableRow.original.Host}{tableRow.original.Path}</span
 								>
 								<span
-									class="font-mono text-sm"
+									class="font-mono text-xs"
 									>{tableRow.original.StatusCode >
 									0
 										? tableRow.original.StatusCode

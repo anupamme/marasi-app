@@ -180,11 +180,11 @@
 			/>
 		</div>
 	{:else if loading}
-		<div class="flex min-h-0 flex-1 items-center justify-center text-sm opacity-60">
+		<div class="flex min-h-0 flex-1 items-center justify-center text-xs opacity-60">
 			Loading interception queue…
 		</div>
 	{:else}
-		<div class="flex min-h-0 flex-1 items-center justify-center text-sm opacity-60">
+		<div class="flex min-h-0 flex-1 items-center justify-center text-xs opacity-60">
 			No WebSocket messages in the interception queue
 		</div>
 	{/if}

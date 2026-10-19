@@ -243,7 +243,7 @@
 {#if $modalStore[0]}
 	<!-- svelte-ignore a11y-no-static-element-interactions -->
 	<div
-		class="card p-6 w-[75%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-primary-500 bg-surface-50-800-token text-surface-900-50-token"
+		class="card p-4 text-sm w-[75%] max-w-[95vw] shadow-xl rounded-none flex flex-col max-h-[95vh] border-t-4 border-primary-500 bg-surface-50-800-token text-surface-900-50-token"
 		on:keydown={(event) => {
 			if (event.key === "Escape") {
 				event.stopImmediatePropagation();
@@ -254,27 +254,27 @@
 		<header class="flex justify-between items-center p-2">
 			<div class="flex items-center gap-2">
 				<ShieldAlert
-					size={24}
+					size={18}
 					class="text-primary-500"
 				/>
-				<h2 class="text-xl font-bold">New Finding</h2>
+				<h2 class="text-base font-bold">New Finding</h2>
 			</div>
 
 			<button
-				class="text-2xl leading-none"
+				class="text-base leading-none"
 				aria-label="Close"
 				on:click={modalStore.close}
 			>
-				<X />
+				<X size={18} />
 			</button>
 		</header>
 		<form
-			class="overflow-y-auto grid grid-cols-4 gap-4 custom-scrollbar"
+			class="overflow-y-auto grid grid-cols-4 gap-3 custom-scrollbar"
 		>
 			<label class="label col-span-3">
 				<span>Title</span>
 				<input
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="text"
 					bind:value={finding.Title}
 				/>
@@ -282,7 +282,7 @@
 			<label class="label col-span-1">
 				<span>Severity</span>
 				<select
-					class="select bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="select h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					bind:value={finding.Severity}
 				>
 					<option value="Critical"
@@ -309,7 +309,7 @@
 									class="flex items-center gap-3 overflow-hidden pr-4"
 								>
 									<Calculator
-										size={18}
+										size={16}
 										class="text-primary-500 flex-shrink-0"
 									/>
 									<span
@@ -369,7 +369,7 @@
 
 				{#if finding.TestCaseID}
 					<div
-						class="flex items-center justify-between p-2 px-3 variant-soft-primary rounded-token border border-primary-500/30 h-[42px]"
+						class="flex items-center justify-between px-2 variant-soft-primary rounded-token border border-primary-500/30 h-8"
 					>
 						<span
 							class="text-sm font-semibold truncate"
@@ -396,10 +396,10 @@
 					</div>
 				{:else if showTestCaseSearch}
 					<div
-						class="flex items-center gap-2 h-[42px]"
+						class="flex items-center gap-2 h-8"
 					>
 						<input
-							class="input h-full bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+							class="input h-full py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 							type="search"
 							bind:value={
 								testCaseInput
@@ -446,7 +446,7 @@
 				{:else}
 					<button
 						type="button"
-						class="btn variant-soft-surface w-full border border-dashed border-surface-500/50 hover:variant-soft-primary transition-colors h-[42px]"
+						class="btn btn-sm variant-soft-surface w-full border border-dashed border-surface-500/50 hover:variant-soft-primary transition-colors h-8"
 						on:click={() =>
 							(showTestCaseSearch = true)}
 					>
@@ -458,7 +458,7 @@
 				<span>Linked Requests</span>
 
 				<input
-					class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					type="search"
 					name="requestSearch"
 					bind:value={requestInput}
@@ -594,7 +594,7 @@
 					</Accordion>
 				{:else}
 					<div
-						class="mt-4 p-3 variant-soft rounded-token text-sm opacity-70 text-center"
+						class="mt-3 p-3 variant-soft rounded-token text-xs opacity-70 text-center"
 					>
 						No requests linked. Search above
 						to add one.
@@ -604,7 +604,7 @@
 			<label class="label col-span-4 md:col-span-2">
 				<span>Writeup</span>
 				<textarea
-					class="textarea rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="textarea text-sm rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					rows="10"
 					bind:value={finding.WriteUp}
 					placeholder="Finding Writeup"
@@ -613,7 +613,7 @@
 			<label class="label col-span-4 md:col-span-2">
 				<span>Treatment Plan</span>
 				<textarea
-					class="textarea rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+					class="textarea text-sm rounded-none bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 					rows="10"
 					bind:value={finding.TreatmentPlan}
 					placeholder="Treatment Plan"
@@ -1026,7 +1026,7 @@
 								</AccordionItem>
 							{:else}
 								<div
-									class="flex justify-between items-center p-4 py-3 variant-soft rounded-token border-b border-surface-500/10"
+									class="flex justify-between items-center px-3 py-2 variant-soft rounded-token border-b border-surface-500/10"
 								>
 									<div
 										class="flex items-center gap-2 {art.Status ===
@@ -1138,7 +1138,7 @@
 					</Accordion>
 				{:else}
 					<div
-						class="mt-4 p-3 variant-soft rounded-token text-sm opacity-70 text-center"
+						class="mt-3 p-3 variant-soft rounded-token text-xs opacity-70 text-center"
 					>
 						No artifacts uploaded. Drop
 						files above to attach them.

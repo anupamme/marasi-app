@@ -243,24 +243,25 @@
 </script>
 
 <MarasiKeys menuOptions={logbookMenu} />
-<Accordion rounded="none" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
+<Accordion rounded="none" padding="py-3 px-3" regionControl="text-sm font-bold" class="bg-surface-50 dark:bg-surface-900 text-surface-900-50-token">
 	<AccordionItem bind:open={accOpened}>
-		<svelte:fragment slot="lead"><SettingsIcon /></svelte:fragment>
+		<svelte:fragment slot="lead"><SettingsIcon size="16" /></svelte:fragment>
 		<svelte:fragment slot="summary"
 			>Logbook Settings</svelte:fragment
 		>
 		<svelte:fragment slot="content">
 			<div
-				class="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 p-2"
+				class="flex flex-col md:flex-row justify-between items-start md:items-center gap-3 p-2 text-sm"
 			>
 				<div
-					class="input-group input-group-divider grid-cols-[auto_1fr_auto] w-full md:w-[400px]"
+					class="input-group input-group-divider h-8 grid-cols-[auto_1fr_auto] w-full md:w-[400px]"
 				>
-					<div class="input-group-shim">
-						<Search size={16} />
+					<div class="input-group-shim px-2">
+						<Search size={14} />
 					</div>
 					<input
 						id="logbookSearch"
+						class="text-sm"
 						type="search"
 						placeholder={tabSet === 0
 							? "Search test cases and findings..."
@@ -272,13 +273,14 @@
 				</div>
 
 				<div
-					class="flex items-center gap-4 w-full md:w-auto justify-between"
+					class="flex items-center gap-3 w-full md:w-auto justify-between"
 				>
-					<TabGroup>
+					<TabGroup class="text-sm">
 						<Tab
 							bind:group={tabSet}
 							name="combined"
 							value={0}
+							padding="px-3 py-1"
 						>
 							<div
 								class="flex items-center gap-2"
@@ -293,6 +295,7 @@
 							bind:group={tabSet}
 							name="findings"
 							value={1}
+							padding="px-3 py-1"
 						>
 							<div
 								class="flex items-center gap-2"
@@ -309,6 +312,7 @@
 							bind:group={tabSet}
 							name="testcases"
 							value={2}
+							padding="px-3 py-1"
 						>
 							<div
 								class="flex items-center gap-2"
@@ -409,12 +413,12 @@
 	</AccordionItem>
 </Accordion>
 
-<div class="container p-4">
+<div class="container p-4 text-sm">
 	{#if (tabSet === 0 || tabSet === 1) && findings.length > 0}
 		{#if tabSet === 0}
-			<h3 class="h3 font-bold mb-4 flex items-center gap-2">
+			<h3 class="text-sm font-bold mb-3 flex items-center gap-2">
 				<ShieldAlert
-					size={20}
+					size={16}
 					class="text-primary-500"
 				/>
 				Findings ({findings.length})
@@ -422,13 +426,13 @@
 		{/if}
 
 		<div
-			class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 mb-8"
+			class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 mb-4"
 		>
 			{#each findings as finding (finding.ID)}
 				<!--svelte-ignore a11y-click-events-have-key-events-->
 				<!--svelte-ignore a11y-no-static-element-interactions-->
 				<div
-					class="card group relative p-4 cursor-pointer flex flex-col justify-between gap-4 border-l-4 border-surface-500/30 transition-all bg-surface-50 dark:bg-surface-800 {$modeCurrent ? 'hover:border-primary-500/20' : 'hover:border-primary-500'}"
+					class="card group relative p-3 cursor-pointer flex flex-col justify-between gap-3 border-l-4 border-surface-500/30 transition-all bg-surface-50 dark:bg-surface-800 {$modeCurrent ? 'hover:border-primary-500/20' : 'hover:border-primary-500'}"
 					on:click={() =>
 						openFindingModal(
 							finding,
@@ -465,7 +469,7 @@
 								class="flex items-center gap-2"
 							>
 								<span
-									class="badge {getScoreBadgeClass(
+									class="badge text-[10px] {getScoreBadgeClass(
 										finding?.Severity,
 									)} font-bold"
 								>
@@ -481,7 +485,7 @@
 							</span>
 						</div>
 						<h4
-							class="h4 font-bold line-clamp-2"
+							class="text-sm font-bold line-clamp-2"
 						>
 							{finding?.Title}
 						</h4>
@@ -495,7 +499,7 @@
 					</section>
 					<footer class="card-footer">
 						<div
-							class="grid grid-cols-2 gap-2 text-xs font-mono mt-auto pt-4 border-t border-surface-500/30"
+							class="grid grid-cols-2 gap-2 text-xs font-mono mt-auto pt-3 border-t border-surface-500/30"
 						>
 							<div
 								class="flex items-center gap-1 opacity-70"
@@ -564,22 +568,22 @@
 
 	{#if (tabSet === 0 || tabSet === 2) && testCases.length > 0}
 		{#if tabSet === 0}
-			<h3 class="h3 font-bold mb-4 flex items-center gap-2">
+			<h3 class="text-sm font-bold mb-3 flex items-center gap-2">
 				<BookCheck
-					size={20}
+					size={16}
 					class="text-tertiary-500"
 				/>
 				Test Cases ({testCases.length})
 			</h3>
 		{/if}
 		<div
-			class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-4 mb-8"
+			class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 2xl:grid-cols-4 gap-3 mb-4"
 		>
 			{#each testCases as testCase (testCase.ID)}
 				<!--svelte-ignore a11y-click-events-have-key-events-->
 				<!--svelte-ignore a11y-no-static-element-interactions-->
 				<div
-					class="card group relative p-4 cursor-pointer flex flex-col justify-between gap-4 border-l-4 border-surface-500/30 transition-all bg-surface-50 dark:bg-surface-800 {$modeCurrent ? 'hover:border-tertiary-500/20' : 'hover:border-tertiary-500'}"
+					class="card group relative p-3 cursor-pointer flex flex-col justify-between gap-3 border-l-4 border-surface-500/30 transition-all bg-surface-50 dark:bg-surface-800 {$modeCurrent ? 'hover:border-tertiary-500/20' : 'hover:border-tertiary-500'}"
 					on:click={() =>
 						openTestCaseModal(
 							testCase,
@@ -615,13 +619,13 @@
 							<div class="max-w-full">
 								{#if testCase?.Category}
 									<span
-										class="badge variant-soft-tertiary font-bold h-auto whitespace-normal text-left"
+										class="badge text-[10px] variant-soft-tertiary font-bold h-auto whitespace-normal text-left"
 									>
 										{testCase.Category}
 									</span>
 								{:else}
 									<span
-										class="badge variant-soft font-bold"
+										class="badge text-[10px] variant-soft font-bold"
 										>Uncategorized</span
 									>
 								{/if}
@@ -654,7 +658,7 @@
 						</div>
 
 						<h4
-							class="h4 font-bold line-clamp-2"
+							class="text-sm font-bold line-clamp-2"
 						>
 							{testCase?.Title}
 						</h4>
@@ -668,7 +672,7 @@
 					</section>
 					<footer class="card-footer">
 						<div
-							class="grid grid-cols-2 gap-2 text-xs font-mono mt-auto pt-4 border-t border-surface-500/30"
+							class="grid grid-cols-2 gap-2 text-xs font-mono mt-auto pt-3 border-t border-surface-500/30"
 						>
 							<div
 								class="flex items-center gap-1 opacity-70"

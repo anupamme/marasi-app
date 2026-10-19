@@ -49,26 +49,26 @@
 </script>
 
 {#if $modalStore[0]}
-	<div class="card flex max-h-[90vh] w-[65%] max-w-[95vw] flex-col rounded-0 p-4 shadow-xl bg-surface-50-800-token text-surface-900-50-token">
+	<div class="card flex max-h-[90vh] w-[65%] max-w-[95vw] flex-col rounded-0 p-4 text-sm shadow-xl bg-surface-50-800-token text-surface-900-50-token">
 		<header class="flex items-center justify-between p-2">
-			<h2 class="text-xl font-bold">Add Wordlist</h2>
+			<h2 class="text-base font-bold">Add Wordlist</h2>
 			<div class="flex items-center gap-2">
 				<button
 					type="button"
-					class="btn btn-sm-icon variant-ghost ring-0 shadow-none"
+					class="btn btn-sm variant-ghost ring-0 shadow-none px-2"
 					aria-label="Refresh wordlists"
 					disabled={refreshing}
 					on:click={refreshWordlists}
 				>
-					<RefreshCw size={16} />
+					<RefreshCw size={14} />
 				</button>
 				<button class="text-2xl leading-none" aria-label="Close" on:click={modalStore.close}>
-					<X />
+					<X size={16} />
 				</button>
 			</div>
 		</header>
 		<input
-			class="input bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
+			class="input h-8 py-1 text-sm bg-white dark:bg-surface-700 border-0 ring-0 focus:border-0 focus:ring-0"
 			type="search"
 			placeholder="Search wordlists..."
 			bind:value={input}
@@ -76,7 +76,7 @@
 		/>
 		<div class="mt-2 min-h-0 flex-1 overflow-y-auto">
 			{#if options.length === 0}
-				<p class="p-2 text-sm opacity-60">No wordlists available</p>
+				<p class="p-2 text-xs opacity-60">No wordlists available</p>
 			{:else}
 				{#each options as wordlist (wordlist.Name)}
 					<div>
@@ -90,7 +90,7 @@
 							</button>
 							<button
 								type="button"
-								class="btn btn-sm-icon variant-ghost ring-0 shadow-none"
+								class="btn btn-sm variant-ghost ring-0 shadow-none px-2"
 								aria-label={`Preview ${wordlist.Name}`}
 								on:click={() => previewWordlist(wordlist.Name)}
 							>

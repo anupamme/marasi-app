@@ -1,10 +1,8 @@
 import { sveltekit } from '@sveltejs/kit/vite';
 import { defineConfig } from 'vite';
-import codemirrorLineGaps from './vite-plugins/codemirrorLineGaps.js';
 
 export default defineConfig({
 	plugins: [
-		codemirrorLineGaps(),
 		sveltekit()
 	],
 	//Fix

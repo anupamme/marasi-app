@@ -7,14 +7,14 @@ export const WINDOW = 10;
 /** Entries one "Show more" click reveals. */
 export const STEP = 50;
 
-// The latest `shown` rows of one list, preceded by an "earlier" row. The
+// The last `shown` rows of one list, preceded by an "earlier" row. The
 // window widens so the selected entry is never hidden.
 function windowed(rows, list, depth, shown, label, selectedEntryId) {
   const selected = rows.findIndex((row) => row.entry.ID === selectedEntryId);
   const hidden = Math.max(0, Math.min(rows.length - shown, selected < 0 ? Infinity : selected));
-  const latest = rows.slice(hidden).map((row) => ({ ...row, depth, list, label }));
-  if (!hidden) return latest;
-  return [{ kind: "more", list, hidden, total: rows.length, depth }, ...latest];
+  const last = rows.slice(hidden).map((row) => ({ ...row, depth, list, label }));
+  if (!hidden) return last;
+  return [{ kind: "more", list, hidden, total: rows.length, depth }, ...last];
 }
 
 /**
@@ -72,10 +72,11 @@ const statusRank = (key) =>
 const byStatus = (a, b) => statusRank(a) - statusRank(b);
 
 /**
- * The rows under one open launchpad: its original entry, then the rest of
- * its Launchpad entries, windowed to the latest `WINDOW` (plus whatever
- * `shownByList[list]` adds, and widened to keep `selectedEntryId` in view).
- * With `groupByStatus`, the rest are filed into
+ * The rows under one open launchpad: its Launchpad entries in entry order,
+ * each numbered by it (`index`, from 0), windowed to the last `WINDOW` (plus
+ * whatever `shownByList[list]` adds, and widened to keep `selectedEntryId`
+ * in view).
+ * With `groupByStatus`, they are filed into
  * status folders, each windowed the same way. A folder is open when
  * `openGroups` says so, else when it holds `selectedEntryId`.
  */
@@ -83,7 +84,7 @@ export function entryRows(options) {
   return markLast(buildRows(options));
 }
 
-// Flags the final entry row of each list; the Latest-in button scrolls to it.
+// Flags the final entry row of each list; the End-of button scrolls to it.
 function markLast(rows) {
   const seen = new Set();
   for (let i = rows.length - 1; i >= 0; i -= 1) {
@@ -110,25 +111,18 @@ function buildRows({
     const keep = new Set(matchedEntries.map((entry) => entry.ID));
     return indexed.filter((row) => keep.has(row.entry.ID)).map((row) => ({ ...row, depth: 1 }));
   }
-  if (indexed.length === 0) return [];
-  const original = { ...indexed[0], depth: 1, list: launchpad.ID, label: launchpad.Name };
-  const rest = indexed.slice(1);
   const shown = (list) => shownByList[list] ?? WINDOW;
   if (!groupByStatus) {
-    return [
-      original,
-      ...windowed(rest, launchpad.ID, 1, shown(launchpad.ID), launchpad.Name, selectedEntryId),
-    ];
+    return windowed(indexed, launchpad.ID, 1, shown(launchpad.ID), launchpad.Name, selectedEntryId);
   }
 
   const groups = new Map();
-  for (const row of rest) {
+  for (const row of indexed) {
     const key = statusKey(row.entry, launchFor?.(row.entry));
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(row);
   }
-  // Grouped, the original belongs to no folder, so no Latest-in list.
-  const rows = [{ ...original, list: null }];
+  const rows = [];
   for (const key of [...groups.keys()].sort(byStatus)) {
     const groupRows = groups.get(key);
     const id = `${launchpad.ID}:${key}`;

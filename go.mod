@@ -43,6 +43,7 @@ require (
 	modernc.org/mathutil v1.7.1 // indirect
 	modernc.org/memory v1.11.0 // indirect
 	modernc.org/sqlite v1.38.2 // indirect
+	roci.dev/fracdex v0.0.0-20241211175510-82d7df79e312 // indirect
 )
 
 require (
@@ -64,7 +65,7 @@ require (
 	github.com/pkg/errors v0.9.1 // indirect
 	github.com/rivo/uniseg v0.4.7 // indirect
 	github.com/samber/lo v1.49.1 // indirect
-	github.com/tfkr-ae/marasi v0.0.0-20261017160910-3db785e02afb
+	github.com/tfkr-ae/marasi v0.0.0-20261019164123-ebd069bd5170
 	github.com/tkrajina/go-reflector v0.5.8 // indirect
 	github.com/valyala/bytebufferpool v1.0.0 // indirect
 	github.com/valyala/fasttemplate v1.2.2 // indirect

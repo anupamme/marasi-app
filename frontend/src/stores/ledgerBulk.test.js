@@ -350,3 +350,55 @@ test("a ⌘A selection Marasi refuses while a job builds changes nothing and lea
   store.clickRow(idOf(2));
   assert.equal(await store.setHighlight(selectionSpec(get(store)), 2), 1, "listed ids are never refused");
 });
+
+// Marasi refusing a selection that holds pairs still launching (marasi
+// ADR-0053), as the Go side words it.
+const launchPending = (what, ...ids) => new Error(`${what}: launch_pending (${ids.join(", ")}): a launch is pending`);
+
+test("a ⌘A delete Marasi refuses for pairs still launching selects those pairs and deletes nothing", async () => {
+  const { store, api } = await storeWith();
+  api.deleteTraffic = async () => {
+    throw launchPending("deleting traffic", idOf(2), idOf(9));
+  };
+  store.selectAll();
+  await store.settled();
+  await assert.rejects(store.deleteFromProject(selectionSpec(get(store))), /launch_pending/);
+  assert.equal(tableRows(get(store)).length, 4, "every row stays");
+  assert.deepEqual(selected(store), [idOf(2)], "the loaded pair still launching is selected");
+  assert.equal(get(store).selection.focus, idOf(2));
+});
+
+test("a ⌘A Remove from launchpad Marasi refuses for pairs still launching selects those pairs", async () => {
+  const { store, api } = await storeWith();
+  api.unlinkTraffic = async () => {
+    throw launchPending("unlinking traffic", idOf(1), idOf(3));
+  };
+  store.selectAll();
+  await store.settled();
+  await assert.rejects(store.removeFromLaunchpad(selectionSpec(get(store)), "L"), /launch_pending/);
+  assert.deepEqual(selected(store), [idOf(1), idOf(3)]);
+});
+
+test("a refusal naming no loaded pair keeps the selection", async () => {
+  const { store, api } = await storeWith();
+  api.deleteTraffic = async () => {
+    throw launchPending("deleting traffic", idOf(9));
+  };
+  store.selectAll();
+  await store.settled();
+  const before = selected(store);
+  await assert.rejects(store.deleteFromProject(selectionSpec(get(store))), /launch_pending/);
+  assert.deepEqual(selected(store), before);
+});
+
+test("the new launchpad's cleanup tolerates Marasi refusing to delete it", async () => {
+  const { store, api } = await storeWith({ refuse: "traffic_index" });
+  api.deleteLaunchpad = async (id) => {
+    api.calls.push(["deleteLaunchpad", id]);
+    throw launchPending("deleting launchpad", idOf(9));
+  };
+  store.selectAll();
+  await store.settled();
+  await assert.rejects(store.sendToNewLaunchpad(selectionSpec(get(store)), 4), /selection_incomplete/);
+  assert.deepEqual(api.calls.filter(([name]) => name === "deleteLaunchpad"), [["deleteLaunchpad", "lp1"]]);
+});

@@ -10,11 +10,14 @@
         ArrowLeftIcon,
         ArrowLeftRightIcon,
         ArrowRightIcon,
+        ArrowUpIcon,
+        ArrowUpToLineIcon,
         BracesIcon,
         CircleStopIcon,
         Columns2Icon,
         FolderTreeIcon,
         GitCompareIcon,
+        ListChecksIcon,
         LockIcon,
         PanelLeftIcon,
         PenIcon,
@@ -34,10 +37,27 @@
     import LaunchpadTree from "../../lib/launchpad/LaunchpadTree.svelte";
     import LaunchpadWorkspace from "../../lib/launchpad/LaunchpadWorkspace.svelte";
     import { compareClick, compareEscape } from "../../lib/launchpad/compare.js";
-    import { latestEntry } from "../../lib/launchpad/jumpTarget.js";
+    import { entryMenuFor } from "../../lib/launchpad/entryMenu.js";
+    import { lastEntry } from "../../lib/launchpad/jumpTarget.js";
+    import RowMenu from "../../lib/ledger/RowMenu.svelte";
+    import { menuAction } from "../../lib/ledger/rowMenu.js";
     import { GetMetadata, GetNote } from "../../lib/wailsjs/go/main/App";
     import { listener } from "../../stores";
-    import { isDraftDirty, launchpadStore, pendingLaunchOf } from "../../stores/launchpadStore";
+    import {
+        isDraftDirty,
+        launchpadStore,
+        pendingEntryIds,
+        pendingLaunchOf,
+        selectedEntryIds,
+    } from "../../stores/launchpadStore";
+    import {
+        DELETE_LAUNCHPAD_PENDING_HINT,
+        pendingLaunchIDs,
+        toastLaunchingRefusal,
+        warnLaunching,
+    } from "../../lib/launchPending.js";
+    import { UNTITLED_LAUNCHPAD } from "../../lib/launchpad/format.js";
+    import { toastError } from "../../lib/toasts.js";
 
     const modalStore = getModalStore();
     const toastStore = getToastStore();
@@ -107,15 +127,129 @@
         );
     }
 
-    // ⌘⇧↓ selects the open launchpad's newest entry through the usual
+    // A Move from the tree or the entry menu. The draft follows its entry,
+    // so a move that would replace the target's dirty draft asks first;
+    // Cancel cancels the move. Marasi's refusals (the view was stale) and
+    // failures become toasts; the store has reloaded both launchpads.
+    async function moveEntries(move, options = {}) {
+        try {
+            const result = await launchpadStore.moveEntries(move, options);
+            if (result.needsConfirm) return confirmMove(move);
+            if (result.refused) {
+                toastStore.trigger({ message: result.refused, background: "variant-filled-warning" });
+            }
+            return result;
+        } catch (err) {
+            console.error("Launchpad move error:", err);
+            toastError(toastStore, "Failed to move the entries", err);
+            return { moved: null, refused: null };
+        }
+    }
+
+    // Resolves once the researcher answers, so the caller can show the moved
+    // entries; a cancelled move resolves as nothing moved.
+    function confirmMove(move) {
+        return new Promise((resolve) => {
+            modalStore.trigger({
+                type: "confirm",
+                title: "Discard the draft?",
+                body: "The target launchpad's draft has unsaved edits. The draft moving with its entry replaces them.",
+                response: (ok) =>
+                    resolve(ok ? moveEntries(move, { force: true }) : { moved: null, refused: null }),
+            });
+        });
+    }
+
+    // The entry context menu (RowMenu with entryMenu.js items) for the
+    // Entry selection. Its Order items are also the tree's ⌥-arrow actions.
+    let entryMenu = { open: false, x: 0, y: 0 };
+
+    function entryMenuInput(state) {
+        const { launchpadId } = state.entrySelection;
+        const entries = state.entriesByLaunchpad[launchpadId] || [];
+        const ids = selectedEntryIds(state);
+        return {
+            launchpadId,
+            entries,
+            ids,
+            launchpads: state.launchpads,
+            entriesByLaunchpad: state.entriesByLaunchpad,
+            pendingIds: pendingEntryIds(state, launchpadId, ids),
+            grouped: groupByStatus,
+            searching: state.search.trim() !== "",
+        };
+    }
+
+    $: entryMenuData = entryMenu.open ? entryMenuInput($launchpadStore) : null;
+    $: entryMenuEntries = entryMenuData ? entryMenuData.entries.filter((e) => entryMenuData.ids.includes(e.ID)) : [];
+    $: entryMenuName = $launchpadStore.launchpads.find((l) => l.ID === entryMenuData?.launchpadId)?.Name;
+
+    function openEntryMenu(x, y) {
+        if (selectedEntryIds(get(launchpadStore)).length) entryMenu = { open: true, x, y };
+    }
+
+    // Runs a menu item's action on the Entry selection.
+    async function runEntryAction(action) {
+        const state = get(launchpadStore);
+        const sourceId = state.entrySelection.launchpadId;
+        const ids = selectedEntryIds(state);
+        if (!sourceId || !ids.length) return;
+        if (action.type === "remove") return removeEntries(sourceId, ids);
+        const targetId = action.type === "move" ? action.targetId : sourceId;
+        const before = action.type === "move" ? null : action.before;
+        const { moved } = await moveEntries({ sourceId, targetId, ids, before });
+        if (moved?.length) await tree?.showEntry(targetId, moved[0]);
+    }
+
+    // Removing the entry a dirty draft came from would replace the draft,
+    // so it asks first; Cancel removes nothing.
+    async function removeEntries(launchpadId, ids, options = {}) {
+        const name = get(launchpadStore).launchpads.find((l) => l.ID === launchpadId)?.Name || UNTITLED_LAUNCHPAD;
+        try {
+            const { removed: count, needsConfirm } = await launchpadStore.removeEntries(launchpadId, ids, options);
+            if (needsConfirm) {
+                confirm(
+                    "Discard the draft?",
+                    "This launchpad's draft has unsaved edits. Removing the entry it came from replaces them.",
+                    () => removeEntries(launchpadId, ids, { force: true }),
+                );
+                return;
+            }
+            toastStore.trigger({
+                message: `Removed ${count === 1 ? "1 entry" : `${count} entries`} from "${name}"`,
+                background: "variant-filled-success",
+            });
+        } catch (err) {
+            if (toastLaunchingRefusal(toastStore, err, "removed", "entry")) return;
+            console.error("Launchpad remove error:", err);
+            toastError(toastStore, "Failed to remove the entries", err);
+        }
+    }
+
+    // ⌥↑ ⌥↓ ⌥⇧↑ ⌥⇧↓ in the tree: the menu's Order item, run as choosing it
+    // would; when the menu greys it, its reason instead.
+    function runEntryShortcut(actionId) {
+        entryMenu = { ...entryMenu, open: false };
+        const input = entryMenuInput(get(launchpadStore));
+        if (!input.ids.length) return;
+        const item = menuAction(entryMenuFor(input), actionId);
+        if (!item) return;
+        if (item.disabled) {
+            toastStore.trigger({ message: item.hint, background: "variant-filled-warning", timeout: 2000 });
+            return;
+        }
+        runEntryAction(item.action);
+    }
+
+    // ⌘⇧↓ selects the open launchpad's last entry through the usual
     // draft guard. While that launchpad is compared, it only scrolls, so A
     // and B stay as picked.
-    async function jumpToLatest() {
+    async function jumpToEnd() {
         const state = get(launchpadStore);
-        const latest = latestEntry(state);
-        if (!latest) return;
-        if (state.compare?.launchpadId !== latest.launchpadId) await pickEntry(latest.launchpadId, latest.entryId);
-        await tree?.showEntry(latest.launchpadId, latest.entryId);
+        const last = lastEntry(state);
+        if (!last) return;
+        if (state.compare?.launchpadId !== last.launchpadId) await pickEntry(last.launchpadId, last.entryId);
+        await tree?.showEntry(last.launchpadId, last.entryId);
     }
 
     // Esc cancels a chip re-pick, then closes compare. Editors, inputs and
@@ -134,12 +268,24 @@
         const state = get(launchpadStore);
         const launchpad = state.launchpads.find((l) => l.ID === state.selectedLaunchpadId);
         if (!launchpad) return;
+        // Marasi refuses while a launch from it is pending (marasi ADR-0053).
+        if (pendingLaunchOf(state, launchpad.ID)) return warnDeleteLaunching();
         confirm(
             `Delete ${launchpad.Name}?`,
             isDraftDirty(state, launchpad.ID) ? "Its unsaved draft will be discarded." : undefined,
-            () => launchpadStore.deleteLaunchpad(launchpad.ID),
+            () =>
+                launchpadStore.deleteLaunchpad(launchpad.ID).catch((err) => {
+                    if (pendingLaunchIDs(err)) return warnDeleteLaunching();
+                    console.error("Deleting the launchpad failed:", err);
+                    toastStore.trigger({
+                        message: "Failed to delete the launchpad",
+                        background: "variant-filled-error",
+                    });
+                }),
         );
     }
+
+    const warnDeleteLaunching = () => warnLaunching(toastStore, DELETE_LAUNCHPAD_PENDING_HINT);
 
     async function launch() {
         const state = get(launchpadStore);
@@ -247,6 +393,14 @@
         if (compare?.leftId && compare.rightId) launchpadStore.swapCompare();
     }
 
+    // ⌘A in the tree: the focused launchpad is the entry selection's, else
+    // the open one.
+    function selectAllEntries() {
+        const { entrySelection, selectedLaunchpadId } = get(launchpadStore);
+        const id = entrySelection.launchpadId ?? selectedLaunchpadId;
+        if (id) launchpadStore.selectAllEntries(id);
+    }
+
     // Catalog actions keep their pre-redesign IDs (ADR-0001):
     // toggle-settings renames, *-tab steps launchpads.
     const launchpadMenu = [
@@ -263,7 +417,7 @@
             icon: FolderTreeIcon,
             handler: () => (groupByStatus = !groupByStatus),
         },
-        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: jumpToLatest },
+        { actionId: "launchpad.jump-to-latest", icon: ArrowDownToLineIcon, handler: jumpToEnd },
         { actionId: "launchpad.toggle-compare", icon: GitCompareIcon, handler: () => workspace?.toggleCompare() },
         {
             actionId: "launchpad.toggle-compare-view",
@@ -271,6 +425,11 @@
             handler: () => workspace?.toggleCompareView(),
         },
         { actionId: "launchpad.swap-compare", icon: ArrowLeftRightIcon, handler: swapCompare },
+        { actionId: "launchpad.tree.select-all-entries", icon: ListChecksIcon, handler: selectAllEntries },
+        { actionId: "launchpad.tree.move-entries-up", icon: ArrowUpIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-up") },
+        { actionId: "launchpad.tree.move-entries-down", icon: ArrowDownIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-down") },
+        { actionId: "launchpad.tree.move-entries-top", icon: ArrowUpToLineIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-top") },
+        { actionId: "launchpad.tree.move-entries-bottom", icon: ArrowDownToLineIcon, handler: () => runEntryShortcut("launchpad.tree.move-entries-bottom") },
         { actionId: "launchpad.next-tab", icon: ArrowRightIcon, handler: () => stepLaunchpad(1) },
         { actionId: "launchpad.previous-tab", icon: ArrowLeftIcon, handler: () => stepLaunchpad(-1) },
         { actionId: "launchpad.next-entry", icon: ArrowDownIcon, handler: () => stepEntry(1) },
@@ -317,6 +476,8 @@
             store={launchpadStore}
             pickLaunchpad={(id) => launchpadStore.selectLaunchpad(id)}
             {pickEntry}
+            {moveEntries}
+            {openEntryMenu}
             bind:searchInput
         />
     </LaunchpadDock>
@@ -332,3 +493,16 @@
         />
     </div>
 </div>
+
+<RowMenu
+    bind:open={entryMenu.open}
+    x={entryMenu.x}
+    y={entryMenu.y}
+    pairs={entryMenuEntries}
+    items={entryMenuData ? entryMenuFor(entryMenuData) : []}
+    context={{ numberOf: (entry) => entryMenuData.entries.indexOf(entry) + 1 }}
+    noun={["entry", "entries"]}
+    scope={entryMenuName ? `in ${entryMenuName}` : null}
+    on:action={(e) => runEntryAction(e.detail)}
+    on:close={(e) => e.detail.refocus && tree?.focus()}
+/>

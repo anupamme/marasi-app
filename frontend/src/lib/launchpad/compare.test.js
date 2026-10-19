@@ -46,7 +46,7 @@ test("Esc first cancels a chip re-pick, then closes compare; without compare it 
   assert.equal(compareEscape(state(null)), null);
 });
 
-test("the view numbers A and B by timeline position and offers quick picks around A", () => {
+test("the view numbers A and B in entry order and offers quick picks around A", () => {
   const view = compareView(picking("right", "b"));
   assert.equal(view.comparing, false);
   assert.deepEqual([view.left.number, view.left.entry.ID, view.right], [2, "b", null]);

@@ -4,6 +4,9 @@
 import { writable } from "svelte/store";
 import { COMPARE_SIDES } from "../lib/launchpad/compare.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
+import * as selecting from "../lib/launchpad/entrySelection.js";
+import { leavesOrder, marasiMoveRefusal } from "../lib/launchpad/entryMove.js";
+import { launchingIds, pendingLaunchIDs } from "../lib/launchPending.js";
 
 // Entry search through Marasi: `matches` holds entry ids by launchpad id,
 // `status` is idle, loading, done or error.
@@ -33,6 +36,8 @@ function initialState(projectStateVersion = 0) {
     launchesById: {},
     detailsById: {},
     selectedLaunchpadId: null,
+    // The Entry selection (entrySelection.js): one launchpad at a time.
+    entrySelection: selecting.NO_ENTRY_SELECTION,
     search: "",
     entrySearch: IDLE_SEARCH,
     compare: null,
@@ -77,6 +82,19 @@ export function dirtyLaunchpadIds(state) {
   );
 }
 
+/** True when the entry is in the Entry selection. */
+export function isEntrySelected(state, launchpadId, entryId) {
+  const selection = state.entrySelection;
+  return selection.launchpadId === launchpadId && selection.ids.includes(entryId);
+}
+
+/** The Entry selection's entry ids in entry order. */
+export function selectedEntryIds(state) {
+  const { launchpadId, ids } = state.entrySelection;
+  const selected = new Set(ids);
+  return entryIdsOf(state, launchpadId).filter((id) => selected.has(id));
+}
+
 /**
  * How the entry's launch went: { Status, Reason } with Status pending,
  * completed, cancelled or failed, or null for an entry that was not
@@ -95,6 +113,15 @@ export function launchOf(state, entryId, entry = undefined) {
     found?.Metadata?.launch ?? state.detailsById[entryId]?.Metadata?.launch;
   if (!stored?.status) return null;
   return { Status: stored.status, Reason: stored.reason || "" };
+}
+
+/**
+ * The ids of `ids` still launching from `launchpadId`: their launch is
+ * pending and was launched from it. Marasi refuses to move such an entry to
+ * another launchpad or remove it (marasi ADR-0053).
+ */
+export function pendingEntryIds(state, launchpadId, ids) {
+  return launchingIds(Object.values(state.launchesById), ids, launchpadId);
 }
 
 /** The launchpad's newest pending launch, or null. */
@@ -149,6 +176,10 @@ function selectLaunched(state, launchpadId, entryId, sentRaw, launchedRaw) {
   };
 }
 
+// The launchpad's entry ids in entry order.
+const entryIdsOf = (state, launchpadId) =>
+  (state.entriesByLaunchpad[launchpadId] || []).map((entry) => entry.ID);
+
 function without(map, key) {
   const copy = { ...map };
   delete copy[key];
@@ -159,6 +190,7 @@ function without(map, key) {
 function entryFromRequest(request) {
   return {
     ID: request.ID,
+    Number: request.Number,
     Scheme: request.Scheme,
     Method: request.Method,
     Host: request.Host,
@@ -183,17 +215,43 @@ function updateSummary(launchpads, launchpadId, fields) {
   );
 }
 
-// The summary of a freshly loaded entry list, oldest first.
-const summaryOfEntries = (entries) => ({
-  EntryCount: entries.length,
-  LastStatusCode: entries.at(-1)?.StatusCode || null,
-  NewestEntryID: entries.at(-1)?.ID ?? null,
-});
+// The newest of `entries` by capture: the highest pair number. Entry order
+// is the researcher's, so the last entry need not be the newest. Among
+// entries without a number, the later one wins.
+function newestByCapture(entries) {
+  const rank = (entry) => entry.Number ?? -Infinity;
+  return (entries || []).reduce(
+    (newest, entry) => (!newest || rank(entry) >= rank(newest) ? entry : newest),
+    null,
+  );
+}
 
-// A request from the layout's "request" event. Launched requests carry their
-// launchpad in Metadata.launchpad_id; anything else is ignored.
+/** The launchpad's newest loaded entry by capture, or null. */
+export function newestEntryOf(state, launchpadId) {
+  return newestByCapture(state.entriesByLaunchpad[launchpadId]);
+}
+
+// The summary of a freshly loaded entry list. Like Marasi's LastStatusCode,
+// it follows the newest entry by capture, and a status code of 0 or below
+// (awaiting, or -1 for a launch that ended without a response) is none.
+function summaryOfEntries(entries) {
+  const newest = newestByCapture(entries);
+  return {
+    EntryCount: entries.length,
+    LastStatusCode: newest?.StatusCode > 0 ? newest.StatusCode : null,
+    NewestEntryID: newest?.ID ?? null,
+  };
+}
+
+// The launchpad a launched pair belongs to, from its launch: launch events
+// and this store's own launches name it. Pair metadata is not read, since
+// Marasi leaves it stale when an entry moves.
+const launchpadOfLaunch = (state, id) => state.launchesById[id]?.LaunchpadID;
+
+// A request from the layout's "request" event. A launched request goes to its
+// launch's launchpad; anything else is ignored.
 function arriveRequest(state, request) {
-  const launchpadId = request?.Metadata?.launchpad_id;
+  const launchpadId = launchpadOfLaunch(state, request?.ID);
   if (!launchpadId) return state;
   const launchpad = state.launchpads.find((item) => item.ID === launchpadId);
   if (!launchpad) return state;
@@ -231,7 +289,7 @@ function arriveRequest(state, request) {
 // A response from the layout's "response" event, matched to an arrived request.
 function arriveResponse(state, response) {
   const details = state.detailsById[response?.ID];
-  const launchpadId = details?.Request?.Metadata?.launchpad_id;
+  const launchpadId = details && launchpadOfLaunch(state, response.ID);
   if (!launchpadId) return state;
   const entries = state.entriesByLaunchpad[launchpadId];
   const newest = state.launchpads.find((item) => item.ID === launchpadId)?.NewestEntryID;
@@ -352,11 +410,14 @@ export function createLaunchpadStore(api) {
       details = await ensureDetails(launchId);
       if (version !== projectStateVersion) return;
     }
+    const sent = sentRaw(launchId, details);
     if (!awaitingEntry.delete(launchId)) return;
-    update((state) =>
-      selectLaunched(state, launchpadId, launchId, details?.Request?.Raw ?? raw, raw),
-    );
+    update((state) => selectLaunched(state, launchpadId, launchId, sent, raw));
   }
+
+  // The request an entry sent, from its details `row`. A launch from this
+  // store whose request Marasi has not stored yet sent the draft it launched.
+  const sentRaw = (entryId, row) => row?.Request?.Raw ?? awaitingEntry.get(entryId)?.raw;
 
   // Replaces the pending launches with Marasi's list. A launch this store
   // still thinks pending but Marasi no longer lists ended unseen; read it.
@@ -410,7 +471,9 @@ export function createLaunchpadStore(api) {
   }
 
   // Selects the entry and replaces the launchpad's draft with its request.
-  async function seedDraft(launchpadId, entryId) {
+  // The new draft keeps `previous`'s HTTPS choice, the launchpad's own
+  // draft's by default.
+  async function seedDraft(launchpadId, entryId, previous = current.draftsByLaunchpad[launchpadId]) {
     const version = projectStateVersion;
     const row = await ensureDetails(entryId);
     if (version !== projectStateVersion) return;
@@ -422,11 +485,7 @@ export function createLaunchpadStore(api) {
       },
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: makeDraft(
-          row?.Request?.Raw ?? "",
-          entryId,
-          state.draftsByLaunchpad[launchpadId],
-        ),
+        [launchpadId]: makeDraft(sentRaw(entryId, row) ?? "", entryId, previous),
       },
     }));
   }
@@ -452,15 +511,23 @@ export function createLaunchpadStore(api) {
     if (version !== projectStateVersion) return;
     // A draft survives launchpad switches; only a missing one is seeded.
     if (current.draftsByLaunchpad[launchpadId]) return;
+    await seedFromLast(launchpadId, entries);
+  }
+
+  // Seeds the launchpad's draft from its last entry, or a blank one with no
+  // entry selected when it has none. The new draft keeps `previous`'s HTTPS
+  // choice, the launchpad's own draft's by default.
+  async function seedFromLast(launchpadId, entries, previous = current.draftsByLaunchpad[launchpadId]) {
     if (entries.length > 0) {
-      await seedDraft(launchpadId, entries[entries.length - 1].ID);
+      await seedDraft(launchpadId, entries[entries.length - 1].ID, previous);
       return;
     }
     update((state) => ({
       ...state,
+      selectedEntryByLaunchpad: without(state.selectedEntryByLaunchpad, launchpadId),
       draftsByLaunchpad: {
         ...state.draftsByLaunchpad,
-        [launchpadId]: makeDraft(BLANK_REQUEST, null),
+        [launchpadId]: makeDraft(BLANK_REQUEST, null, previous),
       },
     }));
   }
@@ -486,10 +553,16 @@ export function createLaunchpadStore(api) {
           [launchpadId]: entryId,
         },
       }));
-      return { needsConfirm: false };
+    } else {
+      await seedDraft(launchpadId, entryId);
     }
-    await seedDraft(launchpadId, entryId);
+    // A click selects just this entry.
+    updateEntrySelection(() => selecting.selectOnly(launchpadId, entryId));
     return { needsConfirm: false };
+  }
+
+  function updateEntrySelection(fn) {
+    update((state) => ({ ...state, entrySelection: fn(state.entrySelection, state) }));
   }
 
   function updateDraftFields(launchpadId, fields) {
@@ -536,6 +609,9 @@ export function createLaunchpadStore(api) {
         ),
         ...mapPerLaunchpad(state, keep),
         compare: ids.has(state.compare?.launchpadId) ? state.compare : null,
+        entrySelection: ids.has(state.entrySelection.launchpadId)
+          ? state.entrySelection
+          : selecting.NO_ENTRY_SELECTION,
       };
     });
     const exists = (id) => launchpads.some((launchpad) => launchpad.ID === id);
@@ -558,6 +634,70 @@ export function createLaunchpadStore(api) {
     return { found: true, entryId, needsConfirm };
   }
 
+  // The draft follows its entry: the source's draft, dirty or not, replaces
+  // the target's, and the source starts a fresh one from what it has left,
+  // over the same scheme. The workspace follows the draft: an open source
+  // opens the target.
+  async function carryDraft(sourceId, targetId) {
+    if (current.selectedLaunchpadId === sourceId) openLaunchpad(targetId);
+    const draft = current.draftsByLaunchpad[sourceId];
+    update((state) => ({
+      ...state,
+      selectedEntryByLaunchpad: {
+        ...without(state.selectedEntryByLaunchpad, sourceId),
+        [targetId]: draft.seededFrom,
+      },
+      draftsByLaunchpad: {
+        ...without(state.draftsByLaunchpad, sourceId),
+        [targetId]: draft,
+      },
+    }));
+    await seedFromLast(sourceId, current.entriesByLaunchpad[sourceId] || [], draft);
+  }
+
+  // Move: takes `ids` (in entry order) out of `sourceId` and puts them
+  // before `before` in `targetId`, at the end when `before` is null; the
+  // target may be the source. Marasi moves all or none. Both launchpads are
+  // reloaded either way, and after a move the Entry selection is the moved
+  // entries. Returns { moved, refused }: the moved ids in entry order, or
+  // why Marasi refused (its view was stale). Other failures throw.
+  // The draft follows its entry (carryDraft). When that would replace a
+  // dirty target draft, it returns { needsConfirm: true } without moving
+  // unless `force` is set.
+  async function moveEntries({ sourceId, targetId, ids, before = null }, { force = false } = {}) {
+    if (sourceId === targetId && leavesOrder(entryIdsOf(current, sourceId), ids, before)) {
+      return { moved: ids, refused: null };
+    }
+    const draft = current.draftsByLaunchpad[sourceId];
+    const followsDraft = sourceId !== targetId && Boolean(draft?.seededFrom) && ids.includes(draft.seededFrom);
+    if (followsDraft && !force && isDraftDirty(current, targetId)) {
+      return { moved: null, refused: null, needsConfirm: true };
+    }
+    const version = projectStateVersion;
+    const reload = () =>
+      Promise.all([...new Set([sourceId, targetId])].map((id) => loadEntries(id)));
+    let moved;
+    try {
+      moved = (await api.moveEntries(sourceId, targetId, ids, before ?? "")) || [];
+    } catch (err) {
+      const nameOf = (id) => current.launchpads.find((launchpad) => launchpad.ID === id)?.Name ?? "";
+      const refused = marasiMoveRefusal(err, { sourceName: nameOf(sourceId), targetName: nameOf(targetId) });
+      if (!refused) throw err;
+      await Promise.all([reload(), loadPendingLaunches()]);
+      return { moved: null, refused };
+    }
+    if (version !== projectStateVersion) return { moved, refused: null };
+    await reload();
+    if (version !== projectStateVersion) return { moved, refused: null };
+    if (followsDraft) await carryDraft(sourceId, targetId);
+    updateEntrySelection((selection) => ({
+      launchpadId: targetId,
+      ids: moved,
+      anchor: moved.includes(selection.anchor) ? selection.anchor : moved[0] ?? null,
+    }));
+    return { moved, refused: null };
+  }
+
   return {
     subscribe,
     clear: () => {
@@ -572,6 +712,61 @@ export function createLaunchpadStore(api) {
     ensureDetails,
     selectLaunchpad,
     selectEntry,
+
+    // Entry selection beyond a plain click (selectEntry). None of these
+    // reseeds a draft or changes the open launchpad.
+    // Just this entry, as when a drag starts on an unselected one.
+    selectOnlyEntry: (launchpadId, entryId) =>
+      updateEntrySelection(() => selecting.selectOnly(launchpadId, entryId)),
+    toggleEntry: (launchpadId, entryId) =>
+      updateEntrySelection((selection) => selecting.toggle(selection, launchpadId, entryId)),
+    // `order` is the entry ids the tree shows, for a range under Group by
+    // status or a search; the launchpad's entry order otherwise.
+    extendEntrySelection: (launchpadId, entryId, order = null) =>
+      updateEntrySelection((selection, state) =>
+        selecting.extend(selection, launchpadId, entryId, order ?? entryIdsOf(state, launchpadId)),
+      ),
+    // Every entry, including those behind "Show more".
+    selectAllEntries: (launchpadId) =>
+      updateEntrySelection((selection, state) =>
+        selecting.selectAll(selection, launchpadId, entryIdsOf(state, launchpadId)),
+      ),
+    collapseEntrySelection: () => updateEntrySelection(selecting.collapse),
+
+    // Remove from launchpad: unlinks the entries; their pairs stay in the
+    // project. The launchpad reloads, refused or not: a refusal means this
+    // view was stale, and one for a pending launch also reads the pending
+    // launches, so the menu shows them launching. Removing the entry the
+    // draft was seeded from, or the selected one, reseeds the draft as a
+    // move does; when that would replace a dirty draft, it returns
+    // { needsConfirm: true } without removing unless `force` is set.
+    // Returns { removed, needsConfirm }: how many Marasi removed. The error
+    // goes on.
+    removeEntries: async (launchpadId, ids, { force = false } = {}) => {
+      const removed = new Set(ids);
+      const reseeds = () =>
+        removed.has(current.draftsByLaunchpad[launchpadId]?.seededFrom) ||
+        removed.has(current.selectedEntryByLaunchpad[launchpadId]);
+      if (!force && reseeds() && isDraftDirty(current, launchpadId)) {
+        return { removed: 0, needsConfirm: true };
+      }
+      const version = projectStateVersion;
+      let count;
+      try {
+        count = await api.unlinkEntries(launchpadId, ids);
+      } catch (err) {
+        await Promise.all([loadEntries(launchpadId), pendingLaunchIDs(err) ? loadPendingLaunches() : null]);
+        throw err;
+      }
+      const entries = await loadEntries(launchpadId);
+      if (version !== projectStateVersion) return { removed: count, needsConfirm: false };
+      updateEntrySelection(() => selecting.NO_ENTRY_SELECTION);
+      if (reseeds()) await seedFromLast(launchpadId, entries);
+      return { removed: count, needsConfirm: false };
+    },
+
+    // Drag and drop and the entry menu both move through this.
+    moveEntries,
 
     updateDraft: (launchpadId, raw) => {
       if (current.draftsByLaunchpad[launchpadId]?.raw === raw) return;
@@ -645,14 +840,23 @@ export function createLaunchpadStore(api) {
     },
 
     // Deletes without asking: confirming a dirty draft is the page's job.
+    // Marasi refuses while a launch from it is pending (marasi ADR-0053);
+    // the store then learns that launch, so Delete shows it launching.
     deleteLaunchpad: async (id) => {
-      await api.deleteLaunchpad(id);
+      try {
+        await api.deleteLaunchpad(id);
+      } catch (err) {
+        if (pendingLaunchIDs(err)) await loadPendingLaunches();
+        throw err;
+      }
       const index = current.launchpads.findIndex((launchpad) => launchpad.ID === id);
       update((state) => ({
         ...state,
         launchpads: state.launchpads.filter((launchpad) => launchpad.ID !== id),
         ...mapPerLaunchpad(state, (map) => without(map, id)),
         compare: state.compare?.launchpadId === id ? null : state.compare,
+        entrySelection:
+          state.entrySelection.launchpadId === id ? selecting.NO_ENTRY_SELECTION : state.entrySelection,
       }));
       if (current.selectedLaunchpadId !== id) return;
       const neighbour =

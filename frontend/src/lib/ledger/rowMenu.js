@@ -19,6 +19,8 @@ import { upgradeFromLedgerRow, upgradePresentation } from "../websocket/presenta
 import { shortType } from "./table.js";
 import { effectivePalette } from "./highlights.js";
 import { LAUNCHPADS_EACH_MAX } from "./pairs.js";
+import { launchingIds, unlessLaunching } from "../launchPending.js";
+import { UNTITLED_LAUNCHPAD } from "../launchpad/format.js";
 
 const unique = (values) => [...new Set(values)];
 
@@ -229,13 +231,19 @@ export function isPartialSelection(pairs, { all = false, count = null } = {}) {
   return all && !(count != null && count <= pairs.length);
 }
 
+// How many of `pairs` are still launching, from `launchpadId` when given.
+const launchingCount = (pairs, pendingLaunches, launchpadId = null) =>
+  launchingIds(pendingLaunches, pairs.map((pair) => pair.ID), launchpadId).length;
+
 /**
  * The menu for `pairs`, the selected pairs the table has loaded, in table
  * order. `context` holds what the app already knows: { launchpads,
  * findings, testCases, palette (the effective highlight
- * palette), all, count }. `all` marks a ⌘A selection, whose `count` pairs
- * (null until counted) can be more than the loaded ones; actions that need
- * each pair are disabled then.
+ * palette), pendingLaunches (the launchpad store's, each { ID, LaunchpadID }
+ * with its pair's ID), all, count }. `all` marks a ⌘A selection, whose
+ * `count` pairs (null until counted) can be more than the loaded ones;
+ * actions that need each pair are disabled then, and Delete and Remove from
+ * launchpad stay enabled for Marasi to refuse what is still launching.
  */
 export function menuFor(
   pairs,
@@ -244,6 +252,7 @@ export function menuFor(
     findings = [],
     testCases = [],
     palette = effectivePalette(),
+    pendingLaunches = [],
     all = false,
     count = null,
   } = {},
@@ -252,6 +261,7 @@ export function menuFor(
   // Some selected pairs aren't loaded: only bulk actions can reach them.
   const partial = isPartialSelection(pairs, { all, count });
   const n = partial ? count : pairs.length;
+  const launching = (launchpadId) => (partial ? 0 : launchingCount(pairs, pendingLaunches, launchpadId));
   const many = n == null ? "all" : n.toLocaleString();
   const one = n === 1 ? pairs[0] : null;
   const hosts = unique(pairs.map((pair) => pair.Host));
@@ -332,7 +342,7 @@ export function menuFor(
           hint: "No launchpads yet",
           sub: launchpads.map((launchpad) => ({
             id: `lp-${launchpad.ID}`,
-            label: launchpad.Name || "Untitled launchpad",
+            label: launchpad.Name || UNTITLED_LAUNCHPAD,
             action: { type: "add-to-launchpad", id: launchpad.ID, name: launchpad.Name },
           })),
         },
@@ -346,7 +356,8 @@ export function menuFor(
                 icon: "unlink",
                 sub: launchpads.map((launchpad) => ({
                   id: `lpu-${launchpad.ID}`,
-                  label: launchpad.Name || "Untitled launchpad",
+                  label: launchpad.Name || UNTITLED_LAUNCHPAD,
+                  ...unlessLaunching(launching(launchpad.ID)),
                   action: { type: "remove-from-launchpad", id: launchpad.ID, name: launchpad.Name },
                 })),
               },
@@ -564,6 +575,7 @@ export function menuFor(
       label: one ? "Delete from project…" : `Delete ${many} from project…`,
       icon: "trash",
       danger: true,
+      ...unlessLaunching(launching()),
       action: { type: "delete" },
     },
   ];

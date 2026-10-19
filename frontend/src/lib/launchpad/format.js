@@ -1,5 +1,8 @@
 // Display helpers for the Launchpad page.
 
+/** What a launchpad without a name is called, here and in the Ledger. */
+export const UNTITLED_LAUNCHPAD = "Untitled launchpad";
+
 /** Marasi's primary variant: ghost in light mode, filled in dark. */
 export const primaryVariant = (lightMode) =>
   lightMode ? "variant-ghost-primary ring-0 shadow-none" : "variant-filled-primary";
@@ -31,4 +34,13 @@ export function launchEndText(launch) {
 export function shortTime(iso) {
   if (!iso) return "";
   return new Date(iso).toLocaleTimeString([], { hour12: false });
+}
+
+/**
+ * The entry row's length column: the response length once the entry has a
+ * response, else blank. Marasi reports an unanswered pair's length as "0"
+ * (status code 0 while pending, -1 when its launch ended without one).
+ */
+export function entryLengthText(entry) {
+  return entry?.StatusCode > 0 ? String(entry.Length ?? "") : "";
 }

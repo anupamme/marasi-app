@@ -487,7 +487,7 @@ test("Launchpad page shortcuts run only on the Launchpad page", () => {
   assert.equal(dispatcher.resolve(cmd("\\", "Backslash"), on("/ledger")), "ledger.drawer-closed.toggle-sidebar");
 });
 
-test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => {
+test("jump to last entry leaves ⌘⇧↓ to a focused editor or text field", () => {
   const dispatcher = mac();
   const codeMirror = { tagName: "DIV", isContentEditable: true, closest: (s) => (s.includes(".cm-editor") ? {} : null) };
   const field = { tagName: "INPUT", closest: () => null };
@@ -498,6 +498,34 @@ test("jump to latest leaves ⌘⇧↓ to a focused editor or text field", () => 
   // Other Launchpad shortcuts still run from the request editor.
   const compare = keydown("C", "KeyC", { metaKey: true, shiftKey: true }, codeMirror);
   assert.equal(dispatcher.resolve(compare, on("/launchpad")), "launchpad.toggle-compare");
+});
+
+test("⌘A selects every entry only while the Launchpad tree has focus, and not from its search box", () => {
+  const dispatcher = mac();
+  const tree = { ...on("/launchpad"), launchpadTreeFocused: true };
+  assert.equal(dispatcher.resolve(cmd("a", "KeyA"), tree), "launchpad.tree.select-all-entries");
+  assert.equal(dispatcher.resolve(cmd("a", "KeyA"), on("/launchpad")), null);
+  const search = keydown("a", "KeyA", { metaKey: true }, { tagName: "INPUT", closest: () => null });
+  assert.equal(dispatcher.resolve(search, tree), null);
+  // The page's own shortcuts still run from the tree.
+  assert.equal(dispatcher.resolve(cmdShift("C", "KeyC"), tree), "launchpad.toggle-compare");
+  // Both are eligible together, so one key cannot serve both.
+  assert.ok(contextsConflict(CONTEXTS, "launchpad.tree", "launchpad"));
+});
+
+test("⌥ arrows move the entry selection only while the Launchpad tree has focus, and not from an editor", () => {
+  const alt = (key, mods = {}, target) => keydown(key, key, { altKey: true, ...mods }, target);
+  const tree = { ...on("/launchpad"), launchpadTreeFocused: true };
+  for (const dispatcher of [mac(), createDispatcher({ catalog: buildCatalog(), platform: WINDOWS_LINUX })]) {
+    assert.equal(dispatcher.resolve(alt("ArrowUp"), tree), "launchpad.tree.move-entries-up");
+    assert.equal(dispatcher.resolve(alt("ArrowDown"), tree), "launchpad.tree.move-entries-down");
+    assert.equal(dispatcher.resolve(alt("ArrowUp", { shiftKey: true }), tree), "launchpad.tree.move-entries-top");
+    assert.equal(dispatcher.resolve(alt("ArrowDown", { shiftKey: true }), tree), "launchpad.tree.move-entries-bottom");
+    assert.equal(dispatcher.resolve(alt("ArrowUp"), on("/launchpad")), null);
+    // ⌥↑ moves a line in CodeMirror; the tree's search box keeps it too.
+    const search = alt("ArrowUp", {}, { tagName: "INPUT", closest: () => null });
+    assert.equal(dispatcher.resolve(search, tree), null);
+  }
 });
 
 test("no Launchpad default hides a global shortcut", () => {

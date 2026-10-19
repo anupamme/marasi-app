@@ -6,6 +6,7 @@ import {
   dirtyLaunchpadIds,
   isDraftDirty,
   launchOf,
+  newestEntryOf,
   pendingLaunchOf,
 } from "./createLaunchpadStore.js";
 import { entrySearchQuery } from "../lib/launchpad/entrySearch.js";
@@ -68,7 +69,7 @@ function twoLaunchpads() {
   });
 }
 
-test("populate selects the first launchpad and seeds its draft from the latest entry", async () => {
+test("populate selects the first launchpad and seeds its draft from its last entry", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();
   const state = get(store);
@@ -186,14 +187,16 @@ test("a populate that resolves after clear does not leak into the new project", 
   assert.equal(get(store).selectedLaunchpadId, null);
 });
 
-const launched = (id, launchpadId, raw) => ({
+// A launched request as the "request" event carries it. Its metadata names
+// no launchpad: the store places it by its launch.
+const launched = (id, raw) => ({
   ID: id,
   Scheme: "https",
   Method: "GET",
   Host: "x",
   Path: `/${id}`,
   Raw: raw,
-  Metadata: { launchpad_id: launchpadId },
+  Metadata: {},
   RequestedAt: "2026-10-13T10:00:00Z",
 });
 
@@ -204,6 +207,13 @@ const launchState = (id, launchpadId, Status, Reason = "") => ({
   Status,
   Reason,
 });
+
+// A launch started elsewhere (another window, Marasi's service) whose
+// request then arrives.
+function arrive(store, id, launchpadId, raw) {
+  store.onLaunchStarted(launchState(id, launchpadId, "pending"));
+  store.onRequest(launched(id, raw));
+}
 
 test("launch sends the draft, stays pending under its launch id, and the arriving entry is selected", async () => {
   const api = twoLaunchpads();
@@ -222,7 +232,7 @@ test("launch sends the draft, stays pending under its launch id, and the arrivin
   assert.equal(pendingLaunchOf(get(store), "lp1")?.ID, "d");
 
   // Marasi echoes the request as sent, with its own line endings.
-  store.onRequest(launched("d", "lp1", "GET /b?q=1 HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onRequest(launched("d", "GET /b?q=1 HTTP/1.1\r\nHost: x\r\n\r\n"));
   let state = get(store);
   assert.deepEqual(
     state.entriesByLaunchpad.lp1.map((item) => item.ID),
@@ -247,7 +257,7 @@ test("an entry that arrives before the launch binding returns is still selected"
   await store.populate();
   api.launch = async () => {
     store.onLaunchStarted(launchState("d", "lp1", "pending"));
-    store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+    store.onRequest(launched("d", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
     return "d";
   };
   await store.launch("lp1");
@@ -264,7 +274,7 @@ test("edits typed after Launch survive the arrival as a dirty draft", async () =
   store.updateDraft("lp1", "first");
   await store.launch("lp1");
   store.updateDraft("lp1", "second");
-  store.onRequest(launched("d", "lp1", "first"));
+  store.onRequest(launched("d", "first"));
   const state = get(store);
   assert.equal(state.selectedEntryByLaunchpad.lp1, "d");
   assert.equal(state.draftsByLaunchpad.lp1.raw, "second");
@@ -279,8 +289,8 @@ test("an arrival for a launchpad that is not open counts as unseen until it is o
   await store.selectLaunchpad("lp2");
   await store.launch("lp2");
   await store.selectLaunchpad("lp1");
-  store.onRequest(launched("d", "lp2", "GET /c HTTP/1.1\r\nHost: x\r\n\r\n"));
-  store.onRequest(launched("e", "lp2", "GET /c HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onRequest(launched("d", "GET /c HTTP/1.1\r\nHost: x\r\n\r\n"));
+  arrive(store, "e", "lp2", "GET /c HTTP/1.1\r\nHost: x\r\n\r\n");
   assert.equal(get(store).unseenByLaunchpad.lp2, 2);
   assert.equal(get(store).selectedLaunchpadId, "lp1");
   await store.selectLaunchpad("lp2");
@@ -288,14 +298,37 @@ test("an arrival for a launchpad that is not open counts as unseen until it is o
   assert.equal(get(store).selectedEntryByLaunchpad.lp2, "d");
 });
 
-test("traffic without a known launchpad id is ignored", async () => {
+test("traffic without a known launch is ignored, whatever its metadata says", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();
   const before = get(store);
-  store.onRequest({ ...launched("p", "lp1", "x"), Metadata: {} });
-  store.onRequest(launched("q", "elsewhere", "x"));
+  store.onRequest(launched("p", "x"));
+  store.onRequest({ ...launched("q", "x"), Metadata: { launchpad_id: "lp1" } });
   store.onResponse({ ID: "p", StatusCode: 200 });
   assert.equal(get(store), before);
+});
+
+test("a launch into an unknown launchpad is ignored", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  store.onLaunchStarted(launchState("q", "elsewhere", "pending"));
+  const before = get(store);
+  store.onRequest(launched("q", "x"));
+  store.onResponse({ ID: "q", StatusCode: 200 });
+  assert.equal(get(store), before);
+});
+
+test("a launched request lands in its launch's launchpad, not the one its stale metadata names", async () => {
+  const store = createLaunchpadStore(twoLaunchpads());
+  await store.populate();
+  await store.loadEntries("lp2");
+  store.onLaunchStarted(launchState("d", "lp2", "pending"));
+  store.onRequest({ ...launched("d", "GET /d HTTP/1.1\r\n\r\n"), Metadata: { launchpad_id: "lp1" } });
+  store.onResponse({ ID: "d", StatusCode: 201, Status: "201 Created", Length: "3" });
+  const state = get(store);
+  assert.deepEqual(state.entriesByLaunchpad.lp1.map((item) => item.ID), ["a", "b"]);
+  assert.deepEqual(state.entriesByLaunchpad.lp2.map((item) => [item.ID, item.StatusCode]), [["c", undefined], ["d", 201]]);
+  assert.equal(state.unseenByLaunchpad.lp2, 1);
 });
 
 test("the response fills in the arrived entry's status and length", async () => {
@@ -304,7 +337,7 @@ test("the response fills in the arrived entry's status and length", async () => 
   const store = createLaunchpadStore(api);
   await store.populate();
   await store.launch("lp1");
-  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onRequest(launched("d", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
   store.onResponse({
     ID: "d",
     Status: "201 Created",
@@ -339,7 +372,7 @@ test("cancel ends the open launchpad's pending launch as cancelled", async () =>
   await store.populate();
   await store.launch("lp1");
   api.pending.push(launchState("d", "lp1", "pending"));
-  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onRequest(launched("d", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
 
   await store.cancelLaunch("lp1");
   assert.deepEqual(api.calls.at(-1), ["cancelLaunch", "d"]);
@@ -378,7 +411,7 @@ test("a failed launch keeps its reason on the entry", async () => {
   const store = createLaunchpadStore(api);
   await store.populate();
   await store.launch("lp1");
-  store.onRequest(launched("d", "lp1", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
+  store.onRequest(launched("d", "GET /b HTTP/1.1\r\nHost: x\r\n\r\n"));
   store.onLaunchFinished(launchState("d", "lp1", "failed", "upstream_error"));
   assert.deepEqual(launchOf(get(store), "d"), { Status: "failed", Reason: "upstream_error" });
 });
@@ -571,6 +604,23 @@ test("deleting the open launchpad drops its draft and opens its neighbour", asyn
   assert.equal(state.selectedEntryByLaunchpad.lp2, "c");
 });
 
+test("a delete Marasi refuses for a launch still pending keeps the launchpad and learns the launch", async () => {
+  const api = twoLaunchpads();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  store.updateDraft("lp1", "edited");
+  // Launched elsewhere (another window); this store has not heard of it.
+  api.pending.push({ ID: "d", LaunchpadID: "lp1", Status: "pending" });
+  api.deleteLaunchpad = async (id) => {
+    throw new Error(`deleting launchpad: launch_pending (d): a launch from ${id} is pending`);
+  };
+  await assert.rejects(store.deleteLaunchpad("lp1"), /launch_pending/);
+  const state = get(store);
+  assert.deepEqual(state.launchpads.map((launchpad) => launchpad.ID), ["lp1", "lp2"]);
+  assert.equal(state.draftsByLaunchpad.lp1.raw, "edited");
+  assert.equal(pendingLaunchOf(state, "lp1")?.ID, "d", "its Delete now shows it launching");
+});
+
 test("dirty launchpads are listed for the close and quit prompts", async () => {
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();
@@ -593,7 +643,7 @@ test("selecting an entry in another launchpad clears its unseen count", async ()
   const store = createLaunchpadStore(twoLaunchpads());
   await store.populate();
   await store.loadEntries("lp2");
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\nHost: x\r\n\r\n"));
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\nHost: x\r\n\r\n");
   assert.equal(get(store).unseenByLaunchpad.lp2, 1);
   await store.selectEntry("lp2", "d");
   assert.equal(get(store).selectedLaunchpadId, "lp2");
@@ -708,7 +758,7 @@ test("opening the page loads only the open launchpad's entries", async () => {
 test("a launch arriving in an unexpanded launchpad updates its count and last status live", async () => {
   const store = createLaunchpadStore(summarised());
   await store.populate();
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\n\r\n");
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: null });
   store.onResponse({ ID: "d", StatusCode: 201 });
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 201 });
@@ -717,19 +767,32 @@ test("a launch arriving in an unexpanded launchpad updates its count and last st
 test("a response to an older entry leaves the last status to the newest", async () => {
   const store = createLaunchpadStore(summarised());
   await store.populate();
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
-  store.onRequest(launched("e", "lp2", "GET /e HTTP/1.1\r\n\r\n"));
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\n\r\n");
+  arrive(store, "e", "lp2", "GET /e HTTP/1.1\r\n\r\n");
   store.onResponse({ ID: "d", StatusCode: 201 });
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: null });
   store.onResponse({ ID: "e", StatusCode: 500 });
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: 500 });
 });
 
+test("a launched entry keeps its pair number and is the newest by capture", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.getEntries = async () => [{ ...entry("c"), Number: 7, StatusCode: 404 }];
+  await store.loadEntries("lp2");
+  store.onLaunchStarted(launchState("d", "lp2", "pending"));
+  store.onRequest({ ...launched("d", "GET /d HTTP/1.1\r\n\r\n"), Number: 8 });
+  const arrived = get(store).entriesByLaunchpad.lp2.find((item) => item.ID === "d");
+  assert.equal(arrived.Number, 8);
+  assert.equal(newestEntryOf(get(store), "lp2")?.ID, "d");
+});
+
 test("a repeated request event does not count twice", async () => {
   const store = createLaunchpadStore(summarised());
   await store.populate();
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\n\r\n");
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\n\r\n");
   assert.equal(summaryOf(store, "lp2").EntryCount, 2);
 });
 
@@ -740,6 +803,42 @@ test("loading a launchpad's entries refreshes its summary", async () => {
   api.getEntries = async () => [entry("c"), { ...entry("x"), StatusCode: 302 }];
   await store.loadEntries("lp2");
   assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: 302 });
+});
+
+test("the summary follows the newest entry by capture, not the last in entry order", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  // Entry order: the newest pair (Number 3) was moved to the top.
+  api.getEntries = async () => [
+    { ...entry("n"), Number: 3, StatusCode: 404 },
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+    { ...entry("x"), Number: 2, StatusCode: 302 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: 404 });
+  assert.equal(newestEntryOf(get(store), "lp2")?.ID, "n");
+});
+
+test("a pending or cancelled newest entry leaves the last status empty", async () => {
+  const api = summarised();
+  const store = createLaunchpadStore(api);
+  await store.populate();
+  api.getEntries = async () => [
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+    { ...entry("n"), Number: 3, StatusCode: 0 },
+    { ...entry("x"), Number: 2, StatusCode: 302 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 3, LastStatusCode: null });
+  // Marasi stores a cancelled launch's status code as -1.
+  api.getEntries = async () => [
+    { ...entry("n"), Number: 3, StatusCode: -1, Metadata: { launch: { status: "cancelled" } } },
+    { ...entry("c"), Number: 1, StatusCode: 200 },
+  ];
+  await store.loadEntries("lp2");
+  assert.deepEqual(summaryOf(store, "lp2"), { EntryCount: 2, LastStatusCode: null });
+  assert.equal(launchOf(get(store), newestEntryOf(get(store), "lp2").ID)?.Status, "cancelled");
 });
 
 test("a new launchpad starts with no entries", async () => {
@@ -753,8 +852,9 @@ test("a response after a page revisit still updates the last status", async () =
   const api = summarised();
   const store = createLaunchpadStore(api);
   await store.populate();
-  store.onRequest(launched("d", "lp2", "GET /d HTTP/1.1\r\n\r\n"));
-  // Marasi now reports the in-flight entry as the newest.
+  arrive(store, "d", "lp2", "GET /d HTTP/1.1\r\n\r\n");
+  // Marasi now reports the in-flight entry as the newest, still launching.
+  api.pending.push(launchState("d", "lp2", "pending"));
   api.getLaunchpads = async () => [
     { ID: "lp1", Name: "Login", EntryCount: 2, LastStatusCode: 200 },
     { ID: "lp2", Name: "Search", EntryCount: 2, LastStatusCode: null },

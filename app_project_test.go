@@ -7,6 +7,7 @@ import (
 	"log/slog"
 	"path/filepath"
 	"testing"
+	"time"
 
 	marasi "github.com/tfkr-ae/marasi"
 	"github.com/tfkr-ae/marasi/domain"
@@ -43,35 +44,46 @@ func TestOpenProjectSwitchesThroughLifecycle(t *testing.T) {
 	assertProjectReleased(t, oldPath)
 }
 
-func TestOpenProjectSurfacesProjectBusy(t *testing.T) {
+// A switch waits for a held Checkpoint item rather than refusing, and the
+// item can still be dropped while it waits (Marasi ADR-0046).
+func TestOpenProjectWaitsForHeldCheckpointItem(t *testing.T) {
 	app := newCheckpointApp(t)
 	oldPath := scratchpadPath(t, app)
-	oldRepo := app.Proxy.TrafficRepo
 	_, reqID, done := startAppRequestHold(t, app)
 	waitForAppCheckpoint(t, app, 1)
 
-	name, err := app.OpenProject("other")
-	if !errors.Is(err, service.ErrProjectBusy) {
-		t.Fatalf("wanted %v, got %q %v", service.ErrProjectBusy, name, err)
+	type opened struct {
+		name string
+		err  error
+	}
+	switched := make(chan opened, 1)
+	go func() {
+		name, err := app.OpenProject("other")
+		switched <- opened{name, err}
+	}()
+	select {
+	case got := <-switched:
+		t.Fatalf("wanted switch to wait for the held item, got %q %v", got.name, got.err)
+	case <-time.After(200 * time.Millisecond):
 	}
 	assertProjectOwned(t, oldPath)
-	if app.Proxy.TrafficRepo != oldRepo {
-		t.Fatal("wanted old project repositories left in place")
-	}
-	if !app.Proxy.HasPendingCheckpoint() {
-		t.Fatal("wanted pending checkpoint left untouched")
-	}
-	select {
-	case <-done:
-		t.Fatal("wanted checkpoint still waiting")
-	default:
-	}
+
 	if err := app.DropCheckpoint(reqID); err != nil {
 		t.Fatalf("dropping checkpoint: %v", err)
 	}
 	if err := receiveAppHoldResult(t, done); !errors.Is(err, marasi.ErrDropped) {
 		t.Fatalf("wanted: %v\ngot: %v", marasi.ErrDropped, err)
 	}
+	select {
+	case got := <-switched:
+		if got.err != nil || got.name != "other" {
+			t.Fatalf("wanted switch to other, got %q %v", got.name, got.err)
+		}
+	case <-time.After(5 * time.Second):
+		t.Fatal("wanted switch to finish once the held item was dropped")
+	}
+	assertProjectOwned(t, projectPath(t, app, "other.marasi"))
+	assertProjectReleased(t, oldPath)
 }
 
 func TestCloseReleasesOpenProject(t *testing.T) {

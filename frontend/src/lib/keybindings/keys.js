@@ -199,19 +199,17 @@ export function isModifiedBinding(binding) {
   return /^(meta|ctrl|alt)\+/.test(binding);
 }
 
-// Display labels keep the palette's existing notation ("⌘+⇧+F",
-// "ctrl+alt+1", "⌘+⇧+↩", "ctrl+⇧+enter", "⌘+⇧+down").
+// Display labels keep the palette's notation ("⌘+⇧+F", "ctrl+alt+1",
+// "⌘+⇧+↩", "ctrl+⇧+enter"). macOS shows its key glyphs: ⌥ for alt and
+// arrows as ↑ ↓ ← → ("⌥+⇧+↓"); other platforms spell them ("ctrl+left").
 const MODIFIER_LABELS = {
-  [MACOS]: { meta: "⌘", ctrl: "ctrl", alt: "alt", shift: "⇧" },
+  [MACOS]: { meta: "⌘", ctrl: "ctrl", alt: "⌥", shift: "⇧" },
   default: { meta: "meta", ctrl: "ctrl", alt: "alt", shift: "⇧" },
 };
 
 const KEY_LABELS = {
-  arrowup: "up",
-  arrowdown: "down",
-  arrowleft: "left",
-  arrowright: "right",
-  plus: "+",
+  [MACOS]: { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", enter: "↩", plus: "+" },
+  default: { arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right", plus: "+" },
 };
 
 export function formatBinding(binding, platform) {
@@ -219,9 +217,8 @@ export function formatBinding(binding, platform) {
   const parts = binding.split("+");
   const key = parts.pop();
   const labels = MODIFIER_LABELS[platform] ?? MODIFIER_LABELS.default;
-  let keyLabel = KEY_LABELS[key] ?? key;
-  if (key === "enter" && platform === MACOS) keyLabel = "↩";
-  else if (isSingleCharacter(key)) keyLabel = key.toUpperCase();
+  let keyLabel = (KEY_LABELS[platform] ?? KEY_LABELS.default)[key] ?? key;
+  if (isSingleCharacter(key)) keyLabel = key.toUpperCase();
   return [...parts.map((m) => labels[m] ?? m), keyLabel].join("+");
 }
 

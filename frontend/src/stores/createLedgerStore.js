@@ -32,6 +32,7 @@ import { select } from "../lib/storeSelect.js";
 import { LAUNCHPADS_EACH_MAX, pairIDSet, sameID } from "../lib/ledger/pairs.js";
 import { formatCount, matchNoun, requestCount } from "../lib/ledger/counts.js";
 import { incompleteJobs } from "../lib/ledger/selectionIncomplete.js";
+import { pendingLaunchIDs } from "../lib/launchPending.js";
 import { DEFAULT_SORT } from "../lib/ledger/table.js";
 
 /** The drawer's share of the table area's height: default and limits. */
@@ -1818,7 +1819,7 @@ export function createLedgerStore(api) {
     sendToNewLaunchpad,
     sendToLaunchpadsEach,
     addToLaunchpad: (selection, id) => link(selection, "launchpad", id),
-    removeFromLaunchpad: (selection, id) => unlink(selection, "launchpad", id),
+    removeFromLaunchpad: (selection, id) => showLaunching(unlink(selection, "launchpad", id)),
     linkToFinding: (selection, id) => link(selection, "finding", id),
     unlinkFromFinding: (selection, id) => unlink(selection, "finding", id),
     linkToTestCase: (selection, id) => link(selection, "test_case", id),
@@ -1898,12 +1899,29 @@ export function createLedgerStore(api) {
     return changed(api.unlinkTraffic(selection, { Kind: kind, ID: id }));
   }
 
+  // Waits for a delete or a removal from a launchpad. When Marasi refuses it
+  // for pairs still launching (marasi ADR-0053), nothing changed: the loaded
+  // ones become the selection, so the researcher sees which, and the error
+  // goes on.
+  async function showLaunching(operation) {
+    try {
+      return await operation;
+    } catch (err) {
+      const pending = new Set(pendingLaunchIDs(err) ?? []);
+      const loaded = tableRows(current)
+        .map((row) => String(row.ID))
+        .filter((id) => pending.has(id));
+      if (loaded.length) selectIDs(loaded, loaded[0], loaded[0]);
+      throw err;
+    }
+  }
+
   /**
    * Deletes the selection from the project, with its notes, links and
    * WebSocket messages, then clears the selection and reads the rows again.
    */
   async function deleteFromProject(selection) {
-    const count = await api.deleteTraffic(selection);
+    const count = await showLaunching(api.deleteTraffic(selection));
     clearSelection();
     await refresh();
     return count;

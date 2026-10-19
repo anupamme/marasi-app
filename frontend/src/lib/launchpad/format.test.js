@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { statusClass } from "./format.js";
+import { entryLengthText, statusClass } from "./format.js";
 
 test("status colours: pending dimmed, then success, warning, error", () => {
   assert.equal(statusClass(0), "opacity-50");
@@ -15,4 +15,13 @@ test("3xx statuses use a darker warning in light mode", () => {
 
 test("a stored pair without a response (-1) is dimmed like a pending one", () => {
   assert.equal(statusClass(-1), "opacity-50");
+});
+
+test("an entry's length shows only once it has a response", () => {
+  // Marasi reports an unanswered pair's length as "0".
+  assert.equal(entryLengthText({ StatusCode: 0, Length: "0" }), "");
+  assert.equal(entryLengthText({ StatusCode: -1, Length: "0" }), "");
+  assert.equal(entryLengthText({ StatusCode: 0, Length: "" }), "");
+  assert.equal(entryLengthText({ StatusCode: 200, Length: "512" }), "512");
+  assert.equal(entryLengthText({ StatusCode: 204, Length: "0" }), "0");
 });

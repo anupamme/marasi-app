@@ -71,6 +71,7 @@
 	import { select } from "../../lib/storeSelect.js";
 	import { toastError as showError } from "../../lib/toasts.js";
 	import { incompleteJobs, incompleteText } from "../../lib/ledger/selectionIncomplete.js";
+	import { toastLaunchingRefusal } from "../../lib/launchPending.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
@@ -79,7 +80,7 @@
 	import LedgerTypesMenu from "../../lib/ledger/LedgerTypesMenu.svelte";
 	import { positionLabel, rowHighlight } from "../../lib/ledger/table.js";
 	import { launchpadStore } from "../../stores/launchpadStore";
-	import { primaryVariant } from "../../lib/launchpad/format.js";
+	import { primaryVariant, UNTITLED_LAUNCHPAD } from "../../lib/launchpad/format.js";
 	import { highlightMigrating, highlightPalette, renameHighlight } from "../../stores/highlightsStore";
 	import { testCaseStore } from "../../stores/testCaseStore";
 	import { findingStore } from "../../stores/findingStore";
@@ -260,6 +261,16 @@
 		});
 	}
 
+	// A delete or removal Marasi refused for pairs still launching (marasi
+	// ADR-0053): nothing changed, the store selected the loaded ones, and
+	// the launchpads are read again so the menu greys it next time. False
+	// for any other error.
+	function launchingRefused(error, verb) {
+		if (!toastLaunchingRefusal(toastStore, error, verb)) return false;
+		refreshLaunchpads();
+		return true;
+	}
+
 	// A toast with a button that leaves for another page.
 	function toastJump(message, label, path) {
 		const toastId = toastStore.trigger({
@@ -399,12 +410,13 @@
 		try {
 			const count = await ledgerStore.removeFromLaunchpad(target.selection, launchpadId);
 			refreshLaunchpads();
-			if (!count) return unchanged(target, { type: "remove-from-launchpad", name: name || "Untitled launchpad" });
+			if (!count) return unchanged(target, { type: "remove-from-launchpad", name: name || UNTITLED_LAUNCHPAD });
 			toastStore.trigger({
-				message: `Removed ${requestCount(count)} from "${name || "Untitled launchpad"}"`,
+				message: `Removed ${requestCount(count)} from "${name || UNTITLED_LAUNCHPAD}"`,
 				background: handoffBackground,
 			});
 		} catch (error) {
+			if (launchingRefused(error, "removed")) return;
 			bulkFailed(`Failed to remove ${describeTarget(target)} from "${name}"`, error, () =>
 				removeFromLaunchpad(target, launchpadId, name),
 			);
@@ -501,6 +513,7 @@
 					if (!count) return unchanged(target, { type: "delete" });
 					toastStore.trigger({ message: `Deleted ${requestCount(count)}`, background: handoffBackground });
 				} catch (error) {
+					if (launchingRefused(error, "deleted")) return;
 					bulkFailed(`Failed to delete ${what}`, error, remove);
 				}
 			},
@@ -703,6 +716,7 @@
 		findings: $findingStore,
 		testCases: $testCaseStore,
 		palette: $highlightPalette,
+		pendingLaunches: Object.values($launchpadStore.launchesById ?? {}).filter((launch) => launch.Status === "pending"),
 		all: Boolean(rowMenu.target?.all),
 		count: rowMenu.target?.all ? $liveSize : null,
 	};

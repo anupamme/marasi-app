@@ -23,6 +23,7 @@
 		EyeOff,
 		Filter,
 		FolderInput,
+		Globe,
 		Highlighter,
 		Link,
 		ListChecks,
@@ -87,6 +88,7 @@
 		up: ArrowUp,
 		down: ArrowDown,
 		bottom: ArrowDownToLine,
+		globe: Globe,
 	};
 	const METHOD_CLASS = {
 		POST: "text-tertiary-700 dark:text-tertiary-500",

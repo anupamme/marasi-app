@@ -21,6 +21,7 @@
 		PenIcon,
 		SendIcon,
 		CopyIcon,
+		GlobeIcon,
 		BracesIcon,
 		MaximizeIcon,
 		WrapTextIcon,
@@ -72,6 +73,7 @@
 	import { toastError as showError } from "../../lib/toasts.js";
 	import { incompleteJobs, incompleteText } from "../../lib/ledger/selectionIncomplete.js";
 	import { toastLaunchingRefusal } from "../../lib/launchPending.js";
+	import { BROWSER_VIEW_COPIED, browserViewURL } from "../../lib/browserView.js";
 	import ToolbarMenu from "../../lib/ledger/ToolbarMenu.svelte";
 	import MarksMenu from "../../lib/ledger/MarksMenu.svelte";
 	import HighlightsMenu from "../../lib/ledger/HighlightsMenu.svelte";
@@ -672,6 +674,8 @@
 				return showInDrawer(action.id, "note");
 			case "copy":
 				return copyPairs(pairs, action.what);
+			case "browser-view":
+				return copyText(browserViewURL(action.id), BROWSER_VIEW_COPIED, "Failed to copy the browser view URL");
 			case "narrow":
 				return narrow(action.term);
 			case "hide-type":
@@ -1030,6 +1034,11 @@
 			actionId: "ledger.drawer-open.copy-raw-response",
 			icon: CopyIcon,
 			handler: shortcut("ledger.drawer-open.copy-raw-response"),
+		},
+		{
+			actionId: "ledger.drawer-open.copy-browser-view-url",
+			icon: GlobeIcon,
+			handler: shortcut("ledger.drawer-open.copy-browser-view-url"),
 		},
 		{
 			actionId: "ledger.drawer-open.open-row-menu",

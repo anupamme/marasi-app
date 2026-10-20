@@ -17,6 +17,7 @@
         Columns2Icon,
         FolderTreeIcon,
         GitCompareIcon,
+        GlobeIcon,
         ListChecksIcon,
         LockIcon,
         PanelLeftIcon,
@@ -58,6 +59,7 @@
     } from "../../lib/launchPending.js";
     import { UNTITLED_LAUNCHPAD } from "../../lib/launchpad/format.js";
     import { toastError } from "../../lib/toasts.js";
+    import { BROWSER_VIEW_COPIED, browserViewRefusal, browserViewURL } from "../../lib/browserView.js";
 
     const modalStore = getModalStore();
     const toastStore = getToastStore();
@@ -195,6 +197,7 @@
         const ids = selectedEntryIds(state);
         if (!sourceId || !ids.length) return;
         if (action.type === "remove") return removeEntries(sourceId, ids);
+        if (action.type === "browser-view") return copyBrowserView(action.id);
         const targetId = action.type === "move" ? action.targetId : sourceId;
         const before = action.type === "move" ? null : action.before;
         const { moved } = await moveEntries({ sourceId, targetId, ids, before });
@@ -361,6 +364,25 @@
         return index < 0 ? null : { entry: entries[index], number: index + 1 };
     }
 
+    function copyBrowserView(entryId) {
+        navigator.clipboard
+            .writeText(browserViewURL(entryId))
+            .then(() => toastStore.trigger({ message: BROWSER_VIEW_COPIED, background: "variant-filled-success" }))
+            .catch((err) => toastError(toastStore, "Failed to copy the browser view URL", err));
+    }
+
+    // The open entry's browser view URL; when it has none, the reason.
+    function copyOpenBrowserView() {
+        const selected = selectedEntry();
+        if (!selected) return;
+        const refused = browserViewRefusal(selected.entry);
+        if (refused) {
+            toastStore.trigger({ message: refused, background: "variant-filled-warning", timeout: 2000 });
+            return;
+        }
+        copyBrowserView(selected.entry.ID);
+    }
+
     function toggleEntryModal(component, actionId, fetch, title) {
         const selected = selectedEntry();
         if (!selected) return;
@@ -461,6 +483,7 @@
             icon: BracesIcon,
             handler: () => toggleEntryModal("Metadata", "launchpad.view-metadata", GetMetadata, "Metadata"),
         },
+        { actionId: "launchpad.copy-browser-view-url", icon: GlobeIcon, handler: copyOpenBrowserView },
     ];
     useMenuActions(launchpadMenu);
 </script>
@@ -489,6 +512,7 @@
             onLaunch={launch}
             onCancel={cancelLaunch}
             onDelete={deleteLaunchpad}
+            onBrowserView={copyOpenBrowserView}
             launchDisabled={!$listener.status}
         />
     </div>

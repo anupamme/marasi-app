@@ -139,3 +139,14 @@ test("Move to launchpad is greyed when there is no other launchpad", () => {
   assert.equal(move.disabled, true);
   assert.equal(move.hint, "No other launchpads");
 });
+
+test("Copy browser view URL is for one entry with a response that is not a WebSocket upgrade", () => {
+  assert.deepEqual(item(menu(["b"]), "browser-view").action, { type: "browser-view", id: "b" });
+  assert.equal(item(menu(["b"]), "browser-view").disabled, undefined);
+  assert.equal(item(menu(["b", "c"]), "browser-view").hint, "One entry at a time");
+  const status = (code) =>
+    item(menu(["a"], { entries: [entry("a", { StatusCode: code })] }), "browser-view");
+  assert.equal(status(0).disabled, true);
+  assert.equal(status(0).hint, "No response yet");
+  assert.equal(status(101).hint, "Not for a WebSocket upgrade");
+});

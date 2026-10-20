@@ -49,11 +49,12 @@ const item = (items, id) => {
 };
 const ids = (items) => items.filter((it) => it?.id).map((it) => it.id);
 
-test("one pair: Launchpad, Armory, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata, Delete", () => {
+test("one pair: Launchpad, Armory, Browser view, Finding, Test case, Note, Highlight, Copy, Narrow, Select, Metadata, Delete", () => {
   const menu = menuFor([pair("a")], context());
   assert.deepEqual(ids(menu), [
     "launchpad",
     "armory",
+    "browser-view",
     "finding",
     "testcase",
     "note",
@@ -447,4 +448,28 @@ test("under a partly loaded selection nothing is disabled for being a no-op", ()
   const menu = menuFor([pair("a"), pair("b")], context({ all: true, count: 1200 }));
   assert.ok(item(menu, "highlight").swatches.every((s) => !s.disabled));
   assert.equal(item(menu, "n-clear").disabled, false);
+});
+
+test("Copy browser view URL is for one pair with a response that is not a WebSocket upgrade", () => {
+  const view = (pairs) => item(menuFor(pairs, context()), "browser-view");
+  assert.deepEqual(view([pair("a")]).action, { type: "browser-view", id: "a" });
+  assert.equal(view([pair("a")]).disabled, false);
+  assert.equal(view([pair("a")]).actionId, "ledger.drawer-open.copy-browser-view-url");
+  for (const [pairs, hint] of [
+    [[pair("a"), pair("b")], "One request at a time"],
+    [[pair("a", { StatusCode: 0 })], "No response yet"],
+    [[pair("a", { StatusCode: 101 })], "Not for a WebSocket upgrade"],
+  ]) {
+    assert.equal(view(pairs).disabled, true);
+    assert.equal(view(pairs).hint, hint);
+  }
+});
+
+test("the browser view shortcut says why the menu disables it", () => {
+  const menu = menuFor([pair("a", { StatusCode: 0 })], context());
+  assert.deepEqual(menuAction(menu, "ledger.drawer-open.copy-browser-view-url"), {
+    action: { type: "browser-view", id: "a" },
+    disabled: true,
+    hint: "No response yet",
+  });
 });

@@ -21,6 +21,7 @@ import { effectivePalette } from "./highlights.js";
 import { LAUNCHPADS_EACH_MAX } from "./pairs.js";
 import { launchingIds, unlessLaunching } from "../launchPending.js";
 import { UNTITLED_LAUNCHPAD } from "../launchpad/format.js";
+import { browserViewRefusal } from "../browserView.js";
 
 const unique = (values) => [...new Set(values)];
 
@@ -373,6 +374,15 @@ export function menuFor(
       disabled: partial,
       hint: NOT_FOR_ALL,
       action: { type: "armory" },
+    },
+    {
+      id: "browser-view",
+      label: "Copy browser view URL",
+      icon: "globe",
+      actionId: "ledger.drawer-open.copy-browser-view-url",
+      disabled: !one || Boolean(browserViewRefusal(one)),
+      hint: one ? browserViewRefusal(one) : "One request at a time",
+      action: { type: "browser-view", id: pairs[0].ID },
     },
     "sep",
     { id: "finding", label: "Finding", icon: "finding", ...finding },

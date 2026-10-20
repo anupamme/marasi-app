@@ -9,10 +9,11 @@
 	import { githubLight } from "@uiw/codemirror-theme-github";
 	import { vim } from "@replit/codemirror-vim";
 	import { modeCurrent, ProgressRadial, SlideToggle } from "@skeletonlabs/skeleton";
-	import { Check, GitCompare, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
+	import { Check, GitCompare, Globe, Pencil, RotateCcw, Send, Trash2, X } from "lucide-svelte";
 	import { lineWrap, marasiConfig } from "../../stores";
 	import { isDraftDirty, launchOf, pendingLaunchOf } from "../../stores/launchpadStore";
 	import { DELETE_LAUNCHPAD_PENDING_HINT } from "../launchPending.js";
+	import { browserViewRefusal } from "../browserView.js";
 	import { compareView } from "./compare.js";
 	import { launchEndText, primaryVariant, statusClass } from "./format.js";
 	import LaunchpadCompare from "./LaunchpadCompare.svelte";
@@ -22,6 +23,7 @@
 	export let onLaunch = () => {};
 	export let onCancel = () => {};
 	export let onDelete = () => {};
+	export let onBrowserView = () => {};
 	export let launchDisabled = false;
 
 	$: state = $store;
@@ -32,6 +34,7 @@
 	$: selectedId = state.selectedEntryByLaunchpad[launchpadId];
 	$: entryIndex = entries.findIndex((entry) => entry.ID === selectedId);
 	$: details = selectedId ? state.detailsById[selectedId] : null;
+	$: browserViewOff = browserViewRefusal(entries[entryIndex]);
 	$: dirty = isDraftDirty(state, launchpadId);
 	$: pending = !!pendingLaunchOf(state, launchpadId);
 	$: endText = selectedId ? launchEndText(launchOf(state, selectedId)) : null;
@@ -235,6 +238,16 @@
 							· {details.Response.Length} B
 						{/if}
 					</span>
+					{#if selectedId}
+						<button
+							class="lp-browser-view flex items-center gap-1 opacity-60 hover:opacity-100 disabled:opacity-30"
+							title={browserViewOff ?? "Copy the URL that shows this response in a browser that uses Marasi's proxy"}
+							disabled={!!browserViewOff}
+							on:click={onBrowserView}
+						>
+							<Globe size={12} /> Browser view
+						</button>
+					{/if}
 				</div>
 				<div class="lp-response lp-scroll min-h-0 flex-1 overflow-auto dark:bg-[#282c34]">
 					{#if endText}

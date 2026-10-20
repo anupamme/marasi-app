@@ -1,16 +1,19 @@
 // The Launchpad tree's context menu for an Entry selection, as data in the
 // shape of the Ledger's row menu (ledger/rowMenu.js), so RowMenu.svelte
 // renders it and menuAction runs its shortcuts. Every item is a Move, to the
-// end of another launchpad or to a new place in this one, or a removal.
+// end of another launchpad or to a new place in this one, a removal, or
+// copying one entry's browser view URL.
 // Plain functions, so they load under node.
 //
 // Actions:
 //   { type: "move", targetId, name }   to the end of another launchpad
 //   { type: "reorder", before }        within the launchpad; before null is the end
 //   { type: "remove" }                 unlink from the launchpad
+//   { type: "browser-view", id }       copy the entry's browser view URL
 import { unlessLaunching } from "../launchPending.js";
 import { UNTITLED_LAUNCHPAD } from "./format.js";
 import { moveRefusal } from "./entryMove.js";
+import { browserViewRefusal } from "../browserView.js";
 
 const entriesLabel = (n) => (n === 1 ? "" : ` ${n.toLocaleString()}`);
 
@@ -88,6 +91,8 @@ export function entryMenuFor({
   const moveOff = !targets.length ? "No other launchpads" : launching ? targets[0].hint : null;
   const reorderOff = grouped ? "Grouped by status" : searching ? "Searching" : null;
   const before = reorderBefore(order, new Set(picked));
+  const one = n === 1 ? entries.find((entry) => entry.ID === picked[0]) : null;
+  const viewOff = one ? browserViewRefusal(one) : "One entry at a time";
   return [
     {
       id: "move",
@@ -105,6 +110,14 @@ export function entryMenuFor({
       ...(reorderOff || before[key] === undefined ? { disabled: true, hint: reorderOff ?? already } : {}),
       action: { type: "reorder", before: before[key] ?? null },
     })),
+    "sep",
+    {
+      id: "browser-view",
+      label: "Copy browser view URL",
+      icon: "globe",
+      ...(viewOff ? { disabled: true, hint: viewOff } : {}),
+      action: { type: "browser-view", id: picked[0] },
+    },
     "sep",
     {
       id: "remove",

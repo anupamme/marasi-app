@@ -336,7 +336,7 @@ func (a *App) OpenProject(name string) (string, error) {
 	// The project lifecycle interrupts pending launches before it switches
 	// (Marasi ADR-0031), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
-		return "", err
+		return "", openProjectError(err)
 	}
 	// The drafts belonged to the old project and are gone with it.
 	a.unsavedDrafts.Store(0)
@@ -345,10 +345,24 @@ func (a *App) OpenProject(name string) (string, error) {
 	projectName := strings.TrimSuffix(base, filepath.Ext(base))
 	return projectName, nil
 }
+
+// A project another Marasi (an app or a service instance) owns reads as
+// projectLocked: "opening project: project_locked: project already open: <path>".
+// A failed open leaves the open project as it was.
+const projectLocked = "project_locked"
+
+// openProjectError gives a refused open its code for the frontend.
+func openProjectError(err error) error {
+	if errors.Is(err, service.ErrProjectAlreadyOpen) {
+		return fmt.Errorf("opening project: %s: %w", projectLocked, err)
+	}
+	return err
+}
+
 func (a *App) SetupScratchpad() error {
 	scratchPad := path.Join(a.Proxy.ConfigDir, "scratchpad.marasi")
 	if err := a.projects.Open(context.Background(), scratchPad); err != nil {
-		return err
+		return openProjectError(err)
 	}
 	a.prepareOpenedProject()
 	return nil

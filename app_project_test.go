@@ -6,6 +6,7 @@ import (
 	"io"
 	"log/slog"
 	"path/filepath"
+	"strings"
 	"testing"
 	"time"
 
@@ -42,6 +43,40 @@ func TestOpenProjectSwitchesThroughLifecycle(t *testing.T) {
 	}
 	assertProjectOwned(t, projectPath(t, app, "other.marasi"))
 	assertProjectReleased(t, oldPath)
+}
+
+// A project another Marasi owns refuses with the project_locked code, and
+// the project the app had open stays open and owned by the app.
+func TestOpenProjectRefusesLockedProjectAndKeepsOpenProject(t *testing.T) {
+	app := newScratchpadApp(t)
+	holder := newDetachedProjectLifecycle(t)
+	if err := holder.Open(context.Background(), projectPath(t, app, "locked.marasi")); err != nil {
+		t.Fatalf("holding locked project: %v", err)
+	}
+
+	_, err := app.OpenProject("locked")
+	if err == nil || !strings.Contains(err.Error(), "project_locked") {
+		t.Fatalf("wanted a project_locked error, got %v", err)
+	}
+	assertProjectOwned(t, scratchpadPath(t, app))
+	if app.Proxy.TrafficRepo == nil {
+		t.Fatal("wanted the scratchpad's repositories still published")
+	}
+}
+
+// With the scratchpad owned by another Marasi, opening it refuses with the
+// project_locked code too.
+func TestSetupScratchpadRefusesLockedScratchpad(t *testing.T) {
+	app := newProjectApp(t)
+	holder := newDetachedProjectLifecycle(t)
+	if err := holder.Open(context.Background(), scratchpadPath(t, app)); err != nil {
+		t.Fatalf("holding scratchpad: %v", err)
+	}
+
+	err := app.SetupScratchpad()
+	if err == nil || !strings.Contains(err.Error(), "project_locked") {
+		t.Fatalf("wanted a project_locked error, got %v", err)
+	}
 }
 
 // A switch waits for a held Checkpoint item rather than refusing, and the

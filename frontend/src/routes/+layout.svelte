@@ -1,5 +1,6 @@
 <script>
 	import Logo from "../lib/components/Logo.svelte";
+	import OpeningScreen from "../lib/components/OpeningScreen.svelte";
 	import {
 		computePosition,
 		autoUpdate,
@@ -46,7 +47,11 @@
 		extensions,
 		extensions_ui,
 		appState,
-		projectOpenMessage,
+		opening,
+		startOpening,
+		feedOpeningLog,
+		finishOpening,
+		clearOpening,
 	} from "../stores.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
@@ -184,6 +189,7 @@
 	};
 	const StartupRoutine2 = new Promise((resolve) => {
 		readConfig().then(() => {
+			startOpening({ name: "scratchpad" });
 			SetupScratchpad()
 				.then(() => {
 					StartProxy(
@@ -209,6 +215,7 @@
 						});
 				})
 				.catch((repoError) => {
+					clearOpening();
 					console.log(repoError);
 				});
 		});
@@ -239,17 +246,17 @@
 		EventsOn("update-installed", onUpdateInstalled);
 		EventsOn("update-failed", onUpdateFailed);
 		refreshUpdateState();
-		EventsOn("log", (log) => {
-			const message = projectOpenMessage(log);
-			if (message) {
-				appState.update((s) => ({ ...s, message }));
-			}
-		});
+		// The open in progress takes its steps from the backend's log events.
+		EventsOn("log", feedOpeningLog);
 		autoModeWatcher();
 		StartupRoutine2.then(() => {
 			WindowSetTitle("scratchpad");
 			activeProject.set("scratchpad");
-			openProject();
+			// The opening screen stays up while the scratchpad loads, so it
+			// can say which part is loading.
+			const loaded = openProject().catch((err) =>
+				console.error("Loading the scratchpad failed:", err),
+			);
 			if ($marasiConfig.FirstRun) {
 				const modal = {
 					type: "component",
@@ -264,7 +271,10 @@
 				}
 			}
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
-			$appState.isReady = true;
+			loaded.then(() => {
+				finishOpening();
+				$appState.isReady = true;
+			});
 			// The rail navigates by click, so nothing preloads the Ledger's
 			// code on hover; load it now, so the first visit renders at once.
 			preloadCode("/ledger").catch((err) =>
@@ -892,6 +902,8 @@
 					/>
 				{/if}
 			</div>
+		{:else if $opening}
+			<OpeningScreen state={$opening} />
 		{:else}
 			<div
 				class="flex items-center w-full h-full justify-center"

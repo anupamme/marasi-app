@@ -9,7 +9,15 @@ import {
 	CopyCertToClipboard,
 } from "./wailsjs/go/main/App";
 import { WindowSetTitle } from "./wailsjs/runtime/runtime";
-import { activeProject, appState, listener, openProject } from "../stores.js";
+import {
+	activeProject,
+	appState,
+	clearOpening,
+	finishOpening,
+	listener,
+	openProject,
+	startOpening,
+} from "../stores.js";
 
 export function setupListener(r, toastStore) {
 	const active = get(listener).status;
@@ -42,18 +50,17 @@ export function setupListener(r, toastStore) {
 }
 
 export async function openProjectFile(r, toastStore) {
-	// Show the splash only if OpenProject is slow, as when it migrates an
-	// older project, so quick switches stay instant. Database log events
-	// replace this message while it runs (see projectOpenMessage).
-	const projectName = String(r)
-		.split(/[\\/]/)
-		.pop()
-		.replace(/\.marasi$/, "");
-	appState.update((s) => ({
-		...s,
-		message: "Opening " + projectName + "…",
-		details: "",
-	}));
+	// Show the opening screen only if OpenProject is slow, as when it
+	// upgrades an older project's database, so quick switches stay instant.
+	// The layout feeds it the open's log events (see lib/openProgress.js).
+	const parts = String(r).split(/[\\/]/);
+	const projectName = parts.pop().replace(/\.marasi$/, "");
+	startOpening({
+		name: projectName,
+		// A bare name (a new project) has no path until its database opens.
+		path: parts.length > 0 ? String(r) : null,
+		currentProject: get(activeProject),
+	});
 	const splashTimer = setTimeout(
 		() => appState.update((s) => ({ ...s, isReady: false })),
 		300,
@@ -67,12 +74,14 @@ export async function openProjectFile(r, toastStore) {
 		WindowSetTitle(name);
 		goto("/");
 		await openProject();
+		finishOpening();
 		appState.update((s) => ({ ...s, isReady: true }));
 		toastStore.trigger({
 			message: "Opened " + name + " project",
 			background: "variant-filled-success",
 		});
 	} catch (repoError) {
+		clearOpening();
 		appState.update((s) => ({ ...s, isReady: true }));
 		if (String(repoError).includes("project switch cancelled")) return;
 		toastStore.trigger({

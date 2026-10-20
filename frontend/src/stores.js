@@ -21,6 +21,7 @@ import { sitemapStore } from "./stores/sitemapStore";
 import { jobsStore } from "./stores/jobsStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
+import { openingFor, withLoadPart, withOpened, withOpenLog } from "./lib/openProgress.js";
 
 // Startup
 export const appState = writable({
@@ -97,23 +98,32 @@ export let listener = writable({
 });
 export let activeProject = writable("Marasi");
 /**
- * Turns a backend log event from opening a project into splash-screen text,
- * or returns null for events the splash ignores. Migrations log one record
- * per statement through goose, with the migration file as `source`.
+ * The open in progress, as lib/openProgress.js's state, or null. The
+ * opening screen in the root layout renders it while the app isn't ready.
  */
-export function projectOpenMessage(log) {
-  const data = log?.data;
-  if (data?.logger === "goose" && data.source) {
-    return `Upgrading project database (${data.source})…`;
-  }
-  if (data?.component !== "db") return null;
-  if (log.message === "Connecting to SQLite...") {
-    return "Opening project database…";
-  }
-  if (log.message === "Migrations completed") {
-    return "Project database upgraded";
-  }
-  return log.message;
+export const opening = writable(null);
+/**
+ * Starts the opening screen's state for opening `name` at `path` (null when
+ * only a bare name is known), with `currentProject` the project open now.
+ */
+export function startOpening({ name, path = null, currentProject = null }) {
+  opening.set(openingFor({ name, path, currentProject }));
+}
+/** Feeds a backend log event to the open in progress, if any. */
+export function feedOpeningLog(log) {
+  opening.update((state) => state && withOpenLog(state, log));
+}
+/** Records that the open in progress succeeded. */
+export function finishOpening() {
+  opening.update((state) => state && withOpened(state));
+}
+/** Drops the open in progress, as after a failed or cancelled open. */
+export function clearOpening() {
+  opening.set(null);
+}
+// Signals that the load sequence starts loading `signal`.
+function loadPart(signal) {
+  opening.update((state) => state && withLoadPart(state, signal));
 }
 
 export async function openProject() {
@@ -122,6 +132,8 @@ export async function openProject() {
     message: "Loading " + get(activeProject) + "…",
     details: "",
   });
+  // Each loadPart signal tells the opening screen which part loads next.
+  loadPart("traffic");
   logbookSearchInput.set("");
   reportMetadata.set({
     title: get(activeProject) + " Report",
@@ -161,6 +173,7 @@ export async function openProject() {
   // first: it is the page researchers open, and its rows don't wait on the
   // project's extensions.
   ledgerStore.populate();
+  loadPart("extensions");
   try {
     await LoadExtensions();
   } catch (err) {
@@ -174,16 +187,27 @@ export async function openProject() {
   // The project's highlight labels, then its old hex highlights migrated in
   // the background; the Ledger reloads once they are numbers.
   highlightsStore.openProject({ onMigrated: () => ledgerStore.reload() });
+  loadPart("logs");
   await populateLogs();
+  loadPart("scope");
   await populateScope();
+  loadPart("checkpoint");
   await populateCheckpoint();
+  loadPart("workshop");
   await populateWorkshop();
+  loadPart("waypoints");
   await populateWaypoints();
+  loadPart("extension-list");
   await populateExtensions();
+  loadPart("test-cases");
   await testCaseStore.populate();
+  loadPart("findings");
   await findingStore.populate();
+  loadPart("intercept");
   await connectionStore.populateInterceptFlag();
+  loadPart("armory");
   await armoryStore.populate();
+  loadPart("launchpads");
   await launchpadStore.populate();
 }
 

@@ -1,6 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { openingFor, openingScreen, withLoadPart, withOpened, withOpenLog } from "./openProgress.js";
+import {
+  openingFor,
+  openingScreen,
+  withFailed,
+  withLoadPart,
+  withOpened,
+  withOpenLog,
+  withRecents,
+  withSwitched,
+} from "./openProgress.js";
 
 // The opening screen's steps as "label:mark" pairs, for compact assertions.
 const marks = (state) => openingScreen(state).steps.map((step) => `${step.label}:${step.mark}`);
@@ -144,4 +153,97 @@ test("an up-to-date database ticks Open and Upgrade even without a goose event f
   const state = replay(acme(), [db("Connecting to SQLite..."), db("Migrations up to date", { count: 0 })]);
 
   assert.deepEqual(marks(state), ["Lock:done", "Open:done", "Upgrade:done", "Loading:current"]);
+});
+
+// Errors as the app's Go side returns them through Wails.
+const lockedError = "opening project: project_locked: project already open: /Users/r/acme-portal.marasi";
+
+test("a locked project fails the Lock step as Locked, says it's open in another Marasi, and offers Stay in and Try again", () => {
+  const state = withFailed(acme(), lockedError);
+  const screen = openingScreen(state);
+
+  assert.deepEqual(marks(state), ["Locked:failed", "Open:todo", "Upgrade:todo", "Load:todo"]);
+  assert.equal(screen.sentence, "Open in another Marasi.");
+  assert.deepEqual(screen.failure, { kind: "locked", error: lockedError });
+  assert.deepEqual(screen.actions, { stayIn: "scratchpad", tryAgain: true });
+});
+
+test("another failure fails the step that was running, offers Stay in but no Try again, and puts the raw error in the log", () => {
+  const error = "file is not a database (26)";
+  const state = withFailed(replay(acme(), [db("Connecting to SQLite...")]), error);
+  const screen = openingScreen(state);
+
+  assert.deepEqual(marks(state), ["Lock:done", "Open:failed", "Upgrade:todo", "Load:todo"]);
+  assert.equal(screen.sentence, "Couldn't open the project.");
+  assert.deepEqual(screen.failure, { kind: "other", error });
+  assert.deepEqual(screen.actions, { stayIn: "scratchpad", tryAgain: false });
+  assert.equal(screen.log.at(-1), error);
+  assert.equal(screen.load.part, null);
+});
+
+test("a failed upgrade fails Upgrade, and stops showing upgrade progress", () => {
+  const upgrading = replay(acme(), [db("Connecting to SQLite..."), goose("executing statement", { source: "00022_pair_number.sql" })]);
+  const state = withFailed(upgrading, "opening project database: migrating: disk full");
+
+  assert.deepEqual(marks(state), ["Lock:done", "Open:done", "Upgrade:failed", "Load:todo"]);
+  assert.equal(openingScreen(state).upgrade, null);
+});
+
+// Recent projects as GetRecentProjects returns them: every project in the
+// config dir, with Go's time.Time.String() as the date.
+const cfg = "/Users/r/Library/Application Support/Marasi";
+const recentProjects = [
+  { ProjectName: `${cfg}/build.marasi`, Date: "2026-10-18 09:12:01.5 +0400 +04" },
+  { ProjectName: `${cfg}/scratchpad.marasi`, Date: "2026-10-20 08:40:21.123456789 +0400 +04" },
+  { ProjectName: `${cfg}/ai-sec.marasi`, Date: "2026-10-19 17:03:44.25 +0400 +04" },
+  { ProjectName: `${cfg}/acme-portal.marasi`, Date: "2026-10-20 07:00:00 +0400 +04" },
+  { ProjectName: `${cfg}/car.marasi`, Date: "2026-10-01 10:00:00.1 +0000 UTC" },
+];
+const names = (state) => openingScreen(state).choices.map((choice) => choice.name);
+
+test("the recent projects to pick from leave out the target and the open project, most recent first", () => {
+  const state = openingFor({
+    name: "acme-portal",
+    path: `${cfg}/acme-portal.marasi`,
+    currentProject: "scratchpad",
+    currentPath: `${cfg}/scratchpad.marasi`,
+  });
+  const failed = withRecents(withFailed(state, lockedError), recentProjects);
+
+  assert.deepEqual(names(failed), ["ai-sec", "build", "car"]);
+  assert.deepEqual(openingScreen(failed).choices[0], { name: "ai-sec", path: `${cfg}/ai-sec.marasi` });
+});
+
+test("a target or open project with no known path is left out of the list by name", () => {
+  const state = openingFor({ name: "acme-portal", path: null, currentProject: "scratchpad", currentPath: null });
+
+  assert.deepEqual(names(withRecents(state, recentProjects)), ["ai-sec", "build", "car"]);
+});
+
+test("a project that shares the open project's name elsewhere stays in the list", () => {
+  const state = openingFor({
+    name: "acme-portal",
+    path: `${cfg}/acme-portal.marasi`,
+    currentProject: "build",
+    currentPath: "/Users/r/Engagements/build.marasi",
+  });
+
+  assert.deepEqual(names(withRecents(state, recentProjects)), ["scratchpad", "ai-sec", "build", "car"]);
+});
+
+test("there's nothing to pick from until the recent projects arrive", () => {
+  assert.deepEqual(openingScreen(withFailed(acme(), lockedError)).choices, []);
+});
+
+test("once the target's database is open the previous project is gone, so a failed load offers Stay in the target", () => {
+  const loading = withSwitched(replay(acme(), upToDate));
+  const state = withFailed(withLoadPart(loading, "extensions"), "loading extensions: boom");
+
+  assert.deepEqual(marks(state), ["Lock:done", "Open:done", "Upgrade:done", "Load:failed"]);
+  assert.deepEqual(openingScreen(state).actions, { stayIn: "acme-portal", tryAgain: false });
+});
+
+test("an open in progress has no failure and offers no actions", () => {
+  assert.equal(openingScreen(acme()).failure, null);
+  assert.equal(openingScreen(acme()).actions, null);
 });

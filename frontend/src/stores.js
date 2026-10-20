@@ -9,6 +9,7 @@ import {
   GetExtensions,
   LoadExtensions,
   GetUserName,
+  GetRecentProjects,
 } from "./lib/wailsjs/go/main/App";
 import { testCaseStore } from "./stores/testCaseStore";
 import { findingStore } from "./stores/findingStore";
@@ -21,10 +22,21 @@ import { sitemapStore } from "./stores/sitemapStore";
 import { jobsStore } from "./stores/jobsStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
-import { openingFor, withLoadPart, withOpened, withOpenLog } from "./lib/openProgress.js";
+import {
+  openingFor,
+  withFailed,
+  withLoadPart,
+  withOpened,
+  withOpenLog,
+  withRecents,
+  withSwitched,
+} from "./lib/openProgress.js";
 
-// Startup
+// Startup. `started` turns true once the first project has loaded, and the
+// app's pages stay mounted from then on; `isReady` is false while a project
+// opens or loads.
 export const appState = writable({
+  started: false,
   isReady: false,
   message: "Starting...",
   details: "",
@@ -98,28 +110,66 @@ export let listener = writable({
 });
 export let activeProject = writable("Marasi");
 /**
- * The open in progress, as lib/openProgress.js's state, or null. The
- * opening screen in the root layout renders it while the app isn't ready.
+ * The open in progress, as lib/openProgress.js's state, or null. The root
+ * layout shows it as the opening screen over the app while `openingShown`.
  */
 export const opening = writable(null);
+/** Whether the opening screen is up: slow opens, failures and startup. */
+export const openingShown = writable(false);
+/** The open project's path, once known, so failures can leave it out. */
+const openProjectPath = writable(null);
+/**
+ * Bumped after each project loads, so the app's pages mount afresh on the
+ * new project's stores.
+ */
+export const pagesKey = writable(0);
 /**
  * Starts the opening screen's state for opening `name` at `path` (null when
  * only a bare name is known), with `currentProject` the project open now.
+ * An opening screen that's up stays up for the new open.
  */
 export function startOpening({ name, path = null, currentProject = null }) {
-  opening.set(openingFor({ name, path, currentProject }));
+  opening.set(openingFor({ name, path, currentProject, currentPath: currentProject && get(openProjectPath) }));
+}
+/** Shows the opening screen for the open in progress. */
+export function showOpening() {
+  openingShown.set(true);
 }
 /** Feeds a backend log event to the open in progress, if any. */
 export function feedOpeningLog(log) {
   opening.update((state) => state && withOpenLog(state, log));
 }
-/** Records that the open in progress succeeded. */
-export function finishOpening() {
-  opening.update((state) => state && withOpened(state));
+/** Records that the target is open and the previous project released. */
+export function switchOpening() {
+  opening.update((state) => state && withSwitched(state));
+  openProjectPath.set(get(opening)?.path ?? null);
 }
-/** Drops the open in progress, as after a failed or cancelled open. */
+/** Records that the open in progress succeeded, and closes the screen. */
+export function finishOpening() {
+  const state = get(opening);
+  // At startup nothing switched; the scratchpad's path came from its log.
+  if (state) openProjectPath.set(withOpened(state).path);
+  clearOpening();
+}
+/**
+ * Records that the open in progress failed with `error`, and shows the
+ * opening screen with the recent projects to open instead, however fast
+ * the open failed.
+ */
+export function failOpening(error) {
+  const current = get(opening);
+  if (!current) return;
+  const failed = withFailed(current, error);
+  opening.set(failed);
+  showOpening();
+  GetRecentProjects()
+    .then((recents) => opening.update((state) => (state === failed ? withRecents(state, recents) : state)))
+    .catch((err) => console.error("Listing recent projects failed:", err));
+}
+/** Closes the opening screen, as after a cancelled open or Stay in. */
 export function clearOpening() {
   opening.set(null);
+  openingShown.set(false);
 }
 // Signals that the load sequence starts loading `signal`.
 function loadPart(signal) {
@@ -127,11 +177,6 @@ function loadPart(signal) {
 }
 
 export async function openProject() {
-  appState.set({
-    isReady: false,
-    message: "Loading " + get(activeProject) + "…",
-    details: "",
-  });
   // Each loadPart signal tells the opening screen which part loads next.
   loadPart("traffic");
   logbookSearchInput.set("");

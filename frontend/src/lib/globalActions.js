@@ -13,10 +13,14 @@ import {
 	activeProject,
 	appState,
 	clearOpening,
+	failOpening,
 	finishOpening,
 	listener,
 	openProject,
+	pagesKey,
+	showOpening,
 	startOpening,
+	switchOpening,
 } from "../stores.js";
 
 export function setupListener(r, toastStore) {
@@ -49,10 +53,22 @@ export function setupListener(r, toastStore) {
 		});
 }
 
+// The opening screen waits this long before it shows an open in progress,
+// so quick switches stay instant.
+const openingDelay = 300;
+// The last open asked for, which the opening screen's Try again re-runs.
+let lastOpen = null;
+
+/**
+ * Opens the project `r` (a full path, or a bare name for a project in the
+ * config dir) and loads it. The opening screen shows the whole open, Go's
+ * open and the load, if it takes longer than openingDelay, and always when
+ * it fails. The open project and the app's pages stay as they were unless
+ * the target's database opens. The layout feeds the screen the open's log
+ * events (see lib/openProgress.js).
+ */
 export async function openProjectFile(r, toastStore) {
-	// Show the opening screen only if OpenProject is slow, as when it
-	// upgrades an older project's database, so quick switches stay instant.
-	// The layout feeds it the open's log events (see lib/openProgress.js).
+	lastOpen = { r, toastStore };
 	const parts = String(r).split(/[\\/]/);
 	const projectName = parts.pop().replace(/\.marasi$/, "");
 	startOpening({
@@ -61,34 +77,48 @@ export async function openProjectFile(r, toastStore) {
 		path: parts.length > 0 ? String(r) : null,
 		currentProject: get(activeProject),
 	});
-	const splashTimer = setTimeout(
-		() => appState.update((s) => ({ ...s, isReady: false })),
-		300,
-	);
+	appState.update((s) => ({ ...s, isReady: false }));
+	const showTimer = setTimeout(showOpening, openingDelay);
+	let name;
 	try {
-		const name = await OpenProject(r).finally(() =>
-			clearTimeout(splashTimer),
-		);
-		appState.update((s) => ({ ...s, isReady: false }));
-		activeProject.set(name);
-		WindowSetTitle(name);
-		goto("/");
-		await openProject();
-		finishOpening();
-		appState.update((s) => ({ ...s, isReady: true }));
-		toastStore.trigger({
-			message: "Opened " + name + " project",
-			background: "variant-filled-success",
-		});
+		name = await OpenProject(r);
 	} catch (repoError) {
-		clearOpening();
+		clearTimeout(showTimer);
 		appState.update((s) => ({ ...s, isReady: true }));
-		if (String(repoError).includes("project switch cancelled")) return;
-		toastStore.trigger({
-			message: "Failed to open project",
-			background: "variant-filled-error",
-		});
+		// Cancelled at the unsaved-work prompt: nothing to show.
+		if (String(repoError).includes("project switch cancelled")) {
+			clearOpening();
+			return;
+		}
+		failOpening(repoError);
+		return;
 	}
+	switchOpening();
+	activeProject.set(name);
+	WindowSetTitle(name);
+	goto("/");
+	try {
+		await openProject();
+	} catch (loadError) {
+		clearTimeout(showTimer);
+		failOpening(loadError);
+		return;
+	} finally {
+		// The pages mount afresh on the new project's stores.
+		pagesKey.update((key) => key + 1);
+		appState.update((s) => ({ ...s, isReady: true }));
+	}
+	clearTimeout(showTimer);
+	finishOpening();
+	toastStore.trigger({
+		message: "Opened " + name + " project",
+		background: "variant-filled-success",
+	});
+}
+
+/** Re-runs the last open, for the opening screen's Try again. */
+export function retryOpen() {
+	if (lastOpen) openProjectFile(lastOpen.r, lastOpen.toastStore);
 }
 
 export function projectModal(toastStore) {

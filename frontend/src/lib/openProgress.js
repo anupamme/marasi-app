@@ -6,9 +6,12 @@
 // The state is a plain object; each `with…` function returns a new one, and
 // `openingScreen` turns it into what the screen renders.
 
-// The open's steps in order. `running` is the label while the step runs.
+import { codeIDs } from "./errorCodes.js";
+
+// The open's steps in order. `running` is the label while the step runs,
+// `failed` the label once it failed, when it differs from `label`.
 const openSteps = [
-  { id: "lock", label: "Lock", running: "Locking", sentence: "Checking the project lock." },
+  { id: "lock", label: "Lock", running: "Locking", failed: "Locked", sentence: "Checking the project lock." },
   { id: "open", label: "Open", running: "Opening", sentence: "Opening the database." },
   { id: "upgrade", label: "Upgrade", running: "Upgrading", sentence: "Upgrading the database. Keep Marasi open." },
   { id: "load", label: "Load", running: "Loading" },
@@ -31,10 +34,22 @@ const partOfSignal = new Map(loadParts.flatMap(({ signals }, i) => signals.map((
 /**
  * Starts the state for opening the project `name` at `path` (null while the
  * full path is unknown). `currentProject` names the project open now, or is
- * null at startup.
+ * null at startup; `currentPath` is its path, when known.
  */
-export function openingFor({ name, path = null, currentProject = null }) {
-  return { name, path, currentProject, step: 0, upgradeFile: null, upgradesApplied: 0, part: 0, log: [] };
+export function openingFor({ name, path = null, currentProject = null, currentPath = null }) {
+  return {
+    name,
+    path,
+    currentProject,
+    currentPath,
+    recents: [],
+    step: 0,
+    upgradeFile: null,
+    upgradesApplied: 0,
+    part: 0,
+    log: [],
+    failure: null,
+  };
 }
 
 /**
@@ -46,7 +61,7 @@ export function withOpenLog(state, log) {
   const data = log?.data;
   // Marasi's own proxy logs (capitalised fields) and other components'
   // records aren't part of the open.
-  if (typeof log?.level !== "string" || state.step === opened) return state;
+  if (typeof log?.level !== "string" || state.step === opened || state.failure) return state;
   const isGoose = data?.logger === "goose";
   if (!isGoose && data?.component !== "db") return state;
 
@@ -91,30 +106,103 @@ export function withLoadPart(state, signal) {
   return { ...state, part };
 }
 
+/**
+ * Records that the app's Go side opened the target and released the
+ * project open before: from here the open project is the target, even if
+ * loading it fails.
+ */
+export function withSwitched(state) {
+  return {
+    ...state,
+    step: Math.max(state.step, stepIndex.load),
+    currentProject: state.name,
+    currentPath: state.path,
+  };
+}
+
 /** Records that the open succeeded: the project is open and loaded. */
 export function withOpened(state) {
   return { ...state, step: opened };
 }
 
+/**
+ * Records that the open failed with `error`, as the app's Go side returned
+ * it. A locked project (the `project_locked` code: another Marasi owns it)
+ * fails the Lock step; any other error fails the step that was running.
+ */
+export function withFailed(state, error) {
+  const text = String(error ?? "");
+  const locked = codeIDs(text, "project_locked") !== null;
+  return {
+    ...state,
+    step: locked ? stepIndex.lock : Math.min(state.step, stepIndex.load),
+    failure: { kind: locked ? "locked" : "other", error: text },
+    // Details ends with the error, as returned.
+    log: [...state.log, text],
+  };
+}
+
+/**
+ * Feeds the recent projects, as GetRecentProjects returns them
+ * (`{ProjectName: <path>, Date: <Go time>}`), to pick from after a failure.
+ */
+export function withRecents(state, recents) {
+  const projects = (recents ?? []).map(({ ProjectName, Date: date }) => ({
+    name: projectName(ProjectName),
+    path: ProjectName,
+    at: goTime(date),
+  }));
+  // Most recent first; a date that doesn't parse goes last.
+  projects.sort((a, b) => (Number.isNaN(b.at) ? -Infinity : b.at) - (Number.isNaN(a.at) ? -Infinity : a.at));
+  return { ...state, recents: projects.map(({ name, path }) => ({ name, path })) };
+}
+
+// A project file's name without its directory or ".marasi".
+const projectName = (path) =>
+  String(path)
+    .split(/[\\/]/)
+    .pop()
+    .replace(/\.marasi$/, "");
+
+// Go's time.Time.String(), "2006-01-02 15:04:05.999999999 -0700 MST", as
+// epoch ms; WebKit's Date doesn't parse it as is. NaN when it doesn't match.
+function goTime(text) {
+  const match = /^(\d{4}-\d\d-\d\d) (\d\d:\d\d:\d\d)(?:\.(\d+))? ([+-]\d\d)(\d\d)/.exec(String(text ?? ""));
+  if (!match) return NaN;
+  const [, day, time, fraction = "0", hours, minutes] = match;
+  return Date.parse(`${day}T${time}.${fraction.padEnd(3, "0").slice(0, 3)}${hours}:${minutes}`);
+}
+
+// Whether a recent project is `name` at `path`: by path when both are
+// known, else by name (projects opened by bare name live in the config dir,
+// as every recent project does).
+const isProject = (recent, name, path) =>
+  recent.path && path ? recent.path === path : recent.name === name;
+
 /** Everything the opening screen renders. */
 export function openingScreen(state) {
-  const steps = openSteps.map(({ id, label, running }, i) => {
+  const { failure } = state;
+  const steps = openSteps.map(({ id, label, running, failed }, i) => {
     let mark = "todo";
-    if (i === state.step) mark = "current";
+    if (i === state.step) mark = failure ? "failed" : "current";
     else if (i < state.step) mark = "done";
-    return { id, label: mark === "current" ? running : label, mark };
+    if (mark === "current") return { id, label: running, mark };
+    if (mark === "failed") return { id, label: failed ?? label, mark };
+    return { id, label, mark };
   });
-  const loading = state.step === stepIndex.load;
+  const loading = !failure && state.step === stepIndex.load;
   const part = loading ? loadParts[state.part].label : null;
   let sentence = "Opened.";
-  if (loading) sentence = `Loading ${part.toLowerCase()}.`;
+  if (failure?.kind === "locked") sentence = "Open in another Marasi.";
+  else if (failure) sentence = "Couldn't open the project.";
+  else if (loading) sentence = `Loading ${part.toLowerCase()}.`;
   else if (state.step < opened) sentence = openSteps[state.step].sentence;
   return {
     project: { name: state.name, path: state.path },
     steps,
     sentence,
     upgrade:
-      state.step === stepIndex.upgrade && state.upgradeFile
+      !failure && state.step === stepIndex.upgrade && state.upgradeFile
         ? { file: state.upgradeFile, applied: state.upgradesApplied }
         : null,
     load: {
@@ -122,6 +210,18 @@ export function openingScreen(state) {
       done: state.step === opened ? loadParts.length : loading ? state.part : 0,
       total: loadParts.length,
     },
+    failure,
+    // Stay in names the project still open, if any; only a locked project
+    // may open on a retry, once the other Marasi lets it go.
+    actions: failure ? { stayIn: state.currentProject, tryAgain: failure.kind === "locked" } : null,
+    // The projects to open instead, most recent first: the first is the
+    // one picked by default. The target and the open project aren't
+    // choices.
+    choices: state.recents.filter(
+      (recent) =>
+        !isProject(recent, state.name, state.path) &&
+        !(state.currentProject !== null && isProject(recent, state.currentProject, state.currentPath)),
+    ),
     log: state.log,
   };
 }

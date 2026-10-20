@@ -48,11 +48,15 @@
 		extensions_ui,
 		appState,
 		opening,
+		openingShown,
+		pagesKey,
 		startOpening,
+		showOpening,
 		feedOpeningLog,
 		finishOpening,
 		clearOpening,
 	} from "../stores.js";
+	import { openProjectFile, retryOpen } from "../lib/globalActions.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
@@ -69,6 +73,7 @@
 	import SelectFindingModal from "../lib/components/SelectFindingModal.svelte";
 	import SelectWordlistModal from "../lib/components/SelectWordlistModal.svelte";
 	import {
+		OpenFileDialog,
 		SetupScratchpad,
 		StartProxy,
 	} from "../lib/wailsjs/go/main/App";
@@ -190,6 +195,8 @@
 	const StartupRoutine2 = new Promise((resolve) => {
 		readConfig().then(() => {
 			startOpening({ name: "scratchpad" });
+			// Nothing is open yet, so the opening screen shows at once.
+			showOpening();
 			SetupScratchpad()
 				.then(() => {
 					StartProxy(
@@ -272,8 +279,9 @@
 			}
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
 			loaded.then(() => {
-				finishOpening();
+				$appState.started = true;
 				$appState.isReady = true;
+				finishOpening();
 			});
 			// The rail navigates by click, so nothing preloads the Ledger's
 			// code on hover; load it now, so the first visit renders at once.
@@ -489,7 +497,7 @@
 	use:isolateOverlays={{ modalStore, drawerStore, toastStore, isModalToggle }}
 >
 	<div class="flex flex-1 h-screen">
-		{#if $appState.isReady}
+		{#if $appState.started}
 			<GlobalMenu />
 			<AppRail
 				class="no-select h-full nav-rail"
@@ -882,7 +890,9 @@
 
 			<!-- Content area -->
 			<div id="content" class="flex-1 overflow-auto">
-				<slot />
+				{#key $pagesKey}
+					<slot />
+				{/key}
 				{#if SvelteChef && showChef}
 					<svelte:component
 						this={SvelteChef}
@@ -902,9 +912,7 @@
 					/>
 				{/if}
 			</div>
-		{:else if $opening}
-			<OpeningScreen state={$opening} />
-		{:else}
+		{:else if !$opening}
 			<div
 				class="flex items-center w-full h-full justify-center"
 			>
@@ -921,8 +929,28 @@
 		{/if}
 	</div>
 </div>
-{#if $appState.isReady}
+{#if $appState.started}
 	<AppDrawer />
+{/if}
+<!-- The opening screen covers the app rather than replacing it, so the open
+     project's pages stay mounted, exactly as they were, if the open fails. -->
+{#if $opening && $openingShown}
+	<div class="fixed inset-0 z-[998] overflow-auto bg-surface-50-900-token">
+		<OpeningScreen
+			state={$opening}
+			on:stay={clearOpening}
+			on:retry={retryOpen}
+			on:open={(event) => openProjectFile(event.detail, toastStore)}
+			on:browse={() =>
+				OpenFileDialog()
+					.then((path) => {
+						if (path) openProjectFile(path, toastStore);
+					})
+					.catch((err) =>
+						console.error("Opening the file dialog failed:", err),
+					)}
+		/>
+	</div>
 {/if}
 <!-- Bottom-right toasts would cover the Keybindings modal's Save button;
      while it is open they show at the top, over its title. -->

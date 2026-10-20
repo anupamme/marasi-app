@@ -77,7 +77,7 @@ Taking launchpad entries out of one launchpad and putting them into another at a
 _Avoid_: copy, transfer, relink
 
 **Launchpad draft**:
-The working request of a launchpad, held only in memory, seeded from one launchpad entry and sent by Launch. It is dirty when it differs from the request of the entry it was seeded from, and it is lost when the project closes. When that entry moves to another launchpad, the draft moves with it.
+The working request of a launchpad, held only in memory, seeded from one launchpad entry and sent by Launch. It is dirty when it differs from the request of the entry it was seeded from, and it is lost when the project closes. When that entry moves to another launchpad, the draft moves with it. Marasi asks for confirmation only before something discards a dirty draft, such as seeding over it, removing its entry, deleting its launchpad, or switching the project or quitting. A clean draft is replaced without asking, and Cancel changes nothing. Switching the project or quitting asks once for all dirty drafts.
 _Avoid_: edit, buffer, saved request
 
 ### Marasi menu keybindings

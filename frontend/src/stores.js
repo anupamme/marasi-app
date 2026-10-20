@@ -9,6 +9,7 @@ import {
   GetExtensions,
   LoadExtensions,
   GetUserName,
+  GetRecentProjects,
 } from "./lib/wailsjs/go/main/App";
 import { testCaseStore } from "./stores/testCaseStore";
 import { findingStore } from "./stores/findingStore";
@@ -21,9 +22,23 @@ import { sitemapStore } from "./stores/sitemapStore";
 import { jobsStore } from "./stores/jobsStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
+import {
+  loadSignals,
+  openingFor,
+  openingScreen,
+  withFailed,
+  withLoadPart,
+  withOpened,
+  withOpenLog,
+  withRecents,
+  withSwitched,
+} from "./lib/openProgress.js";
 
-// Startup
+// Startup. `started` turns true once the first project has loaded, and the
+// app's pages stay mounted from then on; `isReady` is false while a project
+// opens or loads.
 export const appState = writable({
+  started: false,
   isReady: false,
   message: "Starting...",
   details: "",
@@ -97,31 +112,103 @@ export let listener = writable({
 });
 export let activeProject = writable("Marasi");
 /**
- * Turns a backend log event from opening a project into splash-screen text,
- * or returns null for events the splash ignores. Migrations log one record
- * per statement through goose, with the migration file as `source`.
+ * The open in progress, as lib/openProgress.js's state, or null. The root
+ * layout shows it as the opening screen over the app while `openingShown`.
  */
-export function projectOpenMessage(log) {
-  const data = log?.data;
-  if (data?.logger === "goose" && data.source) {
-    return `Upgrading project database (${data.source})…`;
-  }
-  if (data?.component !== "db") return null;
-  if (log.message === "Connecting to SQLite...") {
-    return "Opening project database…";
-  }
-  if (log.message === "Migrations completed") {
-    return "Project database upgraded";
-  }
-  return log.message;
+export const opening = writable(null);
+/** Whether the opening screen is up: slow opens, failures and startup. */
+export const openingShown = writable(false);
+/**
+ * The project the app's Go side has open, `{name, path}` (path null when
+ * unknown), so a failed open can offer to stay in it and leave it out of
+ * the list.
+ */
+const currentProject = writable(null);
+/**
+ * Bumped after each project loads, so the app's pages mount afresh on the
+ * new project's stores.
+ */
+export const pagesKey = writable(0);
+/**
+ * The project last opened and loaded, `{name, path}`, or null until the
+ * first one has: startup carries on once it's set.
+ */
+export const loadedProject = writable(null);
+/**
+ * Starts the opening screen's state for opening `name` at `path` (null when
+ * only a bare name is known), and returns it. `scratchpad` marks the
+ * scratchpad. Before the first project has loaded (startup), nothing is
+ * open to stay in. An opening screen that's up stays up for the new open.
+ */
+export function startOpening({ name, path = null, scratchpad = false }) {
+  const current = get(appState).started ? get(currentProject) : null;
+  const state = openingFor({ name, path, current, scratchpad });
+  opening.set(state);
+  return state;
+}
+/** Shows the opening screen for the open in progress. */
+export function showOpening() {
+  openingShown.set(true);
+}
+/** Feeds a backend log event to the open in progress, if any. */
+export function feedOpeningLog(log) {
+  opening.update((state) => state && withOpenLog(state, log));
+}
+/** Records that the target is open and the previous project released. */
+export function switchOpening() {
+  opening.update((state) => state && withSwitched(state));
+  currentProject.set(get(opening)?.current ?? null);
+}
+/**
+ * Records that the open in progress succeeded, and closes the screen.
+ * Returns the project that opened, `{name, path}`.
+ */
+export function finishOpening() {
+  const state = get(opening);
+  const opened = state && openingScreen(withOpened(state)).opened;
+  clearOpening();
+  if (!opened) return null;
+  currentProject.set(opened);
+  loadedProject.set(opened);
+  return opened;
+}
+/**
+ * Stays in the project still open after a failed open, and closes the
+ * screen. When the target opened but didn't load, that's the target.
+ */
+export function stayInCurrentProject() {
+  const state = get(opening);
+  clearOpening();
+  if (state?.current) loadedProject.set(state.current);
+}
+/**
+ * Records that the open in progress failed with `error`, and shows the
+ * opening screen with the recent projects to open instead, however fast
+ * the open failed.
+ */
+export function failOpening(error) {
+  const current = get(opening);
+  if (!current) return;
+  const failed = withFailed(current, error);
+  opening.set(failed);
+  showOpening();
+  GetRecentProjects()
+    .then((recents) => opening.update((state) => (state === failed ? withRecents(state, recents) : state)))
+    .catch((err) => console.error("Listing recent projects failed:", err));
+}
+/** Closes the opening screen, as after a cancelled open or Stay in. */
+export function clearOpening() {
+  opening.set(null);
+  openingShown.set(false);
+}
+// Signals that the load sequence starts loading `signal`.
+function loadPart(signal) {
+  opening.update((state) => state && withLoadPart(state, signal));
 }
 
 export async function openProject() {
-  appState.set({
-    isReady: false,
-    message: "Loading " + get(activeProject) + "…",
-    details: "",
-  });
+  // Each loadPart signal tells the opening screen which part loads next.
+  loadPart(loadSignals.traffic);
   logbookSearchInput.set("");
   reportMetadata.set({
     title: get(activeProject) + " Report",
@@ -161,6 +248,7 @@ export async function openProject() {
   // first: it is the page researchers open, and its rows don't wait on the
   // project's extensions.
   ledgerStore.populate();
+  loadPart(loadSignals.extensions);
   try {
     await LoadExtensions();
   } catch (err) {
@@ -174,16 +262,27 @@ export async function openProject() {
   // The project's highlight labels, then its old hex highlights migrated in
   // the background; the Ledger reloads once they are numbers.
   highlightsStore.openProject({ onMigrated: () => ledgerStore.reload() });
+  loadPart(loadSignals.logs);
   await populateLogs();
+  loadPart(loadSignals.scope);
   await populateScope();
+  loadPart(loadSignals.checkpoint);
   await populateCheckpoint();
+  loadPart(loadSignals.workshop);
   await populateWorkshop();
+  loadPart(loadSignals.waypoints);
   await populateWaypoints();
+  loadPart(loadSignals.extensionList);
   await populateExtensions();
+  loadPart(loadSignals.testCases);
   await testCaseStore.populate();
+  loadPart(loadSignals.findings);
   await findingStore.populate();
+  loadPart(loadSignals.intercept);
   await connectionStore.populateInterceptFlag();
+  loadPart(loadSignals.armory);
   await armoryStore.populate();
+  loadPart(loadSignals.launchpads);
   await launchpadStore.populate();
 }
 

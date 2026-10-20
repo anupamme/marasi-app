@@ -111,3 +111,17 @@ _Avoid_: beta, preview, snapshot
 **Update**:
 A build on the app's channel that is newer than the running one and replaces it once the researcher installs it. It is never an older build; going back to an older release is a reinstall.
 _Avoid_: upgrade, patch; not to be confused with new matches
+
+### Projects
+
+**Scratchpad**:
+The project the app opens at startup, kept in the app's config directory. A researcher works in it until they open another project.
+_Avoid_: default project, temporary project
+
+**Locked project**:
+A project the app can't open because another Marasi, an app or a service instance, holds its project ownership as Marasi defines it. It stays locked until that Marasi closes it. Opening a locked project leaves the open project as it was; a locked scratchpad at startup leaves no project open.
+_Avoid_: project lock (Marasi's file lock behind ownership), in use, busy (Marasi's project busy is work blocking a switch)
+
+**Database upgrade**:
+The one-time step that brings an older project's database up to the running build, which Marasi runs as it opens the project. The app shows it as the Upgrade step while opening.
+_Avoid_: migration in what researchers see; not to be confused with an update

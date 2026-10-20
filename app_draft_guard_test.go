@@ -110,3 +110,33 @@ func TestSwitchProjectConfirmedOverUnsavedDraftsDiscardsThem(t *testing.T) {
 		t.Fatalf("wanted no dialog, got %d", len(dialog.asked))
 	}
 }
+
+// A switch cancelled at the unsaved-work prompt never starts opening, so the
+// frontend's opening screen stays away; a confirmed one says it has started.
+func TestSwitchProjectCancelledAtThePromptNeverStartsOpening(t *testing.T) {
+	app := newScratchpadApp(t)
+	events := &recordedEvents{}
+	app.emitEvent = events.emit
+	app.SetUnsavedDraftCount(2)
+	withDialog(app, "Cancel")
+
+	app.OpenProject("other")
+	if _, ok := events.first(projectOpeningEvent); ok {
+		t.Fatalf("wanted no %s event for a cancelled switch", projectOpeningEvent)
+	}
+}
+
+func TestSwitchProjectConfirmedAtThePromptStartsOpening(t *testing.T) {
+	app := newScratchpadApp(t)
+	events := &recordedEvents{}
+	app.emitEvent = events.emit
+	app.SetUnsavedDraftCount(2)
+	withDialog(app, "Switch Project")
+
+	if _, err := app.OpenProject("other"); err != nil {
+		t.Fatalf("opening other project: %v", err)
+	}
+	if _, ok := events.first(projectOpeningEvent); !ok {
+		t.Fatalf("wanted a %s event once the switch was confirmed", projectOpeningEvent)
+	}
+}

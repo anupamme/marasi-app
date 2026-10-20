@@ -2,7 +2,7 @@
 // the text is all Wails passes on: "<what>: <code> (<id>, <id>): <cause>"
 // when the refusal names ids (launch_pending, selection_incomplete), and
 // "<what>: <code>: <cause>" when it does not (launchpad_move.go,
-// traffic_bulk.go).
+// traffic_bulk.go, and app.go's project_locked).
 
 const escape = (text) => text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
 

@@ -2,6 +2,7 @@
     import { Stepper, Step, getModalStore} from '@skeletonlabs/skeleton';
     import { ToggleFlag } from '../wailsjs/go/main/App';
     import { marasiConfig } from '../../stores';
+    import { CERT_URL } from '../browserView.js';
     const modalStore = getModalStore();
 </script>
 
@@ -42,7 +43,7 @@
             <Step regionHeader="!text-base">
                 <svelte:fragment slot="header">Proxying Traffic Through Marasi</svelte:fragment>
                 <p>Marasi supports both forward proxy configurations as well as transparent proxies</p>
-                <p>Once the proxy is configured on an application / device, navigate to <code class="code">marasi/cert</code> to download your certificate</p>
+                <p>Once the proxy is configured on an application / device, navigate to <code class="code">{CERT_URL}</code> to download your certificate</p>
                 <p>Otherwise you can get it from your config directory</p>
                 <p>If you have Chrome instaled, you can press<kbd class="kbd">⌘`</kbd> at any point to open a preconfigured Chrome profile that will whitelist your certificate</p>
             </Step>

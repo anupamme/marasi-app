@@ -6,7 +6,7 @@ import (
 )
 
 // Project saved queries are marasi-app client settings
-// `ledger.saved_query.<uuid>` (ADR 0004): they stay in their project file.
+// `ledger.saved_query.<uuid>` (docs/adr/2026-10-16-app-defaults-with-project-overrides.md): they stay in their project file.
 func TestProjectSavedQueriesStayWithTheirProject(t *testing.T) {
 	app := newScratchpadApp(t)
 	value := json.RawMessage(`{"name":"Login","query":"path = \"/login\"","order":0}`)

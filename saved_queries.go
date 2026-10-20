@@ -13,7 +13,7 @@ import (
 // `saved_queries` list (id, name, query, order) and `hidden_builtin_queries`,
 // the ids of the built-in saved queries the researcher hid. The built-ins
 // themselves ship with the frontend. Project saved queries are client
-// settings in the project (ADR 0004), not here. Neither key is seeded: a
+// settings in the project (docs/adr/2026-10-16-app-defaults-with-project-overrides.md), not here. Neither key is seeded: a
 // missing key means none.
 
 const (

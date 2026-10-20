@@ -1,4 +1,4 @@
-// The Ledger's sitemap dock: Marasi's sitemap (ADR-0040), read a level at a
+// The Ledger's sitemap dock: Marasi's sitemap (marasi docs/adr/2026-10-14-sitemap-is-stored-by-node-and-content-type.md), read a level at a
 // time from ListSitemapChildren and never built here. Each open node keeps
 // the children loaded so far; the dock shows the busiest WINDOW, then STEP
 // more at a time, and reads the next page by cursor once the loaded ones

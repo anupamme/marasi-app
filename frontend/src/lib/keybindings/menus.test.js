@@ -339,7 +339,7 @@ test("the WebSocket modal keeps global actions but not the drawer or page beneat
 });
 
 // Marasi stores whole WebSocket messages, so menu text says "message" while
-// action ids keep "frame" (ADR 0003).
+// action ids keep "frame" (docs/adr/2026-10-11-websocket-action-ids-keep-frame.md).
 const websocketMessageActions = [
   "websocket.stream.previous-frame",
   "websocket.stream.next-frame",

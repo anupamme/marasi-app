@@ -133,7 +133,7 @@ test("a removal Marasi refuses for a pending launch reads the pending launches a
 });
 
 // Marasi refuses to move or remove an entry only while its launch is
-// pending from that launchpad (marasi ADR-0053); a pair launched from
+// pending from that launchpad (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md); a pair launched from
 // another launchpad and linked here too moves freely.
 test("an entry is launching from a launchpad only when its pending launch came from there", () => {
   const state = {

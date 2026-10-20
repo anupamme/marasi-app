@@ -5,7 +5,7 @@ import (
 	"log"
 )
 
-// Reinstalling the latest release (spec "Channels", ADR 0006): the one way
+// Reinstalling the latest release (spec "Channels", docs/adr/2026-10-17-switching-channel-never-downgrades.md): the one way
 // back to the latest release on purpose, whatever the version ordering says.
 // It warns first, because Marasi only migrates project files forward, then
 // runs the same download, verification, replacement and restart prompt as an
@@ -50,7 +50,7 @@ func (a *App) ReinstallLatestRelease() (UpdateInstall, error) {
 	result := a.finishInstall(installCtx, update, err)
 	if result.Outcome == InstallOutcomeInstalled {
 		// The release now installed follows the release channel, so a
-		// nightly is not offered again after the restart (ADR 0006).
+		// nightly is not offered again after the restart (docs/adr/2026-10-17-switching-channel-never-downgrades.md).
 		if err := a.Config.setUpdateChannel(channelRelease); err != nil {
 			log.Printf("[!] saving the release channel after reinstalling: %v", err)
 		}

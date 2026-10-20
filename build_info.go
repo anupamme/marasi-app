@@ -12,7 +12,7 @@ import (
 //
 // signingPublicKey is set the same way, with -X main.signingPublicKey=<key>,
 // to the base64 public key line of the Marasi signing key's minisign.pub
-// (ADR 0005). A development build carries no key.
+// (docs/adr/2026-10-17-updates-are-signed-with-an-embedded-key.md). A development build carries no key.
 var (
 	buildChannel     = "dev"
 	version          = "dev"

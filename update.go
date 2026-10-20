@@ -244,7 +244,7 @@ func (a *App) findUpdate(ctx context.Context, channel Channel) (*Update, error) 
 
 // findReleaseUpdate compares the latest release with the running build: a
 // running release by its tag, a running nightly (switched to release) by
-// its date alone, so the switch never downgrades (ADR 0006).
+// its date alone, so the switch never downgrades (docs/adr/2026-10-17-switching-channel-never-downgrades.md).
 func (a *App) findReleaseUpdate(ctx context.Context) (*Update, error) {
 	var isUpdate func(releaseVersion) bool
 	if running, ok := parseReleaseVersion(a.build.Version); ok {

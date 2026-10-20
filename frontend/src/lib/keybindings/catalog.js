@@ -126,7 +126,7 @@ export const FACTORY_ACTIONS = [
     ["previous-request", "Previous Request", "Open the previous request in this run", "previous request", primary("shift+[")],
   ]),
   // Ids predate the redesigned page (tabs, a settings accordion) and stay
-  // put so saved profiles keep their overrides (ADR 0001).
+  // put so saved profiles keep their overrides (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md).
   ...pageActions("launchpad", [
     ["toggle-settings", "Rename Launchpad", "Edit the launchpad's name and description", "rename, name, description, edit", primary("r")],
     ["next-tab", "Next Launchpad", "Open the next launchpad in the sidebar", "next, launchpad", primary("]")],

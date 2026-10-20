@@ -8,7 +8,7 @@ import (
 	"github.com/tfkr-ae/marasi/domain"
 )
 
-// Bulk changes on a Ledger selection (marasi ADR-0033): the frontend sends
+// Bulk changes on a Ledger selection (marasi docs/adr/2026-10-14-query-selections-stop-at-as-of.md): the frontend sends
 // the selection in Marasi's JSON shape, {"ids": [...]} or {"query": "...",
 // "exclusion": [...], "as_of": "<uuid>"}, which domain.Selection decodes and
 // checks. Each operation runs in one transaction and returns how many pairs
@@ -119,7 +119,7 @@ func (a *App) ClearNotes(sel domain.Selection) (int, error) {
 }
 
 // DeleteTraffic deletes the pairs in sel from the project, with their notes,
-// links, WebSocket messages and logs (marasi ADR-0034), and returns how many
+// links, WebSocket messages and logs (marasi docs/adr/2026-10-14-deleting-a-pair-deletes-everything-it-owns.md), and returns how many
 // it deleted. Marasi deletes nothing when sel holds a pending launch.
 func (a *App) DeleteTraffic(sel domain.Selection) (int, error) {
 	return a.bulk("deleting traffic", func() (int, error) {

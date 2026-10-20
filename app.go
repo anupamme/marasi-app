@@ -74,8 +74,8 @@ type App struct {
 	// updateTicker replaces the ticker automatic checks follow; nil uses a
 	// time.Ticker. Tests tick by hand.
 	updateTicker func(interval time.Duration) (<-chan time.Time, func())
-	// signingKey is the Marasi signing key updates must be signed with (ADR
-	// 0005), from the key built into the app; nil when the build has none,
+	// signingKey is the Marasi signing key updates must be signed with
+	// (docs/adr/2026-10-17-updates-are-signed-with-an-embedded-key.md), from the key built into the app; nil when the build has none,
 	// and then it cannot install updates.
 	signingKey *minisign.PublicKey
 	// installer is the platform's part of installing an update
@@ -336,7 +336,7 @@ func (a *App) OpenProject(name string) (string, error) {
 	// From here the open is underway: the frontend's opening screen may show.
 	a.emitEvent(projectOpeningEvent)
 	// The project lifecycle interrupts pending launches before it switches
-	// (Marasi ADR-0031), so they end in the project they were launched in.
+	// (marasi docs/adr/2026-10-13-launches-are-tracked-and-cancellable.md), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
 		return "", openProjectError(err)
 	}

@@ -1,6 +1,6 @@
 // Marasi refuses to delete a pending launch's pair, to remove it from the
 // launchpad it was launched from, and to delete that launchpad, and changes
-// nothing (marasi ADR-0053). The app's Go side reports it as
+// nothing (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md). The app's Go side reports it as
 // "launch_pending (<id>, <id>)" inside the error's text, which is all Wails
 // passes on (errorCodes.js). The ids are the pending launches' pairs.
 import { codeIDs } from "./errorCodes.js";

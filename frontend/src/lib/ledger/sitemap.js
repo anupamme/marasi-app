@@ -1,7 +1,7 @@
 // The sitemap dock's query terms and labels. Choosing a node narrows the
 // query with `sitemap = "<node name>"`; the eye-off button adds
 // `sitemap != "<node name>"`. Node names are Marasi's canonical paths
-// (ADR-0040), such as https://api.acme.test/v2/users/{int}.
+// (marasi docs/adr/2026-10-14-sitemap-is-stored-by-node-and-content-type.md), such as https://api.acme.test/v2/users/{int}.
 //
 // Plain module: no Svelte component dependencies.
 import { appendToQuery, hasQueryTerm, toggleQueryTerm } from "../ledgerQueryFields.js";

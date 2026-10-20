@@ -58,7 +58,7 @@ type Config struct {
 	keybindings        KeybindingConfig
 	keybindingsProblem string
 	// contentTypeExclusion is the app default content-type exclusion, which
-	// projects without their own list follow (ADR 0004).
+	// projects without their own list follow (docs/adr/2026-10-16-app-defaults-with-project-overrides.md).
 	contentTypeExclusion []string
 	// highlights is the 8 highlight colours and app labels (highlights.go).
 	highlights []Highlight

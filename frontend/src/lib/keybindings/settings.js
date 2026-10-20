@@ -23,7 +23,7 @@ function copyConfig(config) {
 }
 
 // The draft for the saved state from GetKeybindings ({ config, problem }).
-// Every profile is settled against `catalog` (ADR 0001), so the draft shows
+// Every profile is settled against `catalog` (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md), so the draft shows
 // the new-default rule's outcome as explicit unbinding and edits are judged
 // against known actions: capturing a key an inherited default holds is a
 // conflict, never a silent unbind of the other action.

@@ -25,7 +25,7 @@ export const LEDGER_COLUMNS = Object.freeze([
   { key: "size", label: "Size", width: "62px", align: "right", sort: "length" },
 ]);
 
-// Newest first by Marasi's pair number (ADR-0042 in Marasi): unlike
+// Newest first by Marasi's pair number (marasi docs/adr/2026-10-16-pairs-are-numbered-in-capture-order.md): unlike
 // requested_at, it reads strictly in order under concurrent capture.
 export const DEFAULT_SORT = Object.freeze({ field: "number", desc: true });
 

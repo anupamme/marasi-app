@@ -9,7 +9,7 @@
 - Search (names locally; entry heads and bodies through Marasi), create empty launchpad, rename and description
 - Per-launchpad entry count and last status from Marasi's launchpad summary, updated live by launches
 - Launchpad draft editor, HTTPS toggle, Launch, response display, unsaved-draft prompts
-- Tracked launches (Marasi ADR-0031): pending state, Cancel, and each entry's outcome (completed, cancelled, failed with a reason)
+- Tracked launches (marasi `docs/adr/2026-10-13-launches-are-tracked-and-cancellable.md`): pending state, Cancel, and each entry's outcome (completed, cancelled, failed with a reason)
 - Compare two entries: A/B picking, quick picks, read-only CodeMirror MergeView with Request/Response tabs, chip re-pick, swap, Esc
 
 ## How to get to it (user POV)

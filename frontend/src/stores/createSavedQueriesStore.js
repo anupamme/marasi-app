@@ -1,5 +1,5 @@
 // Saved queries: the open project's own (client settings
-// `ledger.saved_query.<uuid>`, each { name, query, order }, ADR 0004), the
+// `ledger.saved_query.<uuid>`, each { name, query, order }, docs/adr/2026-10-16-app-defaults-with-project-overrides.md), the
 // app-wide ones (the app config YAML), and the built-ins that ship with the
 // app, which can be hidden. Backend calls go through the injected `api`, so
 // tests run against a fake:

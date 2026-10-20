@@ -4,7 +4,7 @@ import { normalizeBinding } from "./keys.js";
 import { createKeymap, OPEN_MENU } from "./keymap.js";
 import { PLATFORMS } from "./platform.js";
 
-// Keybinding profiles (ADR 0001), independent of where they are stored:
+// Keybinding profiles (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md), independent of where they are stored:
 // the app config (GetKeybindings/SaveKeybindings) and profile files
 // (portable.js, docs/keybinding-profile-format.md) use this same shape.
 //

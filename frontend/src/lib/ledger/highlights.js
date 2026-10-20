@@ -1,6 +1,6 @@
 // The highlight palette: what each highlight number (1-8) looks like and is
 // called. Colours are app-wide (the app config YAML). A label is the
-// project's label, else the app's, else the colour's own name (ADR 0004).
+// project's label, else the app's, else the colour's own name (docs/adr/2026-10-16-app-defaults-with-project-overrides.md).
 import { hasQueryTerm } from "../ledgerQueryFields.js";
 
 /** The spec's default colours; `name` is the label of an unlabelled highlight. */

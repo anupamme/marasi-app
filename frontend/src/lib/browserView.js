@@ -8,7 +8,7 @@ export const CERT_URL = "http://marasi/cert";
 /**
  * The browser view URL of the pair with UUID `id`. Opening it redirects to
  * the pair's original URL, where the browser gets the stored response
- * without contacting the origin (marasi ADR-0055).
+ * without contacting the origin (marasi docs/adr/2026-10-20-a-browser-view-serves-the-stored-response-once-at-its-original-url.md).
  */
 export const browserViewURL = (id) => `http://marasi/view/${id}`;
 

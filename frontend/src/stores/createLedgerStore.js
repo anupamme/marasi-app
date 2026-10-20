@@ -280,7 +280,7 @@ export function isAllSelected(state) {
 }
 
 /**
- * The selection as Marasi takes it (ADR-0033): { ids }, or after ⌘A
+ * The selection as Marasi takes it (marasi docs/adr/2026-10-14-query-selections-stop-at-as-of.md): { ids }, or after ⌘A
  * { query, exclusion, as_of }, which never lists ids. null when nothing is
  * selected.
  */
@@ -1900,7 +1900,7 @@ export function createLedgerStore(api) {
   }
 
   // Waits for a delete or a removal from a launchpad. When Marasi refuses it
-  // for pairs still launching (marasi ADR-0053), nothing changed: the loaded
+  // for pairs still launching (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md), nothing changed: the loaded
   // ones become the selection, so the researcher sees which, and the error
   // goes on.
   async function showLaunching(operation) {

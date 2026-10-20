@@ -32,7 +32,7 @@ function initialState(projectStateVersion = 0) {
     launchpads: [],
     ...Object.fromEntries(PER_LAUNCHPAD_KEYS.map((key) => [key, {}])),
     // Launches by launch id, which is also their entry's UUID (Marasi
-    // ADR-0031): { ID, LaunchpadID, Status, Reason }.
+    // docs/adr/2026-10-13-launches-are-tracked-and-cancellable.md): { ID, LaunchpadID, Status, Reason }.
     launchesById: {},
     detailsById: {},
     selectedLaunchpadId: null,
@@ -118,7 +118,7 @@ export function launchOf(state, entryId, entry = undefined) {
 /**
  * The ids of `ids` still launching from `launchpadId`: their launch is
  * pending and was launched from it. Marasi refuses to move such an entry to
- * another launchpad or remove it (marasi ADR-0053).
+ * another launchpad or remove it (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md).
  */
 export function pendingEntryIds(state, launchpadId, ids) {
   return launchingIds(Object.values(state.launchesById), ids, launchpadId);
@@ -777,7 +777,7 @@ export function createLaunchpadStore(api) {
     setUseHttps: (launchpadId, useHttps) =>
       updateDraftFields(launchpadId, { useHttps }),
 
-    // Launches are tracked (Marasi ADR-0031): the binding returns the launch
+    // Launches are tracked (marasi docs/adr/2026-10-13-launches-are-tracked-and-cancellable.md): the binding returns the launch
     // id, which is the new entry's UUID, or throws when the launch could not
     // start. The launch stays pending until onLaunchFinished; its entry is
     // selected when it arrives. Returns the launch id.
@@ -840,7 +840,7 @@ export function createLaunchpadStore(api) {
     },
 
     // Deletes without asking: confirming a dirty draft is the page's job.
-    // Marasi refuses while a launch from it is pending (marasi ADR-0053);
+    // Marasi refuses while a launch from it is pending (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md);
     // the store then learns that launch, so Delete shows it launching.
     deleteLaunchpad: async (id) => {
       try {

@@ -271,7 +271,7 @@
         const state = get(launchpadStore);
         const launchpad = state.launchpads.find((l) => l.ID === state.selectedLaunchpadId);
         if (!launchpad) return;
-        // Marasi refuses while a launch from it is pending (marasi ADR-0053).
+        // Marasi refuses while a launch from it is pending (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md).
         if (pendingLaunchOf(state, launchpad.ID)) return warnDeleteLaunching();
         confirm(
             `Delete ${launchpad.Name}?`,
@@ -423,7 +423,7 @@
         if (id) launchpadStore.selectAllEntries(id);
     }
 
-    // Catalog actions keep their pre-redesign IDs (ADR-0001):
+    // Catalog actions keep their pre-redesign IDs (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md):
     // toggle-settings renames, *-tab steps launchpads.
     const launchpadMenu = [
         { actionId: "launchpad.focus-search", icon: SearchIcon, handler: () => dock?.expand(true) },

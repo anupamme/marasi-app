@@ -264,7 +264,7 @@
 	}
 
 	// A delete or removal Marasi refused for pairs still launching (marasi
-	// ADR-0053): nothing changed, the store selected the loaded ones, and
+	// docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md): nothing changed, the store selected the loaded ones, and
 	// the launchpads are read again so the menu greys it next time. False
 	// for any other error.
 	function launchingRefused(error, verb) {

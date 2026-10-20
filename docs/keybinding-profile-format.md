@@ -45,7 +45,7 @@ The profile has no id. An id is local to one app config, so an imported profile 
 
 ## Semantics
 
-These are the profile semantics of [ADR 0001](adr/0001-keybinding-profiles-override-factory-defaults.md):
+These are the profile semantics of [Keybinding profiles override recoverable factory defaults](adr/2026-10-10-keybinding-profiles-override-factory-defaults.md):
 
 - An action without an override inherits its factory default for that platform.
 - An override replaces the default completely. An override with `keys: []` unbinds the action.

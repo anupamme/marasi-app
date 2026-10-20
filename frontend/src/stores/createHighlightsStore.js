@@ -1,6 +1,6 @@
 // The highlight palette's state: the app's colours and labels (the app
 // config YAML), the open project's labels (client settings
-// `ledger.highlight.<n>`, ADR 0004), renaming a label, and the once-per-
+// `ledger.highlight.<n>`, docs/adr/2026-10-16-app-defaults-with-project-overrides.md), renaming a label, and the once-per-
 // project migration of the old context menu's hex highlights. Backend calls
 // go through the injected `api`, so tests run against a fake:
 //

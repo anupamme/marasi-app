@@ -12,7 +12,7 @@ import (
 )
 
 // verifyChecksums checks that signature is the Marasi signing key's
-// signature over checksums (ADR 0005) and returns the checksums it signs,
+// signature over checksums (docs/adr/2026-10-17-updates-are-signed-with-an-embedded-key.md) and returns the checksums it signs,
 // by asset name, as lowercase hex SHA-256.
 func verifyChecksums(key minisign.PublicKey, checksums, signature []byte) (map[string]string, error) {
 	if !minisign.Verify(key, checksums, signature) {

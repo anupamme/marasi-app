@@ -124,7 +124,7 @@ export function entryMenuFor({
       label: `Remove${entriesLabel(n)} from launchpad`,
       icon: "unlink",
       danger: true,
-      // Marasi keeps a pending launch's pair in its launchpad (marasi ADR-0053).
+      // Marasi keeps a pending launch's pair in its launchpad (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md).
       ...unlessLaunching(launching),
       action: { type: "remove" },
     },

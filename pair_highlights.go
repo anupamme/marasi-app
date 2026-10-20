@@ -8,7 +8,7 @@ import (
 	"github.com/tfkr-ae/marasi/domain"
 )
 
-// Highlights on pairs (marasi ADR-0035): a number from 1 to 8 per pair,
+// Highlights on pairs (marasi docs/adr/2026-10-14-highlight-is-a-side-table.md): a number from 1 to 8 per pair,
 // written in bulk on a selection. The old context menu stored a hex colour in
 // metadata.highlight instead; MigrateOldHighlights moves those to numbers
 // once per project.

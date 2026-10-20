@@ -13,7 +13,7 @@ import (
 // The content-type exclusion hides pairs by content type from every traffic
 // read. The app default lives in the app config; a project that has edited
 // its list keeps it in ledgerExclusionKey and stops following the default
-// (ADR 0004).
+// (docs/adr/2026-10-16-app-defaults-with-project-overrides.md).
 const (
 	contentTypeExclusionConfigKey = "ledger_content_type_exclusion"
 	ledgerExclusionKey            = "ledger.exclusion"

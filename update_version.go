@@ -171,7 +171,7 @@ func (v nightlyVersion) isUpdateFor(running nightlyVersion) bool {
 }
 
 // isUpdateForNightly reports whether release r is an update for the
-// running nightly: only when it is dated after the nightly (ADR 0006), so
+// running nightly: only when it is dated after the nightly (docs/adr/2026-10-17-switching-channel-never-downgrades.md), so
 // switching from nightly to release never downgrades.
 func (r releaseVersion) isUpdateForNightly(running nightlyVersion) bool {
 	return r.date.After(running.date)

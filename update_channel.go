@@ -7,7 +7,7 @@ import (
 	"go.yaml.in/yaml/v3"
 )
 
-// Switching Channel (spec "Channels", ADR 0006). The Channel is an app-wide
+// Switching Channel (spec "Channels", docs/adr/2026-10-17-switching-channel-never-downgrades.md). The Channel is an app-wide
 // key in the marasi-app config, never a project setting. When it is absent
 // the app follows the channel of the build that is running. Switching to
 // nightly checks at once; switching to release never downgrades: the running

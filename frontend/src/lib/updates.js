@@ -34,7 +34,7 @@ export const channelSettingPath = "/settings?section=updates";
 /**
  * The toast after the Channel setting changes (a ChannelChange), or null when
  * the check a switch to nightly runs found an update and the panel opens
- * instead. A nightly switched to release keeps running (ADR 0006), so the
+ * instead. A nightly switched to release keeps running (docs/adr/2026-10-17-switching-channel-never-downgrades.md), so the
  * toast says so and points to the reinstall.
  */
 export function channelSwitchNotice(change, running) {

@@ -1,3 +1,18 @@
+## Go commands
+
+Run Go commands as `GOWORK=off go …`. Agent worktrees can sit inside a checkout whose parent `go.work` excludes this module, and `go` then fails with "main module … does not contain package". A fresh worktree runs `scripts/bootstrap.sh` first, to create `frontend/build`, `frontend/node_modules` and the Wails bindings.
+
+## Code maps
+
+Maps live in `docs/agents/maps/`. Read the map there before you change or ask about:
+
+- `ledger.md`: the Ledger page, its row menu, drawer, bulk changes, sitemap or live traffic.
+- `launchpad.md`: the Launchpad page, its entry menu, launches and their pending state, or unsaved drafts.
+- `keybindings-and-menus.md`: a shortcut, a ⌘K menu item, the action catalog, menu contexts, or keybinding profiles.
+- `project-open.md`: startup, the scratchpad, opening or switching a project, or the opening screen.
+- `updates.md`: checking for, installing or relaunching into an update, channels, signing, or the release workflows.
+- `marasi-service.md`: Wails bindings, events between Go and the frontend, coded errors, app or per-project settings, or the Marasi library and its source.
+
 ## Agent skills
 
 ### Issue tracker

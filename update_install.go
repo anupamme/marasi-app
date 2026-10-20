@@ -18,7 +18,7 @@ import (
 //  1. check the build can update itself: a signing key, a platform installer
 //     and a writable install location (platformInstaller.checkReplaceable);
 //  2. download checksums.txt and checksums.txt.minisig and verify the
-//     signature against App.signingKey (ADR 0005);
+//     signature against App.signingKey (docs/adr/2026-10-17-updates-are-signed-with-an-embedded-key.md);
 //  3. download the platform's asset (platformInstaller.asset) to a temp
 //     directory, with progress events, and compare its SHA-256 with the
 //     signed checksums;

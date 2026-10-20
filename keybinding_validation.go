@@ -231,7 +231,7 @@ func checkKeybindingStructure(config KeybindingConfig) error {
 // variant: the override when present, otherwise the factory defaults.
 // Overrides for actions missing from the catalog are dormant and ignored.
 //
-// New-default rule (ADR 0001): an action the profile does not know yet
+// New-default rule (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md): an action the profile does not know yet
 // (missing from KnownActions) inherits its factory defaults only when none
 // collides with a customization; otherwise it is unbound and the
 // customization wins. A collision is a binding shared with an overridden
@@ -239,7 +239,7 @@ func checkKeybindingStructure(config KeybindingConfig) error {
 // nothing may shadow). Known actions always inherit, so a duplicate the
 // researcher makes is a conflict to fix rather than a silent unbind.
 //
-// Positional defaults (ADR 0002; PositionalDefault, extension navigation
+// Positional defaults (docs/adr/2026-10-10-positional-extension-defaults-yield.md; PositionalDefault, extension navigation
 // ⌘⌥1–9 in load order) move when the order changes. Known or not, an inherited positional
 // default that collides with any other resolved binding (a customization or a
 // stable default) in a conflicting context, or with the menu opening, yields

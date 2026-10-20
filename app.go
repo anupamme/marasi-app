@@ -74,8 +74,8 @@ type App struct {
 	// updateTicker replaces the ticker automatic checks follow; nil uses a
 	// time.Ticker. Tests tick by hand.
 	updateTicker func(interval time.Duration) (<-chan time.Time, func())
-	// signingKey is the Marasi signing key updates must be signed with (ADR
-	// 0005), from the key built into the app; nil when the build has none,
+	// signingKey is the Marasi signing key updates must be signed with
+	// (docs/adr/2026-10-17-updates-are-signed-with-an-embedded-key.md), from the key built into the app; nil when the build has none,
 	// and then it cannot install updates.
 	signingKey *minisign.PublicKey
 	// installer is the platform's part of installing an update
@@ -163,8 +163,11 @@ func newApp(proxy *marasi.Proxy, configDir string, wordlists wordlist.Provider, 
 	return app
 }
 
-// startup is called when the app starts. The context is saved
-// so we can call the runtime methods
+// startup is called when the app starts. It saves the context for the
+// runtime methods, sends the project lifecycle's log to the frontend, and
+// sets Marasi's request, response, log and intercept handlers. Those four
+// call runtime.EventsEmit directly, so a test's emitEvent does not see them.
+// It opens no project and starts no listener: the frontend does both.
 func (a *App) startup(ctx context.Context) {
 	a.ctx = ctx
 	go a.removeUpdateLeftovers()
@@ -309,6 +312,10 @@ func (a *App) OpenFileDialog() (string, error) {
 	return runtime.OpenFileDialog(a.ctx, dialogOptions)
 }
 
+// OpenProject switches to the project at name, a path or a bare name in the
+// config directory, and returns its name. It asks first when unsaved work
+// would be lost; a refusal is "project switch cancelled", which the frontend
+// matches to close its opening screen quietly.
 func (a *App) OpenProject(name string) (string, error) {
 	var filePath string
 
@@ -336,7 +343,7 @@ func (a *App) OpenProject(name string) (string, error) {
 	// From here the open is underway: the frontend's opening screen may show.
 	a.emitEvent(projectOpeningEvent)
 	// The project lifecycle interrupts pending launches before it switches
-	// (Marasi ADR-0031), so they end in the project they were launched in.
+	// (marasi docs/adr/2026-10-13-launches-are-tracked-and-cancellable.md), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
 		return "", openProjectError(err)
 	}
@@ -370,6 +377,8 @@ func (a *App) ScratchpadPath() string {
 	return path.Join(a.Proxy.ConfigDir, "scratchpad.marasi")
 }
 
+// SetupScratchpad opens the scratchpad like OpenProject, without the
+// unsaved-work prompt or the project-opening event.
 func (a *App) SetupScratchpad() error {
 	if err := a.projects.Open(context.Background(), a.ScratchpadPath()); err != nil {
 		return openProjectError(err)

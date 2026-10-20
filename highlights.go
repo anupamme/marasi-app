@@ -14,7 +14,7 @@ import (
 // `highlights` section of marasi_appconfig.yaml as a list of 8 entries: entry
 // i is highlight number i+1. An empty label means "unset": the frontend then
 // falls back to the colour's own name. Project labels override the app label
-// and live in the project's client settings (ADR 0004), not here.
+// and live in the project's client settings (docs/adr/2026-10-16-app-defaults-with-project-overrides.md), not here.
 
 const (
 	highlightsKey   = "highlights"

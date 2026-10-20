@@ -1,4 +1,4 @@
-// Ledger selections as Marasi defines them (ADR-0033), and the bulk actions
+// Ledger selections as Marasi defines them (marasi docs/adr/2026-10-14-query-selections-stop-at-as-of.md), and the bulk actions
 // that run on them: a selection is the listed pair ids, or after ⌘A the
 // query, the exclusion and the results' as_of, and never ids for "all".
 import { test } from "node:test";
@@ -352,7 +352,7 @@ test("a ⌘A selection Marasi refuses while a job builds changes nothing and lea
 });
 
 // Marasi refusing a selection that holds pairs still launching (marasi
-// ADR-0053), as the Go side words it.
+// docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md), as the Go side words it.
 const launchPending = (what, ...ids) => new Error(`${what}: launch_pending (${ids.join(", ")}): a launch is pending`);
 
 test("a ⌘A delete Marasi refuses for pairs still launching selects those pairs and deletes nothing", async () => {

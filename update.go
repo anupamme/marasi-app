@@ -21,6 +21,9 @@ import (
 //   - installing: update_install.go (the shared pipeline), update_verify.go,
 //     update_reinstall.go, and the per-platform update_install_*.go,
 //     update_platform_*.go and update_relaunch_*.go.
+//
+// build_info.go holds the running build and the signing key, which
+// .github/workflows/build.yml sets with -ldflags.
 
 // defaultReleaseSource is the GitHub releases API of the Marasi App
 // repository. App.releaseSource holds it so tests can serve releases from a
@@ -244,7 +247,7 @@ func (a *App) findUpdate(ctx context.Context, channel Channel) (*Update, error) 
 
 // findReleaseUpdate compares the latest release with the running build: a
 // running release by its tag, a running nightly (switched to release) by
-// its date alone, so the switch never downgrades (ADR 0006).
+// its date alone, so the switch never downgrades (docs/adr/2026-10-17-switching-channel-never-downgrades.md).
 func (a *App) findReleaseUpdate(ctx context.Context) (*Update, error) {
 	var isUpdate func(releaseVersion) bool
 	if running, ok := parseReleaseVersion(a.build.Version); ok {

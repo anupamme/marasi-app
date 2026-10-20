@@ -15,7 +15,7 @@ import (
 // (Wails passes only the text), says why, and refreshes the launchpads.
 //
 // A change that would take a pending launch's pair out of its launchpad,
-// delete it, or delete its launchpad (marasi ADR-0053) reads as
+// delete it, or delete its launchpad (marasi docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md) reads as
 // launchPending with the pending pairs: "launch_pending (<uuid>, <uuid>)".
 const launchPending = "launch_pending"
 

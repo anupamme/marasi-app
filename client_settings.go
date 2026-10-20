@@ -9,7 +9,7 @@ import (
 )
 
 // appClient is the client name under which the app keeps its per-project
-// settings in the project file (ADR 0004).
+// settings in the project file (docs/adr/2026-10-16-app-defaults-with-project-overrides.md).
 const appClient = "marasi-app"
 
 func (a *App) configRepo() (domain.ConfigRepository, error) {

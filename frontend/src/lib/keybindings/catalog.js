@@ -41,6 +41,12 @@ function pageActions(context, rows) {
   }));
 }
 
+// The built-in actions. An action listed here shows in the keybinding
+// settings and is checked on save, since the catalog is sent to Go with each
+// profile (catalogDescriptor). Its handler is registered separately
+// (useMenuActions, or the handlers in GlobalMenu.svelte for global.*), and a
+// page lists it in ⌘K only through its menuOptions. Never rename an id:
+// saved profiles key their overrides by id.
 export const FACTORY_ACTIONS = [
   action("global.open-menu", "Open Marasi Menu", "Open or close the Marasi menu", "menu, commands, palette", primary("k")),
   action("global.go-home", "Marasi", "Dashboard", "home, dashboard", primary("1")),
@@ -126,7 +132,7 @@ export const FACTORY_ACTIONS = [
     ["previous-request", "Previous Request", "Open the previous request in this run", "previous request", primary("shift+[")],
   ]),
   // Ids predate the redesigned page (tabs, a settings accordion) and stay
-  // put so saved profiles keep their overrides (ADR 0001).
+  // put so saved profiles keep their overrides (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md).
   ...pageActions("launchpad", [
     ["toggle-settings", "Rename Launchpad", "Edit the launchpad's name and description", "rename, name, description, edit", primary("r")],
     ["next-tab", "Next Launchpad", "Open the next launchpad in the sidebar", "next, launchpad", primary("]")],

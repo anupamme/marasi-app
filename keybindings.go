@@ -8,7 +8,7 @@ import (
 )
 
 // Keybinding profiles persisted in the `keybindings` section of
-// marasi_appconfig.yaml. See ADR 0001: a profile stores overrides of the
+// marasi_appconfig.yaml. See docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md: a profile stores overrides of the
 // immutable factory defaults per platform variant; a missing override
 // inherits, an empty key list is intentionally unbound.
 

@@ -20,12 +20,12 @@ function normalizedList(texts) {
 // dormant data, not executable actions).
 //
 // `knownActions` (a profile's known action ids) enables the new-default rule
-// of ADR 0001: an action the profile does not know yet inherits its defaults
+// of docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md: an action the profile does not know yet inherits its defaults
 // only when none collides with a customization (an overridden action in a
 // conflicting context, see contextsConflict, or an overridden menu opening); otherwise it is unbound and
 // the customization wins. Without `knownActions` every action inherits.
 //
-// Positional defaults (ADR 0002; `action.positionalDefault`, the extension navigation
+// Positional defaults (docs/adr/2026-10-10-positional-extension-defaults-yield.md; `action.positionalDefault`, the extension navigation
 // ⌘⌥1–9 that follow the extension order) are unstable: after a reorder an
 // inherited one can land on a binding a customization still holds. Known or
 // not, an inherited positional default that collides with any other resolved

@@ -62,7 +62,7 @@ async function relinked(call, kind) {
 
 export const ledgerStore = createLedgerStore({
   // A page of the live view or of a query's results:
-  // { Query, OrderBy, Cursor, Direction, AsOf, Limit }.
+  // { Query, OrderBy, Cursor, Direction, AsOf, Limit, IgnoreExclusion }.
   queryTraffic: (request) => QueryTraffic(request),
   // after: "" counts every match, else only pairs captured after that id.
   // options: { AsOf, IgnoreExclusion }; AsOf counts only pairs up to it.

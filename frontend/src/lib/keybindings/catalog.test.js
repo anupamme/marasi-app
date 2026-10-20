@@ -212,7 +212,7 @@ test("only extensions that rendered a GUI get a page: Workshop's core page is no
 });
 
 // Launchpad ids predate the redesign and stay put so saved profiles keep
-// their overrides (ADR 0001); only the menu text follows the new page.
+// their overrides (docs/adr/2026-10-10-keybinding-profiles-override-factory-defaults.md); only the menu text follows the new page.
 test("Launchpad actions keep their ids and keys but say Launchpad, not Tab or Settings", () => {
   const catalog = buildCatalog();
   const expected = [

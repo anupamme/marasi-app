@@ -264,7 +264,7 @@
 	}
 
 	// A delete or removal Marasi refused for pairs still launching (marasi
-	// ADR-0053): nothing changed, the store selected the loaded ones, and
+	// docs/adr/2026-10-18-a-pending-launchs-pair-stays-in-its-launchpad.md): nothing changed, the store selected the loaded ones, and
 	// the launchpads are read again so the menu greys it next time. False
 	// for any other error.
 	function launchingRefused(error, verb) {
@@ -727,7 +727,8 @@
 
 	// A shortcut runs its row menu item on the selection, exactly as choosing
 	// it would; when the menu disables it (say, Copy under ⌘A over pairs the
-	// table hasn't loaded), it says why instead.
+	// table hasn't loaded), it says why instead. The item must carry this
+	// `actionId` (menuFor in rowMenu.js), or the shortcut does nothing.
 	function runShortcut(actionId) {
 		if (!drawerOpen) return;
 		rowMenu = { ...rowMenu, open: false };
@@ -1065,7 +1066,8 @@
 	};
 
 	// The drawer's rail and details column run the same handlers as the
-	// shortcuts, by action id.
+	// shortcuts, by action id. Only drawer-open and WebSocket actions are in
+	// it, so a rail button with a drawer-closed id does nothing.
 	const drawerHandlers = new Map(
 		[websocketDrawerMenuItem, ...drawerMenu].map(({ actionId, handler }) => [actionId, handler]),
 	);

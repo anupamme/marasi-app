@@ -95,7 +95,7 @@ func TestScratchpadPathIsTheScratchpadSetupOpens(t *testing.T) {
 }
 
 // A switch waits for a held Checkpoint item rather than refusing, and the
-// item can still be dropped while it waits (Marasi ADR-0046).
+// item can still be dropped while it waits (marasi docs/adr/2026-10-17-project-switch-waits-for-held-checkpoint-items.md).
 func TestOpenProjectWaitsForHeldCheckpointItem(t *testing.T) {
 	app := newCheckpointApp(t)
 	oldPath := scratchpadPath(t, app)

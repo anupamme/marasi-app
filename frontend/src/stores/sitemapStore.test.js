@@ -281,6 +281,23 @@ test("the header warns while Marasi's sitemap is still building", async () => {
   assert.equal(get(store).complete, true);
 });
 
+test("the header counts no hosts until the building sitemap places one", async () => {
+  const api = fakeApi({ tree: { "": [] }, complete: false });
+  const store = await loadedStore(api);
+  assert.equal(hostCountLabel(get(store)), "", "no count while none are placed");
+
+  api.tree[""] = [child(API, 5)];
+  store.reload();
+  await store.settled();
+  assert.equal(hostCountLabel(get(store)), "1 host");
+
+  api.tree[""] = [];
+  api.complete = true;
+  store.reload();
+  await store.settled();
+  assert.equal(hostCountLabel(get(store)), "0 hosts", "a finished empty sitemap still counts");
+});
+
 test("new pairs bump their leaf and its loaded ancestors in All traffic", async () => {
   const api = fakeApi({
     tree: {

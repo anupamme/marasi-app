@@ -51,6 +51,12 @@
 	const ghostBar = "block h-2 animate-pulse rounded-sm bg-surface-300 dark:bg-surface-600";
 	$: hosts = hostCountLabel(state);
 	$: roots = state.levels[""];
+	// While Marasi's sitemap job still places older pairs, ghost hosts stand
+	// in for the ones it hasn't reached: the whole list when none have
+	// arrived, a few after the loaded ones otherwise. The find box only
+	// searches what has loaded, so it shows none.
+	$: building = !state.complete && !find;
+	$: ghostWidths = rows.length ? [0.55, 0.4] : [0.6, 0.45, 0.7, 0.5, 0.4];
 
 	const pad = (depth) => 8 + depth * 14;
 	const count = (n) => Number(n).toLocaleString();
@@ -231,14 +237,17 @@
 				<CircleAlert size={12} /> Couldn't read the sitemap.
 				<button class="underline" on:click={() => store.reload()}>Try again</button>
 			</p>
-		{:else if roots && !roots.loading && rows.length === 0}
+		{:else if roots && !roots.loading && rows.length === 0 && !building}
 			<p class="p-4 text-center font-sans text-xs opacity-60">
 				{#if find}Nothing loaded matches "{find}".{:else if scope === "matching"}No pairs match the query.{:else}No traffic yet.{/if}
 			</p>
-		{:else if !roots || (roots.loading && rows.length === 0)}
-			<!-- Ghost hosts while the first level reads. -->
-			<div class="ledger-sitemap-ghost" aria-label="Loading the sitemap">
-				{#each [0.6, 0.45, 0.7, 0.5, 0.4] as width, i}
+		{:else if !roots || rows.length === 0 || building}
+			<!-- Ghost hosts while the first level reads or the sitemap builds. -->
+			<div
+				class="ledger-sitemap-ghost"
+				aria-label={building ? "Marasi is still building the sitemap" : "Loading the sitemap"}
+			>
+				{#each ghostWidths as width, i}
 					<div class="flex h-[26px] items-center gap-2 border-l-4 border-transparent pl-3 pr-2">
 						<span class={ghostBar} style="width: {width * 100}%; animation-delay: {i * 120}ms"></span>
 						<span class="flex-1"></span>

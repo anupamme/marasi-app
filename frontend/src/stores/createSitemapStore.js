@@ -52,11 +52,15 @@ export function sitemapScope(state) {
   return state.scope === "matching" && state.context.query ? "matching" : "all";
 }
 
-/** The header's host count, such as "12 hosts" or "500+ hosts". */
+/**
+ * The header's host count, such as "12 hosts" or "500+ hosts"; none while
+ * Marasi's sitemap job has yet to place a host.
+ */
 export function hostCountLabel(state) {
   const roots = state.levels[""];
   if (!roots) return "";
   const count = roots.children.length;
+  if (count === 0 && !state.complete) return "";
   return `${count.toLocaleString()}${roots.cursor ? "+" : ""} ${count === 1 && !roots.cursor ? "host" : "hosts"}`;
 }
 

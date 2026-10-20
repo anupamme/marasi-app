@@ -495,9 +495,9 @@ test("the indicator shows how far a download is", () => {
   assert.equal(updateIndicatorLabel(state), "Downloading update 18.10.2026 · 37%");
 });
 
-test("a nightly's notes show only its commit subjects, without the Ref and Commit lines", () => {
+test("a nightly's notes show only its commit subjects, without the Ref, Commit and Marasi lines", () => {
   const notes =
-    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\n";
+    "- fix(ledger): a right-click opens only the row menu\n- feat(update): nightly notes\n\nRef: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\nMarasi: 11b10040310ebdb6adc451287d21a1a0ede947b9\n";
 
   assert.equal(
     nightlyNotes(notes),
@@ -508,6 +508,7 @@ test("a nightly's notes show only its commit subjects, without the Ref and Commi
 test("a nightly published before its notes listed commits has no notes to show", () => {
   assert.equal(nightlyNotes("Ref: main\nCommit: def5678aaaabbbbccccddddeeeeffff0000111122\n"), "");
   assert.equal(nightlyNotes("Ref: main\r\nCommit: def5678\r\n"), "");
+  assert.equal(nightlyNotes("Ref: main\nCommit: def5678\nMarasi: 11b1004\n"), "");
   assert.equal(nightlyNotes(""), "");
   assert.equal(nightlyNotes(undefined), "");
 });

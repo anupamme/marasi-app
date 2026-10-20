@@ -53,7 +53,8 @@ func TestNightlyCheckReadsTheCommitBelowTheCommitSubjectsInItsNotes(t *testing.T
 		"- feat(update): the panel shows a nightly's Commit: line stripped\n" +
 		"\n" +
 		"Ref: main\n" +
-		"Commit: def5678aaaabbbbccccddddeeeeffff0000111122\n"
+		"Commit: def5678aaaabbbbccccddddeeeeffff0000111122\n" +
+		"Marasi: 11b10040310ebdb6adc451287d21a1a0ede947b9\n"
 	releases.publish(fakeRelease{Tag: "nightly", Name: "18.10.2026 (nightly def5678)", Notes: notes, Prerelease: true})
 	app, _ := newUpdateApp(t, "nightly", "17.10.2026 (nightly abc1234)", releases)
 

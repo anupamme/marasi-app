@@ -9,6 +9,11 @@ on:
         description: Commit, tag, or branch to build (defaults to the branch selected above)
         required: false
         type: string
+      marasi_ref:
+        description: marasi branch, tag, or full commit SHA to build against (defaults to main)
+        required: false
+        type: string
+        default: main
 
 permissions:
   contents: write
@@ -23,6 +28,7 @@ jobs:
     outputs:
       publish: ${{ steps.check.outputs.publish }}
       sha: ${{ steps.check.outputs.sha }}
+      marasi: ${{ steps.marasi.outputs.sha }}
       previous: ${{ steps.check.outputs.previous }}
       version: ${{ steps.check.outputs.version }}
     steps:
@@ -30,15 +36,44 @@ jobs:
         with:
           ref: ${{ inputs.ref || github.sha }}
           fetch-depth: 0
+      # Nightlies build against marasi at one commit, resolved here once so
+      # every job uses the same one. A commit, not a ref: the Go module proxy
+      # caches moving refs, and marasi's own nightly tag can still point at
+      # yesterday's commit.
+      - id: marasi
+        env:
+          MARASI_REF: ${{ inputs.marasi_ref || 'main' }}
+        run: |
+          if [[ "$MARASI_REF" =~ ^[0-9a-f]{40}$ ]]; then
+            sha=$MARASI_REF
+          else
+            # A peeled annotated tag first, then a tag, then a branch.
+            sha=$(git ls-remote https://github.com/tfkr-ae/marasi \
+                "refs/tags/$MARASI_REF^{}" "refs/tags/$MARASI_REF" "refs/heads/$MARASI_REF" |
+              awk '$2 ~ /\^\{\}$/ { print 0, $1; next } $2 ~ /^refs\/tags\// { print 1, $1; next } { print 2, $1 }' |
+              sort | head -n 1 | cut -d ' ' -f 2)
+          fi
+          if ! [[ "$sha" =~ ^[0-9a-f]{40}$ ]]; then
+            echo "::error::marasi ref $MARASI_REF is not a branch, a tag, or a full commit SHA"
+            exit 1
+          fi
+          echo "Building against marasi $sha ($MARASI_REF)."
+          echo "sha=$sha" >> "$GITHUB_OUTPUT"
       - id: check
         env:
           EVENT_NAME: ${{ github.event_name }}
+          GH_TOKEN: ${{ github.token }}
+          MARASI: ${{ steps.marasi.outputs.sha }}
         run: |
           sha=$(git rev-parse HEAD)
           last=$(git rev-parse --verify --quiet 'refs/tags/nightly^{commit}' || true)
-          if [ "$EVENT_NAME" = schedule ] && [ "$sha" = "$last" ]; then
+          # The marasi commit the published nightly was built from, from the
+          # Marasi line of its notes; empty when there is none.
+          last_marasi=$(gh release view nightly --json body --jq .body 2>/dev/null |
+            sed -n 's/^Marasi: *\([0-9a-f]\{40\}\).*$/\1/p' | head -n 1 || true)
+          if [ "$EVENT_NAME" = schedule ] && [ "$sha" = "$last" ] && [ "$MARASI" = "$last_marasi" ]; then
             echo 'publish=false' >> "$GITHUB_OUTPUT"
-            echo "No commits since the last nightly (${sha:0:7}), skipping."
+            echo "No commits to the app (${sha:0:7}) or marasi (${MARASI:0:7}) since the last nightly, skipping."
             exit 0
           fi
           {
@@ -58,6 +93,7 @@ jobs:
       ref: ${{ needs.prepare.outputs.sha }}
       channel: nightly
       version: ${{ needs.prepare.outputs.version }}
+      marasi_ref: ${{ needs.prepare.outputs.marasi }}
     secrets: inherit
 
   publish:
@@ -116,12 +152,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
           REF: ${{ inputs.ref || github.ref_name }}
           SHA: ${{ needs.prepare.outputs.sha }}
+          MARASI: ${{ needs.prepare.outputs.marasi }}
           # The previous nightly's commit, read before its tag moved; empty
           # for the first nightly.
           PREVIOUS: ${{ needs.prepare.outputs.previous }}
           # The app reads the nightly's date from its title (its version
           # string) and its commit from the Commit line of its notes; it
-          # shows the commit subjects above that line as the notes.
+          # shows the commit subjects above that line as the notes. The
+          # Marasi line is the marasi commit it was built against, which the
+          # next nightly's prepare job reads.
           VERSION: ${{ needs.prepare.outputs.version }}
         run: |
           # The commits since the previous nightly, newest first. Without a
@@ -142,9 +181,9 @@ jobs:
             subjects=$(printf '%s\n- …and %d more' "$subjects" "$((total - limit))")
           fi
           if [ -n "$subjects" ]; then
-            notes=$(printf '%s\n\nRef: %s\nCommit: %s\n' "$subjects" "$REF" "$SHA")
+            notes=$(printf '%s\n\nRef: %s\nCommit: %s\nMarasi: %s\n' "$subjects" "$REF" "$SHA" "$MARASI")
           else
-            notes=$(printf 'Ref: %s\nCommit: %s\n' "$REF" "$SHA")
+            notes=$(printf 'Ref: %s\nCommit: %s\nMarasi: %s\n' "$REF" "$SHA" "$MARASI")
           fi
           if gh release view nightly >/dev/null 2>&1; then
             gh release delete nightly --yes

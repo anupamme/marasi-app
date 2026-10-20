@@ -41,7 +41,6 @@
 		logItems,
 		activeProject,
 		listener,
-		openProject,
 		readConfig,
 		marasiConfig,
 		extensions,
@@ -50,13 +49,15 @@
 		opening,
 		openingShown,
 		pagesKey,
-		startOpening,
-		showOpening,
 		feedOpeningLog,
-		finishOpening,
-		clearOpening,
+		loadedProject,
+		stayInOpening,
 	} from "../stores.js";
-	import { openProjectFile, retryOpen } from "../lib/globalActions.js";
+	import {
+		openProjectFile,
+		openScratchpad,
+		retryOpen,
+	} from "../lib/globalActions.js";
 	import { connectionStore } from "../stores/connectionStore";
 	import { launchpadStore, reportUnsavedDrafts } from "../stores/launchpadStore";
 	import { drawerKeybindingState, ledgerStore } from "../stores/ledgerStore";
@@ -74,7 +75,6 @@
 	import SelectWordlistModal from "../lib/components/SelectWordlistModal.svelte";
 	import {
 		OpenFileDialog,
-		SetupScratchpad,
 		StartProxy,
 	} from "../lib/wailsjs/go/main/App";
 	import {
@@ -192,41 +192,34 @@
 		Keybindings: { ref: KeybindingsModal },
 		Update: { ref: UpdateModal },
 	};
+	// Startup opens the scratchpad, and carries on once the first project
+	// has opened and loaded: the scratchpad, or one picked on the opening
+	// screen when the scratchpad can't open. It resolves to that project.
+	let stopWaitingForProject = () => {};
 	const StartupRoutine2 = new Promise((resolve) => {
-		readConfig().then(() => {
-			startOpening({ name: "scratchpad" });
-			// Nothing is open yet, so the opening screen shows at once.
-			showOpening();
-			SetupScratchpad()
-				.then(() => {
-					StartProxy(
-						$marasiConfig.DefaultAddress,
-						$marasiConfig.DefaultPort,
-					)
-						.then(() => {
-							listener.set({
-								status: true,
-								address: $marasiConfig.DefaultAddress,
-								port: $marasiConfig.DefaultPort,
-							});
-							resolve();
-						})
-						.catch((listenerError) => {
-							//Quit();
-							listener.set({
-								status: false,
-								address: $marasiConfig.DefaultAddress,
-								port: $marasiConfig.DefaultPort,
-							});
-							resolve();
-						});
-				})
-				.catch((repoError) => {
-					clearOpening();
-					console.log(repoError);
-				});
-		});
+		stopWaitingForProject = loadedProject.subscribe(
+			(project) => project && resolve(project),
+		);
+		readConfig().then(openScratchpad);
 	});
+	// Starts the listener on the configured address.
+	function startListener() {
+		return StartProxy($marasiConfig.DefaultAddress, $marasiConfig.DefaultPort)
+			.then(() => {
+				listener.set({
+					status: true,
+					address: $marasiConfig.DefaultAddress,
+					port: $marasiConfig.DefaultPort,
+				});
+			})
+			.catch((listenerError) => {
+				listener.set({
+					status: false,
+					address: $marasiConfig.DefaultAddress,
+					port: $marasiConfig.DefaultPort,
+				});
+			});
+	}
 	// The state menu contexts and the shortcut gate are resolved against.
 	function shortcutState() {
 		return {
@@ -256,14 +249,15 @@
 		// The open in progress takes its steps from the backend's log events.
 		EventsOn("log", feedOpeningLog);
 		autoModeWatcher();
-		StartupRoutine2.then(() => {
-			WindowSetTitle("scratchpad");
-			activeProject.set("scratchpad");
-			// The opening screen stays up while the scratchpad loads, so it
-			// can say which part is loading.
-			const loaded = openProject().catch((err) =>
-				console.error("Loading the scratchpad failed:", err),
-			);
+		StartupRoutine2.then((project) => {
+			stopWaitingForProject();
+			// The project that opened, which may not be the scratchpad, names
+			// the window and the app's project, as a switch does.
+			WindowSetTitle(project.name);
+			activeProject.set(project.name);
+			$appState.started = true;
+			$appState.isReady = true;
+			startListener();
 			if ($marasiConfig.FirstRun) {
 				const modal = {
 					type: "component",
@@ -278,11 +272,6 @@
 				}
 			}
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
-			loaded.then(() => {
-				$appState.started = true;
-				$appState.isReady = true;
-				finishOpening();
-			});
 			// The rail navigates by click, so nothing preloads the Ledger's
 			// code on hover; load it now, so the first visit renders at once.
 			preloadCode("/ledger").catch((err) =>
@@ -938,7 +927,7 @@
 	<div class="fixed inset-0 z-[998] overflow-auto bg-surface-50-900-token">
 		<OpeningScreen
 			state={$opening}
-			on:stay={clearOpening}
+			on:stay={stayInOpening}
 			on:retry={retryOpen}
 			on:open={(event) => openProjectFile(event.detail, toastStore)}
 			on:browse={() =>

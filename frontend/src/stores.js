@@ -24,6 +24,7 @@ import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
 import {
   openingFor,
+  openingScreen,
   withFailed,
   withLoadPart,
   withOpened,
@@ -124,12 +125,20 @@ const openProjectPath = writable(null);
  */
 export const pagesKey = writable(0);
 /**
+ * The project last opened and loaded, `{name, path}`, or null until the
+ * first one has: startup carries on once it's set.
+ */
+export const loadedProject = writable(null);
+/**
  * Starts the opening screen's state for opening `name` at `path` (null when
- * only a bare name is known), with `currentProject` the project open now.
+ * only a bare name is known), with `currentProject` the project open now
+ * (null at startup). `scratchpad` marks startup's open of the scratchpad.
  * An opening screen that's up stays up for the new open.
  */
-export function startOpening({ name, path = null, currentProject = null }) {
-  opening.set(openingFor({ name, path, currentProject, currentPath: currentProject && get(openProjectPath) }));
+export function startOpening({ name, path = null, currentProject = null, scratchpad = false }) {
+  opening.set(
+    openingFor({ name, path, currentProject, currentPath: currentProject && get(openProjectPath), scratchpad }),
+  );
 }
 /** Shows the opening screen for the open in progress. */
 export function showOpening() {
@@ -144,12 +153,27 @@ export function switchOpening() {
   opening.update((state) => state && withSwitched(state));
   openProjectPath.set(get(opening)?.path ?? null);
 }
-/** Records that the open in progress succeeded, and closes the screen. */
+/**
+ * Records that the open in progress succeeded, and closes the screen.
+ * Returns the project that opened, `{name, path}`.
+ */
 export function finishOpening() {
   const state = get(opening);
-  // At startup nothing switched; the scratchpad's path came from its log.
-  if (state) openProjectPath.set(withOpened(state).path);
+  const opened = state && openingScreen(withOpened(state)).opened;
   clearOpening();
+  if (!opened) return null;
+  openProjectPath.set(opened.path);
+  loadedProject.set(opened);
+  return opened;
+}
+/**
+ * Stays in the project still open after a failed open, and closes the
+ * screen. When the target opened but didn't load, that's the target.
+ */
+export function stayInOpening() {
+  const state = get(opening);
+  clearOpening();
+  if (state?.currentProject) loadedProject.set({ name: state.currentProject, path: state.currentPath });
 }
 /**
  * Records that the open in progress failed with `error`, and shows the

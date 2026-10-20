@@ -3,20 +3,20 @@ import test from "node:test";
 import vm from "node:vm";
 import { normalizeListenerStartup } from "./listener-startup.mjs";
 
-const startup = `const StartupRoutine2 = new Promise(resolve => {
- SetupScratchpad().then(() => {
-  StartProxy($marasiConfig.DefaultAddress, $marasiConfig.DefaultPort).then(() => {
-   listener.set({status: true}); resolve();
-  }).catch(() => {listener.set({status: false}); resolve();});
- });
-});`;
+// The layout's shape: startup waits for the first project to open, then
+// starts the listener on the configured address.
+const startup = `const StartupRoutine2 = new Promise(resolve => resolve({name: "scratchpad"}));
+function startListener() {
+ return StartProxy($marasiConfig.DefaultAddress, $marasiConfig.DefaultPort).then(() => {
+  listener.set({status: true});
+ }).catch(() => {listener.set({status: false});});
+}`;
 
 async function run(startError, updateError) {
 	const calls = [];
 	let state;
 	const context = {
 		$marasiConfig: { DefaultAddress: "127.0.0.1", DefaultPort: "18080" },
-		SetupScratchpad: async () => {},
 		StartProxy: async (...args) => {
 			calls.push(["start", ...args]);
 			if (startError) throw startError;
@@ -28,7 +28,7 @@ async function run(startError, updateError) {
 		listener: { set: value => { state = value; } },
 		console: { info() {} },
 	};
-	await vm.runInNewContext(normalizeListenerStartup(startup).body + "\nStartupRoutine2;", context);
+	await vm.runInNewContext(normalizeListenerStartup(startup).body + "\nStartupRoutine2.then(startListener);", context);
 	return { calls, online: state.status };
 }
 

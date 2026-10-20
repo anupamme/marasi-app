@@ -3,6 +3,7 @@ import { goto } from "$app/navigation";
 import { get } from "svelte/store";
 import {
 	OpenProject,
+	SetupScratchpad,
 	StartProxy,
 	UpdateProxy,
 	DownloadCert,
@@ -65,33 +66,59 @@ let lastOpen = null;
  * open and the load, if it takes longer than openingDelay, and always when
  * it fails. The open project and the app's pages stay as they were unless
  * the target's database opens. The layout feeds the screen the open's log
- * events (see lib/openProgress.js).
+ * events (see lib/openProgress.js). Resolves to the project that opened,
+ * `{name, path}`, or null.
  */
-export async function openProjectFile(r, toastStore) {
-	lastOpen = { r, toastStore };
+export function openProjectFile(r, toastStore) {
+	lastOpen = () => openProjectFile(r, toastStore);
 	const parts = String(r).split(/[\\/]/);
-	const projectName = parts.pop().replace(/\.marasi$/, "");
-	startOpening({
-		name: projectName,
+	return openWithScreen({
+		name: parts.pop().replace(/\.marasi$/, ""),
 		// A bare name (a new project) has no path until its database opens.
 		path: parts.length > 0 ? String(r) : null,
-		currentProject: get(activeProject),
+		open: () => OpenProject(r),
+		toastStore,
 	});
+}
+
+/**
+ * Opens the scratchpad at startup, with the opening screen up from the
+ * start, as nothing is open yet. Resolves like openProjectFile.
+ */
+export function openScratchpad() {
+	lastOpen = openScratchpad;
+	const name = "scratchpad";
+	return openWithScreen({
+		name,
+		scratchpad: true,
+		open: () => SetupScratchpad().then(() => name),
+	});
+}
+
+// Runs `open` (Go's open, resolving to the project's name) and loads the
+// project, with the opening screen for `name` at `path`. A toastStore
+// announces the open.
+async function openWithScreen({ name: target, path = null, scratchpad = false, open, toastStore = null }) {
+	// Before the first project has loaded, nothing is open to stay in.
+	const currentProject = get(appState).started ? get(activeProject) : null;
+	startOpening({ name: target, path, currentProject, scratchpad });
 	appState.update((s) => ({ ...s, isReady: false }));
+	// With nothing open there's nothing else to show, so the screen is up at once.
+	if (currentProject === null) showOpening();
 	const showTimer = setTimeout(showOpening, openingDelay);
 	let name;
 	try {
-		name = await OpenProject(r);
+		name = await open();
 	} catch (repoError) {
 		clearTimeout(showTimer);
 		appState.update((s) => ({ ...s, isReady: true }));
 		// Cancelled at the unsaved-work prompt: nothing to show.
 		if (String(repoError).includes("project switch cancelled")) {
 			clearOpening();
-			return;
+			return null;
 		}
 		failOpening(repoError);
-		return;
+		return null;
 	}
 	switchOpening();
 	activeProject.set(name);
@@ -102,23 +129,27 @@ export async function openProjectFile(r, toastStore) {
 	} catch (loadError) {
 		clearTimeout(showTimer);
 		failOpening(loadError);
-		return;
+		return null;
 	} finally {
 		// The pages mount afresh on the new project's stores.
 		pagesKey.update((key) => key + 1);
 		appState.update((s) => ({ ...s, isReady: true }));
 	}
 	clearTimeout(showTimer);
-	finishOpening();
-	toastStore.trigger({
+	const opened = finishOpening();
+	toastStore?.trigger({
 		message: "Opened " + name + " project",
 		background: "variant-filled-success",
 	});
+	return opened;
 }
 
-/** Re-runs the last open, for the opening screen's Try again. */
+/**
+ * Re-runs the last open, for the opening screen's Try again: at startup,
+ * the scratchpad until a project is picked.
+ */
 export function retryOpen() {
-	if (lastOpen) openProjectFile(lastOpen.r, lastOpen.toastStore);
+	lastOpen?.();
 }
 
 export function projectModal(toastStore) {

@@ -34,12 +34,14 @@ const partOfSignal = new Map(loadParts.flatMap(({ signals }, i) => signals.map((
 /**
  * Starts the state for opening the project `name` at `path` (null while the
  * full path is unknown). `currentProject` names the project open now, or is
- * null at startup; `currentPath` is its path, when known.
+ * null at startup; `currentPath` is its path, when known. `scratchpad`
+ * marks the scratchpad, which startup opens first.
  */
-export function openingFor({ name, path = null, currentProject = null, currentPath = null }) {
+export function openingFor({ name, path = null, currentProject = null, currentPath = null, scratchpad = false }) {
   return {
     name,
     path,
+    scratchpad,
     currentProject,
     currentPath,
     recents: [],
@@ -193,12 +195,17 @@ export function openingScreen(state) {
   const loading = !failure && state.step === stepIndex.load;
   const part = loading ? loadParts[state.part].label : null;
   let sentence = "Opened.";
-  if (failure?.kind === "locked") sentence = "Open in another Marasi.";
+  if (failure?.kind === "locked") {
+    sentence = state.scratchpad ? "The scratchpad is open in another Marasi." : "Open in another Marasi.";
+  }
   else if (failure) sentence = "Couldn't open the project.";
   else if (loading) sentence = `Loading ${part.toLowerCase()}.`;
   else if (state.step < opened) sentence = openSteps[state.step].sentence;
   return {
     project: { name: state.name, path: state.path },
+    // The project that opened, once the open succeeded: what startup and
+    // the window title take the project's name from.
+    opened: state.step === opened ? { name: state.name, path: state.path } : null,
     steps,
     sentence,
     upgrade:
@@ -214,6 +221,9 @@ export function openingScreen(state) {
     // Stay in names the project still open, if any; only a locked project
     // may open on a retry, once the other Marasi lets it go.
     actions: failure ? { stayIn: state.currentProject, tryAgain: failure.kind === "locked" } : null,
+    // With no project open (at startup) there's nothing to stay in, so the
+    // list is the way forward.
+    choicesLabel: state.currentProject === null ? "Open a project instead" : "Open another project",
     // The projects to open instead, most recent first: the first is the
     // one picked by default. The target and the open project aren't
     // choices.

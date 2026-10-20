@@ -247,3 +247,44 @@ test("an open in progress has no failure and offers no actions", () => {
   assert.equal(openingScreen(acme()).failure, null);
   assert.equal(openingScreen(acme()).actions, null);
 });
+
+// At startup nothing is open yet, and the app opens the scratchpad first.
+const scratchpad = () => openingFor({ name: "scratchpad", scratchpad: true });
+const lockedScratchpad = `opening project: project_locked: project already open: ${cfg}/scratchpad.marasi`;
+
+test("a locked scratchpad at startup says the scratchpad is open in another Marasi, offers Try again but no Stay in, and a project instead", () => {
+  const state = withRecents(withFailed(scratchpad(), lockedScratchpad), recentProjects);
+  const screen = openingScreen(state);
+
+  assert.deepEqual(marks(state), ["Locked:failed", "Open:todo", "Upgrade:todo", "Load:todo"]);
+  assert.equal(screen.sentence, "The scratchpad is open in another Marasi.");
+  assert.deepEqual(screen.actions, { stayIn: null, tryAgain: true });
+  assert.equal(screen.choicesLabel, "Open a project instead");
+  assert.deepEqual(names(state), ["acme-portal", "ai-sec", "build", "car"]);
+});
+
+test("any other scratchpad failure at startup says it couldn't open, with the same list and neither Stay in nor Try again", () => {
+  const state = withFailed(replay(scratchpad(), [db("Connecting to SQLite...")]), "file is not a database (26)");
+  const screen = openingScreen(state);
+
+  assert.equal(screen.sentence, "Couldn't open the project.");
+  assert.deepEqual(screen.actions, { stayIn: null, tryAgain: false });
+  assert.equal(screen.choicesLabel, "Open a project instead");
+});
+
+test("at startup, a project picked after a locked scratchpad is the one reported as opened, not the scratchpad", () => {
+  const failed = withRecents(withFailed(scratchpad(), lockedScratchpad), recentProjects);
+  const picked = openingScreen(failed).choices[0];
+  assert.equal(openingScreen(failed).opened, null);
+
+  // The picked project opens like any other, with nothing open before it.
+  const opening = openingFor({ name: picked.name, path: picked.path });
+  assert.equal(openingScreen(opening).opened, null);
+  const state = withOpened(withSwitched(replay(opening, upToDate)));
+
+  assert.deepEqual(openingScreen(state).opened, { name: "acme-portal", path: `${cfg}/acme-portal.marasi` });
+});
+
+test("with a project open, the list offers another project", () => {
+  assert.equal(openingScreen(withFailed(acme(), lockedError)).choicesLabel, "Open another project");
+});

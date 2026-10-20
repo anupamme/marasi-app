@@ -121,7 +121,7 @@
 					<ProgressBar {...bar} value={screen.load.done} max={screen.load.total} />
 				</div>
 			{:else if screen.failure}
-				<p class="mt-4 text-xs opacity-60">Open another project</p>
+				<p class="mt-4 text-xs opacity-60">{screen.choicesLabel}</p>
 				<ul class="mt-1 border-y border-surface-300 dark:border-surface-600">
 					{#each screen.choices as choice (choice.path)}
 						<li>

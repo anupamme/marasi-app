@@ -54,7 +54,10 @@
 	export let y = 0;
 	/** The selected pairs, in table order. */
 	export let pairs = [];
-	/** What the menu lists besides the pairs: see menuFor in rowMenu.js. */
+	/**
+	 * What the menu lists besides the pairs (see menuFor in rowMenu.js), plus
+	 * `numberOf(pair)` for the numbers in the header.
+	 */
 	export let context = {};
 	/** The items, when not the Ledger's menuFor(pairs, context). */
 	export let items = null;

@@ -92,6 +92,10 @@ func (a *App) attachExtensionHooks(ext *extensions.Runtime) error {
 	return nil
 }
 
+// LoadExtensions does not load extensions: the project lifecycle does that
+// when a project opens. It sets the listeners for the two events extension
+// UIs send, extension_call_function and extension_sync_state, which call
+// into the open project's extensions. The frontend calls it after each open.
 func (a *App) LoadExtensions() error {
 	runtime.EventsOff(a.ctx, "extension_sync_state")
 	runtime.EventsOff(a.ctx, "extension_call_function")

@@ -21,6 +21,9 @@ import (
 //   - installing: update_install.go (the shared pipeline), update_verify.go,
 //     update_reinstall.go, and the per-platform update_install_*.go,
 //     update_platform_*.go and update_relaunch_*.go.
+//
+// build_info.go holds the running build and the signing key, which
+// .github/workflows/build.yml sets with -ldflags.
 
 // defaultReleaseSource is the GitHub releases API of the Marasi App
 // repository. App.releaseSource holds it so tests can serve releases from a

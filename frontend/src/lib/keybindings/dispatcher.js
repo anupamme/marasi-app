@@ -103,8 +103,9 @@ export function createDispatcher({ catalog, platform, overrides = {}, keybinding
   // event is one of that action's current bindings (looked up by id, so it
   // works wherever the modal was opened from), and no eligible menu action
   // with a live handler claims the event. A menu context the modal itself
-  // provides is more specific than the action that opened it, so the
-  // WebSocket Inject tab keeps ⌘⇧O for Cycle Inject Opcode.
+  // provides is more specific than the action that opened it: when the
+  // opener's key is also bound in the modal's open tab, the key runs that
+  // tab's action and the modal stays open.
   function isModalToggle(event, actionId, state) {
     const binding = bindingFromEvent(event);
     if (!binding || !keymap.bindingsFor(actionId).includes(binding)) return false;

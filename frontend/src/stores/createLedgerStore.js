@@ -1838,7 +1838,8 @@ export function createLedgerStore(api) {
   };
 
   /**
-   * Gives the pairs with these IDs highlight `number` (1-8), or clears their
+   * Gives the pairs of `target` (a selection in Marasi's shape, or an array
+   * of pair IDs) highlight `number` (1-8), or clears their
    * highlights when it is null, in one bulk call. Marasi emits no event for
    * it, so the loaded rows are repainted here, in place: none move, even
    * when they no longer match the query. Resolves to the number of pairs

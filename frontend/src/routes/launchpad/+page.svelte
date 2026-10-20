@@ -190,7 +190,9 @@
         if (selectedEntryIds(get(launchpadStore)).length) entryMenu = { open: true, x, y };
     }
 
-    // Runs a menu item's action on the Entry selection.
+    // Runs a menu item's action on the Entry selection. Any type other than
+    // remove and browser-view is taken as a move or reorder (entryMenuFor),
+    // so a new type needs its own branch above that.
     async function runEntryAction(action) {
         const state = get(launchpadStore);
         const sourceId = state.entrySelection.launchpadId;

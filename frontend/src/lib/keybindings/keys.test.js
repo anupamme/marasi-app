@@ -72,18 +72,22 @@ test("modifier-only and composition events are not bindings", () => {
   assert.equal(bindingFromEvent(event("Process", "KeyK", { keyCode: 229 })), null);
 });
 
-test("bindings display in the palette's existing notation for each platform", () => {
-  assert.equal(formatBinding("meta+shift+f", "macos"), "⌘+⇧+F");
-  assert.equal(formatBinding("ctrl+shift+f", "windows-linux"), "ctrl+⇧+F");
-  assert.equal(formatBinding("meta+alt+1", "macos"), "⌘+⌥+1");
-  assert.equal(formatBinding("ctrl+alt+1", "windows-linux"), "ctrl+alt+1");
-  assert.equal(formatBinding("meta+shift+enter", "macos"), "⌘+⇧+↩");
-  assert.equal(formatBinding("ctrl+shift+enter", "windows-linux"), "ctrl+⇧+enter");
-  assert.equal(formatBinding("meta+shift+arrowdown", "macos"), "⌘+⇧+↓");
-  assert.equal(formatBinding("alt+arrowup", "macos"), "⌥+↑");
-  assert.equal(formatBinding("alt+shift+arrowdown", "macos"), "⌥+⇧+↓");
-  assert.equal(formatBinding("ctrl+arrowleft", "windows-linux"), "ctrl+left");
-  assert.equal(formatBinding("meta+`", "macos"), "⌘+`");
+test("bindings display as key glyphs with no separator on every platform", () => {
+  assert.equal(formatBinding("meta+shift+f", "macos"), "⌘⇧F");
+  assert.equal(formatBinding("ctrl+shift+f", "windows-linux"), "⌃⇧F");
+  assert.equal(formatBinding("meta+alt+1", "macos"), "⌘⌥1");
+  assert.equal(formatBinding("ctrl+alt+1", "windows-linux"), "⌃⌥1");
+  assert.equal(formatBinding("ctrl+alt+arrowdown", "macos"), "⌃⌥↓");
+  assert.equal(formatBinding("meta+shift+enter", "macos"), "⌘⇧↩");
+  assert.equal(formatBinding("ctrl+shift+enter", "windows-linux"), "⌃⇧↩");
+  assert.equal(formatBinding("meta+shift+arrowdown", "macos"), "⌘⇧↓");
+  assert.equal(formatBinding("alt+arrowup", "macos"), "⌥↑");
+  assert.equal(formatBinding("alt+shift+arrowdown", "macos"), "⌥⇧↓");
+  assert.equal(formatBinding("ctrl+arrowleft", "windows-linux"), "⌃←");
+  assert.equal(formatBinding("meta+k", "windows-linux"), "⊞K");
+  assert.equal(formatBinding("meta+plus", "macos"), "⌘+");
+  assert.equal(formatBinding("ctrl+f5", "windows-linux"), "⌃F5");
+  assert.equal(formatBinding("meta+`", "macos"), "⌘`");
 });
 
 test("an action's shortcut label is its first binding in the live keymap, or blank", () => {
@@ -91,7 +95,7 @@ test("an action's shortcut label is its first binding in the live keymap, or bla
     platform: "macos",
     bindingsFor: (id) => ({ "a.note": ["meta+n", "meta+shift+n"] })[id] ?? [],
   };
-  assert.equal(shortcutLabel(keymap, "a.note"), "⌘+N");
+  assert.equal(shortcutLabel(keymap, "a.note"), "⌘N");
   assert.equal(shortcutLabel(keymap, "a.unbound"), "");
   assert.equal(shortcutLabel(keymap, undefined), "");
 });

@@ -100,7 +100,7 @@
 >
 	<input
 		id="commandmenu"
-		class="input w-full h-12 text-lg px-4"
+		class="input w-full h-9 text-sm px-3"
 		type="search"
 		bind:value={commandInput}
 		placeholder="Search..."

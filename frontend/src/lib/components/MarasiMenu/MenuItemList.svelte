@@ -129,7 +129,7 @@
 						<button
 							tabindex="0"
 							class="flex items-center justify-between w-full
-				border-l-4 border-primary-500 px-3 py-2"
+				border-l-4 border-primary-500 px-3 py-1.5 text-sm"
 							on:click={() => {
 								onSelection(option);
 							}}
@@ -141,13 +141,13 @@
 										this={option.icon.component ||
 											option.icon}
 										{...option.icon.props || {}}
-										class="h-4 w-4"
+										class="h-3.5 w-3.5"
 									/>
 								{/if}
 
 								<div class="flex flex-col text-left">
 									<span>{option.name}</span>
-									<span class="text-sm opacity-70"
+									<span class="text-xs opacity-70"
 										>{option.subtitle}</span
 									>
 								</div>
@@ -158,7 +158,7 @@
 								{#if option.actionId}
 									{#each $menuDispatcher.bindingsFor(option.actionId) as binding}
 										<kbd
-											class="kbd text-surface-400 text-sm"
+											class="kbd text-surface-400 text-xs"
 											>{formatBinding(
 												binding,
 												$menuDispatcher.platform,

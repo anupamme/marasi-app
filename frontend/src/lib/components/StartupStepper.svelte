@@ -19,8 +19,8 @@
             <Step regionHeader="!text-base">
                 <svelte:fragment slot="header">Welcome to Marasi!</svelte:fragment>
                 <p>Let us get started with some basic concepts</p>
-                <!-- <p>You can press <kbd class="kbd">⌘ + ?</kbd> at any time to access this guide</p> -->
-                <p>You can press <kbd class="kbd">⌘ + K</kbd> at any time to open the command menu</p>
+                <!-- <p>You can press <kbd class="kbd">⌘?</kbd> at any time to access this guide</p> -->
+                <p>You can press <kbd class="kbd">⌘K</kbd> at any time to open the command menu</p>
             </Step>
             <Step regionHeader="!text-base">
                 <svelte:fragment slot="header">Startup</svelte:fragment>
@@ -31,10 +31,10 @@
                         <li><span>2.</span><span class="flex-auto">Configure the default listener on <code class="code">127.0.0.1:8080</code></span></li>
                     </ol>
                     <p>Think of the scratchpad as a not quite temporary, temporary project file!</p>
-                    <p>You can press <kbd class="kbd">⌘ + O</kbd> at any point, or click on the Open Project button to switch to another project</p>
+                    <p>You can press <kbd class="kbd">⌘O</kbd> at any point, or click on the Open Project button to switch to another project</p>
                     <img src="/project.gif"/>
                     <hr>
-                    <p>You can press <kbd class="kbd">⌘ + L</kbd> at any point, or click on the listener button to reconfigure your listener </p>
+                    <p>You can press <kbd class="kbd">⌘L</kbd> at any point, or click on the listener button to reconfigure your listener </p>
                     <p>The indicator on the button will let you know if the listener is active</p>
                     <img src="/listener.gif"/>
                 </div>
@@ -44,7 +44,7 @@
                 <p>Marasi supports both forward proxy configurations as well as transparent proxies</p>
                 <p>Once the proxy is configured on an application / device, navigate to <code class="code">marasi/cert</code> to download your certificate</p>
                 <p>Otherwise you can get it from your config directory</p>
-                <p>If you have Chrome instaled, you can press<kbd class="kbd">⌘ + `</kbd> at any point to open a preconfigured Chrome profile that will whitelist your certificate</p>
+                <p>If you have Chrome instaled, you can press<kbd class="kbd">⌘`</kbd> at any point to open a preconfigured Chrome profile that will whitelist your certificate</p>
             </Step>
             <Step regionHeader="!text-base">
                 <svelte:fragment slot="header">Marasi Features</svelte:fragment>

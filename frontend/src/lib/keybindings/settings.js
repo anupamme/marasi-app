@@ -1,7 +1,7 @@
 import { slugify } from "./catalog.js";
 import { contextsConflict } from "./contexts.js";
 import { isReservedBinding, reservedBindingProblem } from "./gate.js";
-import { bindingFromEvent, formatBinding, normalizeBinding } from "./keys.js";
+import { bindingFromEvent, bindingLabelParts, formatBinding, normalizeBinding } from "./keys.js";
 import { OPEN_MENU } from "./keymap.js";
 import { PLATFORM_NAMES } from "./platform.js";
 import {
@@ -364,11 +364,13 @@ function unavailableRows(catalog, profile, platform) {
   return byGroup;
 }
 
-function matches(row, group, query) {
+function matches(row, group, query, platform) {
   const words = query.toLowerCase().split(/\s+/).filter(Boolean);
   if (!words.length) return true;
   const { action, bindings, display } = row;
-  const text = [action.label, action.description, action.keywords, group.page, group.state, row.note, ...bindings, ...display]
+  // Labels drop the "+", but a search for "⌘+2" still finds ⌘2.
+  const separated = bindings.map((binding) => bindingLabelParts(binding, platform).join("+"));
+  const text = [action.label, action.description, action.keywords, group.page, group.state, row.note, ...bindings, ...display, ...separated]
     .filter(Boolean)
     .join(" ")
     .toLowerCase();
@@ -570,7 +572,7 @@ export function browse({ catalog, profile, platform, query = "", filter = "all" 
     });
     all.push(...(unavailable.get(group.id)?.rows ?? []));
     const items = all.filter(
-      (row) => matches(row, group, query) && (filter === "all" || row.status === filter),
+      (row) => matches(row, group, query, platform) && (filter === "all" || row.status === filter),
     );
     return {
       id: group.id,

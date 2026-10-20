@@ -361,7 +361,7 @@ test("a customized extension action shows as unavailable, keeping its bindings, 
   assert.equal(send.row.status, "unavailable");
   assert.equal(send.row.available, false);
   assert.deepEqual(send.row.bindings, ["meta+shift+j"]);
-  assert.deepEqual(send.row.display, ["⌘+⇧+J"]);
+  assert.deepEqual(send.row.display, ["⌘⇧J"]);
   assert.equal(send.row.note, "Extension unavailable");
   assert.equal(send.group.state, "Extension unavailable");
 
@@ -483,9 +483,9 @@ test("a more-specific binding that shadows a global one is shown as shadowing on
 
   assert.equal(all.conflictCount, 0);
   assert.equal(rowOf(all, "ledger.drawer-closed.focus-query").status, "shadowing");
-  assert.equal(rowOf(all, "ledger.drawer-closed.focus-query").problem, "⌘+1 shadows Marasi (Global) here");
+  assert.equal(rowOf(all, "ledger.drawer-closed.focus-query").problem, "⌘1 shadows Marasi (Global) here");
   assert.equal(rowOf(all, "global.go-home").status, "shadowing");
-  assert.equal(rowOf(all, "global.go-home").problem, "⌘+1 is shadowed by Search in Ledger · Drawer closed");
+  assert.equal(rowOf(all, "global.go-home").problem, "⌘1 is shadowed by Search in Ledger · Drawer closed");
   assert.deepEqual(view({ profile: draft.profiles[0], filter: "conflict" }).groups.flatMap(ids), []);
 });
 
@@ -500,8 +500,8 @@ test("an unbound or shadowed Open Marasi Menu is a conflict on the rows involved
 
   const shadowed = view({ profile: addBinding(withExtension, fresh, search, "meta+k").profiles[0] });
   assert.equal(shadowed.conflictCount, 2);
-  assert.equal(rowOf(shadowed, "global.open-menu").problem, "⌘+K is shadowed by Search in Ledger · Drawer closed; the menu must open everywhere");
-  assert.equal(rowOf(shadowed, "ledger.drawer-closed.focus-query").problem, "⌘+K would shadow Open Marasi Menu, which must open everywhere");
+  assert.equal(rowOf(shadowed, "global.open-menu").problem, "⌘K is shadowed by Search in Ledger · Drawer closed; the menu must open everywhere");
+  assert.equal(rowOf(shadowed, "ledger.drawer-closed.focus-query").problem, "⌘K would shadow Open Marasi Menu, which must open everywhere");
 });
 
 test("a duplicate across overlapping contexts names the other action's context", () => {
@@ -520,8 +520,8 @@ test("a duplicate across overlapping contexts names the other action's context",
   const stream = { ...home, actionId: "ledger.drawer-open.websocket.stream" };
   const draft = addBinding(overlapping, openDraft(saved([profile("default", "Default")]), overlapping), stream, "meta+e");
   const result = browse({ catalog: overlapping, profile: draft.profiles[0], platform: MACOS });
-  assert.equal(rowOf(result, "ledger.drawer-open.websocket.stream").problem, "⌘+E is also bound to Close in Ledger · Drawer open");
-  assert.equal(rowOf(result, "ledger.drawer-open.close").problem, "⌘+E is also bound to Open Stream in Ledger · WebSocket drawer");
+  assert.equal(rowOf(result, "ledger.drawer-open.websocket.stream").problem, "⌘E is also bound to Close in Ledger · Drawer open");
+  assert.equal(rowOf(result, "ledger.drawer-open.close").problem, "⌘E is also bound to Open Stream in Ledger · WebSocket drawer");
 });
 
 test("save problems cover every profile and platform and say where each one is", () => {
@@ -537,7 +537,7 @@ test("save problems cover every profile and platform and say where each one is",
       platform: WINDOWS_LINUX,
       groupId: "global",
       actionId: "global.go-home",
-      message: "Other · Windows / Linux · Global · Marasi: ctrl+2 is also bound to Ledger",
+      message: "Other · Windows / Linux · Global · Marasi: ⌃2 is also bound to Ledger",
     },
   ]);
 
@@ -546,7 +546,7 @@ test("save problems cover every profile and platform and say where each one is",
   assert.deepEqual(
     problems.map((p) => p.message),
     [
-      "Other · Windows / Linux · Global · Marasi: ctrl+2 is also bound to Ledger",
+      "Other · Windows / Linux · Global · Marasi: ⌃2 is also bound to Ledger",
       "Default · macOS · Global · Open Marasi Menu: The Marasi menu must have a binding",
     ],
     "the variant on screen comes first",

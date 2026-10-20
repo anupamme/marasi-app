@@ -199,27 +199,29 @@ export function isModifiedBinding(binding) {
   return /^(meta|ctrl|alt)\+/.test(binding);
 }
 
-// Display labels keep the palette's notation ("⌘+⇧+F", "ctrl+alt+1",
-// "⌘+⇧+↩", "ctrl+⇧+enter"). macOS shows its key glyphs: ⌥ for alt and
-// arrows as ↑ ↓ ← → ("⌥+⇧+↓"); other platforms spell them ("ctrl+left").
-const MODIFIER_LABELS = {
-  [MACOS]: { meta: "⌘", ctrl: "ctrl", alt: "⌥", shift: "⇧" },
-  default: { meta: "meta", ctrl: "ctrl", alt: "alt", shift: "⇧" },
-};
+// Display labels are key glyphs with no separator ("⌘⇧F", "⌃⌥1", "⌘⇧↩",
+// "⌥⇧↓") on every platform. Only meta differs: ⌘ on macOS, ⊞ (the Windows
+// key) elsewhere. Named keys without a glyph are capitalized ("⌃F5",
+// "⌘Space").
+const MODIFIER_LABELS = { ctrl: "⌃", alt: "⌥", shift: "⇧" };
+const META_LABELS = { [MACOS]: "⌘", default: "⊞" };
 
-const KEY_LABELS = {
-  [MACOS]: { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", enter: "↩", plus: "+" },
-  default: { arrowup: "up", arrowdown: "down", arrowleft: "left", arrowright: "right", plus: "+" },
-};
+const KEY_LABELS = { arrowup: "↑", arrowdown: "↓", arrowleft: "←", arrowright: "→", enter: "↩", plus: "+" };
 
-export function formatBinding(binding, platform) {
-  if (!binding) return "";
+// The label of each part of a binding, modifiers first then the key.
+export function bindingLabelParts(binding, platform) {
+  if (!binding) return [];
   const parts = binding.split("+");
   const key = parts.pop();
-  const labels = MODIFIER_LABELS[platform] ?? MODIFIER_LABELS.default;
-  let keyLabel = (KEY_LABELS[platform] ?? KEY_LABELS.default)[key] ?? key;
+  const modifier = (m) =>
+    m === "meta" ? (META_LABELS[platform] ?? META_LABELS.default) : (MODIFIER_LABELS[m] ?? m);
+  let keyLabel = KEY_LABELS[key] ?? key[0].toUpperCase() + key.slice(1);
   if (isSingleCharacter(key)) keyLabel = key.toUpperCase();
-  return [...parts.map((m) => labels[m] ?? m), keyLabel].join("+");
+  return [...parts.map(modifier), keyLabel];
+}
+
+export function formatBinding(binding, platform) {
+  return bindingLabelParts(binding, platform).join("");
 }
 
 /**

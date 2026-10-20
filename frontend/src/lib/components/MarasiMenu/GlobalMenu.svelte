@@ -55,7 +55,7 @@
 		copyCertificate,
 		downloadCertificate,
 		listenerModal,
-		projectModal,
+		openProjectPicker,
 	} from "../../globalActions.js";
 	import { menuDispatcher } from "../../keybindings/app.js";
 	import {
@@ -105,7 +105,11 @@
 			document.querySelector("dialog[open]")?.close();
 			action?.response();
 		},
-		"global.open-project": () => toggleModal(projectModal(toastStore)),
+		"global.open-project": () => {
+			const top = get(modalStore)[0];
+			if (!top) openProjectPicker(toastStore, modalStore);
+			else if (top.toggleAction === "global.open-project") modalStore.close();
+		},
 		"global.setup-listener": () => toggleModal(listenerModal(toastStore)),
 		"global.toggle-vim": () =>
 			ToggleFlag("vim_enabled").then((config) =>

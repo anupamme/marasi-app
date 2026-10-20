@@ -11,6 +11,7 @@ How the app starts, opens the scratchpad, and switches to another project, acros
 
 ## Opening and switching
 
+- **Held Checkpoint items.** A switch is refused while Checkpoint holds an item, because Marasi would wait for it with nothing on screen to say so, or drop it when a launch holds it. `openProjectPicker` in `globalActions.js` shows the refusal (`checkpointHeld.js`) in place of the project picker. `OpenProject` also refuses with `checkpoint_held` (`checkpointHeldError`) for an item held after the picker opened, and `openWithScreen` shows the same refusal.
 - **Go.** `OpenProject` confirms losing unsaved work, emits `project-opening`, opens through `App.projects` (marasi's `service.ProjectLifecycle`), then runs `prepareOpenedProject`. A project another Marasi owns fails with `project_locked` (`openProjectError`).
 - **Opening screen.** `openWithScreen` waits for `project-opening` with `EventsOnce`, then shows the screen after `openingDelay`, so a quick switch never shows it. Its state lives in the `opening` store, its transitions in the `*Opening` functions of `stores.js`, and its pure logic in `frontend/src/lib/openProgress.js`, drawn by `OpeningScreen.svelte`. Progress comes from Marasi's `log` events (`feedOpeningLog` → `withOpenLog`) and from the parts `openProject` reports (`loadSignals`).
 - **Pages.** Routes stay mounted under the screen. `openWithScreen` bumps `pagesKey` once `openProject` has loaded, which remounts them for the new project.

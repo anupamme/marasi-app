@@ -9,9 +9,11 @@ import {
 	UpdateProxy,
 	DownloadCert,
 	CopyCertToClipboard,
+	GetCheckpointItems,
 } from "./wailsjs/go/main/App";
 import { EventsOnce, WindowSetTitle } from "./wailsjs/runtime/runtime";
 import { projectName } from "./openProgress.js";
+import { checkpointHeldModal, heldCheckpointIDs } from "./checkpointHeld.js";
 import {
 	activeProject,
 	appState,
@@ -71,11 +73,12 @@ let scratchpadPath = null;
  * the unsaved-work prompt, and always when it fails. The open project and
  * the app's pages stay as they were unless the target's database opens.
  * The layout feeds the screen the open's log events (see
- * lib/openProgress.js). Resolves to the project that opened, `{name,
- * path}`, or null.
+ * lib/openProgress.js). A switch refused over held Checkpoint items opens
+ * a modal on modalStore instead. Resolves to the project that opened,
+ * `{name, path}`, or null.
  */
-export function openProjectFile(r, toastStore) {
-	lastOpen = () => openProjectFile(r, toastStore);
+export function openProjectFile(r, toastStore, modalStore) {
+	lastOpen = () => openProjectFile(r, toastStore, modalStore);
 	const isPath = /[\\/]/.test(String(r));
 	return openWithScreen({
 		name: projectName(r),
@@ -85,6 +88,7 @@ export function openProjectFile(r, toastStore) {
 		scratchpad: isPath && String(r) === scratchpadPath,
 		open: () => OpenProject(r),
 		toastStore,
+		modalStore,
 	});
 }
 
@@ -106,8 +110,9 @@ export async function openScratchpad() {
 
 // Runs `open` (Go's open, resolving to the project's name) and loads the
 // project, with the opening screen for `name` at `path`. A toastStore
-// announces the open.
-async function openWithScreen({ name: target, path = null, scratchpad = false, open, toastStore = null }) {
+// announces the open, and a modalStore shows a refusal over held Checkpoint
+// items.
+async function openWithScreen({ name: target, path = null, scratchpad = false, open, toastStore = null, modalStore = null }) {
 	const { current } = startOpening({ name: target, path, scratchpad });
 	appState.update((s) => ({ ...s, isReady: false }));
 	// With nothing open there's nothing else to show, so the screen is up at
@@ -122,9 +127,15 @@ async function openWithScreen({ name: target, path = null, scratchpad = false, o
 		try {
 			name = await open();
 		} catch (repoError) {
+			const held = heldCheckpointIDs(repoError);
 			// Cancelled at the unsaved-work prompt: nothing to show.
 			if (String(repoError).includes("project switch cancelled")) clearOpening();
-			else failOpening(repoError);
+			// Held after the picker opened: refused before it began, so the
+			// open project stays on screen.
+			else if (held && modalStore) {
+				clearOpening();
+				modalStore.trigger(heldModal());
+			} else failOpening(repoError);
 			return null;
 		}
 		switchOpening();
@@ -161,14 +172,30 @@ export function retryOpen() {
 	lastOpen?.();
 }
 
-export function projectModal(toastStore) {
+// The refusal over held Checkpoint items, which ⌘O closes again.
+const heldModal = () => ({
+	...checkpointHeldModal(() => goto("/checkpoint")),
+	toggleAction: "global.open-project",
+});
+
+/**
+ * Opens the project picker, or, while Checkpoint holds items, the refusal
+ * the switch would end in.
+ */
+export async function openProjectPicker(toastStore, modalStore) {
+	const held = await GetCheckpointItems().catch(() => []);
+	if (get(modalStore)[0]) return;
+	modalStore.trigger(held?.length ? heldModal() : projectModal(toastStore, modalStore));
+}
+
+export function projectModal(toastStore, modalStore) {
 	return {
 		type: "component",
 		component: "Project",
 		toggleAction: "global.open-project",
 		title: "Switch Projects",
 		response: (r) => {
-			if (r) openProjectFile(r, toastStore);
+			if (r) openProjectFile(r, toastStore, modalStore);
 		},
 	};
 }

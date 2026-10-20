@@ -135,6 +135,7 @@
 								on:click={() => (picked = choice.path)}
 							>
 								<span class="font-medium">{choice.name}</span>
+								<span class="ml-auto text-xs opacity-60">{choice.opened}</span>
 							</button>
 						</li>
 					{/each}
@@ -164,11 +165,10 @@
 						<RotateCw size={14} /><span>Try again</span>
 					</button>
 				{/if}
-				{#if picked}
-					<button class={positive} on:click={() => dispatch("open", picked)}>
-						<FolderInput size={14} /><span>Open {pickedName}</span>
-					</button>
-				{/if}
+				<!-- With no recent project left to pick, Open stays, disabled. -->
+				<button class={positive} disabled={!picked} on:click={() => dispatch("open", picked)}>
+					<FolderInput size={14} /><span>{picked ? `Open ${pickedName}` : "Open"}</span>
+				</button>
 			</footer>
 		{/if}
 

@@ -3,13 +3,15 @@ import { goto } from "$app/navigation";
 import { get } from "svelte/store";
 import {
 	OpenProject,
+	ScratchpadPath,
 	SetupScratchpad,
 	StartProxy,
 	UpdateProxy,
 	DownloadCert,
 	CopyCertToClipboard,
 } from "./wailsjs/go/main/App";
-import { WindowSetTitle } from "./wailsjs/runtime/runtime";
+import { EventsOnce, WindowSetTitle } from "./wailsjs/runtime/runtime";
+import { projectName } from "./openProgress.js";
 import {
 	activeProject,
 	appState,
@@ -54,28 +56,33 @@ export function setupListener(r, toastStore) {
 		});
 }
 
-// The opening screen waits this long before it shows an open in progress,
-// so quick switches stay instant.
+// The opening screen waits this long once an open is underway before it
+// shows, so quick switches stay instant.
 const openingDelay = 300;
 // The last open asked for, which the opening screen's Try again re-runs.
 let lastOpen = null;
+// The scratchpad's file path, known once startup has asked for it.
+let scratchpadPath = null;
 
 /**
  * Opens the project `r` (a full path, or a bare name for a project in the
  * config dir) and loads it. The opening screen shows the whole open, Go's
- * open and the load, if it takes longer than openingDelay, and always when
- * it fails. The open project and the app's pages stay as they were unless
- * the target's database opens. The layout feeds the screen the open's log
- * events (see lib/openProgress.js). Resolves to the project that opened,
- * `{name, path}`, or null.
+ * open and the load, if it takes longer than openingDelay once Go is past
+ * the unsaved-work prompt, and always when it fails. The open project and
+ * the app's pages stay as they were unless the target's database opens.
+ * The layout feeds the screen the open's log events (see
+ * lib/openProgress.js). Resolves to the project that opened, `{name,
+ * path}`, or null.
  */
 export function openProjectFile(r, toastStore) {
 	lastOpen = () => openProjectFile(r, toastStore);
-	const parts = String(r).split(/[\\/]/);
+	const isPath = /[\\/]/.test(String(r));
 	return openWithScreen({
-		name: parts.pop().replace(/\.marasi$/, ""),
+		name: projectName(r),
 		// A bare name (a new project) has no path until its database opens.
-		path: parts.length > 0 ? String(r) : null,
+		path: isPath ? String(r) : null,
+		// The scratchpad picked from the list is still the scratchpad.
+		scratchpad: isPath && String(r) === scratchpadPath,
 		open: () => OpenProject(r),
 		toastStore,
 	});
@@ -85,11 +92,13 @@ export function openProjectFile(r, toastStore) {
  * Opens the scratchpad at startup, with the opening screen up from the
  * start, as nothing is open yet. Resolves like openProjectFile.
  */
-export function openScratchpad() {
+export async function openScratchpad() {
 	lastOpen = openScratchpad;
 	const name = "scratchpad";
+	scratchpadPath ??= await ScratchpadPath().catch(() => null);
 	return openWithScreen({
 		name,
+		path: scratchpadPath,
 		scratchpad: true,
 		open: () => SetupScratchpad().then(() => name),
 	});
@@ -99,49 +108,49 @@ export function openScratchpad() {
 // project, with the opening screen for `name` at `path`. A toastStore
 // announces the open.
 async function openWithScreen({ name: target, path = null, scratchpad = false, open, toastStore = null }) {
-	// Before the first project has loaded, nothing is open to stay in.
-	const currentProject = get(appState).started ? get(activeProject) : null;
-	startOpening({ name: target, path, currentProject, scratchpad });
+	const { current } = startOpening({ name: target, path, scratchpad });
 	appState.update((s) => ({ ...s, isReady: false }));
-	// With nothing open there's nothing else to show, so the screen is up at once.
-	if (currentProject === null) showOpening();
-	const showTimer = setTimeout(showOpening, openingDelay);
-	let name;
+	// With nothing open there's nothing else to show, so the screen is up at
+	// once. Otherwise the delay starts once Go is past the unsaved-work
+	// prompt, so a switch cancelled there never shows the screen.
+	let showTimer;
+	let stopWaiting = () => {};
+	if (current === null) showOpening();
+	else stopWaiting = EventsOnce("project-opening", () => (showTimer = setTimeout(showOpening, openingDelay)));
 	try {
-		name = await open();
-	} catch (repoError) {
-		clearTimeout(showTimer);
-		appState.update((s) => ({ ...s, isReady: true }));
-		// Cancelled at the unsaved-work prompt: nothing to show.
-		if (String(repoError).includes("project switch cancelled")) {
-			clearOpening();
+		let name;
+		try {
+			name = await open();
+		} catch (repoError) {
+			// Cancelled at the unsaved-work prompt: nothing to show.
+			if (String(repoError).includes("project switch cancelled")) clearOpening();
+			else failOpening(repoError);
 			return null;
 		}
-		failOpening(repoError);
-		return null;
-	}
-	switchOpening();
-	activeProject.set(name);
-	WindowSetTitle(name);
-	goto("/");
-	try {
-		await openProject();
-	} catch (loadError) {
-		clearTimeout(showTimer);
-		failOpening(loadError);
-		return null;
+		switchOpening();
+		activeProject.set(name);
+		WindowSetTitle(name);
+		goto("/");
+		try {
+			await openProject();
+		} catch (loadError) {
+			failOpening(loadError);
+			return null;
+		} finally {
+			// The pages mount afresh on the new project's stores.
+			pagesKey.update((key) => key + 1);
+		}
+		const opened = finishOpening();
+		toastStore?.trigger({
+			message: "Opened " + name + " project",
+			background: "variant-filled-success",
+		});
+		return opened;
 	} finally {
-		// The pages mount afresh on the new project's stores.
-		pagesKey.update((key) => key + 1);
+		stopWaiting();
+		clearTimeout(showTimer);
 		appState.update((s) => ({ ...s, isReady: true }));
 	}
-	clearTimeout(showTimer);
-	const opened = finishOpening();
-	toastStore?.trigger({
-		message: "Opened " + name + " project",
-		background: "variant-filled-success",
-	});
-	return opened;
 }
 
 /**

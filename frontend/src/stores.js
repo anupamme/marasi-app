@@ -23,6 +23,7 @@ import { jobsStore } from "./stores/jobsStore";
 import { recentTraffic } from "./stores/recentTrafficStore";
 import { savedQueriesStore } from "./stores/savedQueriesStore";
 import {
+  loadSignals,
   openingFor,
   openingScreen,
   withFailed,
@@ -117,8 +118,12 @@ export let activeProject = writable("Marasi");
 export const opening = writable(null);
 /** Whether the opening screen is up: slow opens, failures and startup. */
 export const openingShown = writable(false);
-/** The open project's path, once known, so failures can leave it out. */
-const openProjectPath = writable(null);
+/**
+ * The project the app's Go side has open, `{name, path}` (path null when
+ * unknown), so a failed open can offer to stay in it and leave it out of
+ * the list.
+ */
+const currentProject = writable(null);
 /**
  * Bumped after each project loads, so the app's pages mount afresh on the
  * new project's stores.
@@ -131,14 +136,15 @@ export const pagesKey = writable(0);
 export const loadedProject = writable(null);
 /**
  * Starts the opening screen's state for opening `name` at `path` (null when
- * only a bare name is known), with `currentProject` the project open now
- * (null at startup). `scratchpad` marks startup's open of the scratchpad.
- * An opening screen that's up stays up for the new open.
+ * only a bare name is known), and returns it. `scratchpad` marks the
+ * scratchpad. Before the first project has loaded (startup), nothing is
+ * open to stay in. An opening screen that's up stays up for the new open.
  */
-export function startOpening({ name, path = null, currentProject = null, scratchpad = false }) {
-  opening.set(
-    openingFor({ name, path, currentProject, currentPath: currentProject && get(openProjectPath), scratchpad }),
-  );
+export function startOpening({ name, path = null, scratchpad = false }) {
+  const current = get(appState).started ? get(currentProject) : null;
+  const state = openingFor({ name, path, current, scratchpad });
+  opening.set(state);
+  return state;
 }
 /** Shows the opening screen for the open in progress. */
 export function showOpening() {
@@ -151,7 +157,7 @@ export function feedOpeningLog(log) {
 /** Records that the target is open and the previous project released. */
 export function switchOpening() {
   opening.update((state) => state && withSwitched(state));
-  openProjectPath.set(get(opening)?.path ?? null);
+  currentProject.set(get(opening)?.current ?? null);
 }
 /**
  * Records that the open in progress succeeded, and closes the screen.
@@ -162,7 +168,7 @@ export function finishOpening() {
   const opened = state && openingScreen(withOpened(state)).opened;
   clearOpening();
   if (!opened) return null;
-  openProjectPath.set(opened.path);
+  currentProject.set(opened);
   loadedProject.set(opened);
   return opened;
 }
@@ -170,10 +176,10 @@ export function finishOpening() {
  * Stays in the project still open after a failed open, and closes the
  * screen. When the target opened but didn't load, that's the target.
  */
-export function stayInOpening() {
+export function stayInCurrentProject() {
   const state = get(opening);
   clearOpening();
-  if (state?.currentProject) loadedProject.set({ name: state.currentProject, path: state.currentPath });
+  if (state?.current) loadedProject.set(state.current);
 }
 /**
  * Records that the open in progress failed with `error`, and shows the
@@ -202,7 +208,7 @@ function loadPart(signal) {
 
 export async function openProject() {
   // Each loadPart signal tells the opening screen which part loads next.
-  loadPart("traffic");
+  loadPart(loadSignals.traffic);
   logbookSearchInput.set("");
   reportMetadata.set({
     title: get(activeProject) + " Report",
@@ -242,7 +248,7 @@ export async function openProject() {
   // first: it is the page researchers open, and its rows don't wait on the
   // project's extensions.
   ledgerStore.populate();
-  loadPart("extensions");
+  loadPart(loadSignals.extensions);
   try {
     await LoadExtensions();
   } catch (err) {
@@ -256,27 +262,27 @@ export async function openProject() {
   // The project's highlight labels, then its old hex highlights migrated in
   // the background; the Ledger reloads once they are numbers.
   highlightsStore.openProject({ onMigrated: () => ledgerStore.reload() });
-  loadPart("logs");
+  loadPart(loadSignals.logs);
   await populateLogs();
-  loadPart("scope");
+  loadPart(loadSignals.scope);
   await populateScope();
-  loadPart("checkpoint");
+  loadPart(loadSignals.checkpoint);
   await populateCheckpoint();
-  loadPart("workshop");
+  loadPart(loadSignals.workshop);
   await populateWorkshop();
-  loadPart("waypoints");
+  loadPart(loadSignals.waypoints);
   await populateWaypoints();
-  loadPart("extension-list");
+  loadPart(loadSignals.extensionList);
   await populateExtensions();
-  loadPart("test-cases");
+  loadPart(loadSignals.testCases);
   await testCaseStore.populate();
-  loadPart("findings");
+  loadPart(loadSignals.findings);
   await findingStore.populate();
-  loadPart("intercept");
+  loadPart(loadSignals.intercept);
   await connectionStore.populateInterceptFlag();
-  loadPart("armory");
+  loadPart(loadSignals.armory);
   await armoryStore.populate();
-  loadPart("launchpads");
+  loadPart(loadSignals.launchpads);
   await launchpadStore.populate();
 }
 

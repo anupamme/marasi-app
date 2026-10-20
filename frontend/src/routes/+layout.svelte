@@ -51,7 +51,7 @@
 		pagesKey,
 		feedOpeningLog,
 		loadedProject,
-		stayInOpening,
+		stayInCurrentProject,
 	} from "../stores.js";
 	import {
 		openProjectFile,
@@ -251,26 +251,25 @@
 		autoModeWatcher();
 		StartupRoutine2.then((project) => {
 			stopWaitingForProject();
-			// The project that opened, which may not be the scratchpad, names
-			// the window and the app's project, as a switch does.
-			WindowSetTitle(project.name);
-			activeProject.set(project.name);
-			$appState.started = true;
-			$appState.isReady = true;
-			startListener();
-			if ($marasiConfig.FirstRun) {
-				const modal = {
+			// The listener starts on the configured address, and the first-run
+			// setup shows only once it has started (or failed to), as it sets
+			// the listener up.
+			startListener().then(() => {
+				if (!$marasiConfig.FirstRun || $modalStore[0]) return;
+				modalStore.trigger({
 					type: "component",
 					component: "Startup",
 					title: "Setup Listener",
 					response: (r) => {
 						console.log(r);
 					},
-				};
-				if (!$modalStore[0]) {
-					modalStore.trigger(modal);
-				}
-			}
+				});
+			});
+			// The project that opened, which may not be the scratchpad, names
+			// the window and the app's project, as a switch does.
+			WindowSetTitle(project.name);
+			activeProject.set(project.name);
+			appState.update((s) => ({ ...s, started: true, isReady: true }));
 			removeMenuShortcuts = installMenuShortcuts(shortcutState);
 			// The rail navigates by click, so nothing preloads the Ledger's
 			// code on hover; load it now, so the first visit renders at once.
@@ -927,7 +926,7 @@
 	<div class="fixed inset-0 z-[998] overflow-auto bg-surface-50-900-token">
 		<OpeningScreen
 			state={$opening}
-			on:stay={stayInOpening}
+			on:stay={stayInCurrentProject}
 			on:retry={retryOpen}
 			on:open={(event) => openProjectFile(event.detail, toastStore)}
 			on:browse={() =>

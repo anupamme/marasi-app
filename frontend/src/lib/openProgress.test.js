@@ -19,7 +19,7 @@ const db = (message, data = {}) => ({ message, level: "INFO", timestamp: "08:40:
 const goose = (message, data = {}) => ({ message, level: "INFO", timestamp: "08:40:21", data: { logger: "goose", ...data } });
 
 const replay = (state, events) => events.reduce(withOpenLog, state);
-const acme = () => openingFor({ name: "acme-portal", path: "/Users/r/acme-portal.marasi", currentProject: "scratchpad" });
+const acme = () => openingFor({ name: "acme-portal", path: "/Users/r/acme-portal.marasi", current: { name: "scratchpad", path: null } });
 
 test("an open starts by checking the project lock, under the project's name and path", () => {
   const screen = openingScreen(acme());
@@ -142,7 +142,7 @@ test("Details lists the open's log lines unchanged, in order, and leaves out log
 });
 
 test("an open by bare name takes the project's path from the database it connects to", () => {
-  const state = openingFor({ name: "new-target", path: null, currentProject: "scratchpad" });
+  const state = openingFor({ name: "new-target", path: null, current: { name: "scratchpad", path: null } });
   assert.equal(openingScreen(state).project.path, null);
 
   const connected = withOpenLog(state, db("Connecting to SQLite...", { path: "/cfg/Marasi/new-target.marasi" }));
@@ -157,6 +157,15 @@ test("an up-to-date database ticks Open and Upgrade even without a goose event f
 
 // Errors as the app's Go side returns them through Wails.
 const lockedError = "opening project: project_locked: project already open: /Users/r/acme-portal.marasi";
+
+test("a locked project opened by bare name takes its path from the error", () => {
+  const state = openingFor({ name: "acme-portal", path: null, current: { name: "scratchpad", path: null } });
+
+  assert.deepEqual(openingScreen(withFailed(state, lockedError)).project, {
+    name: "acme-portal",
+    path: "/Users/r/acme-portal.marasi",
+  });
+});
 
 test("a locked project fails the Lock step as Locked, says it's open in another Marasi, and offers Stay in and Try again", () => {
   const state = withFailed(acme(), lockedError);
@@ -205,17 +214,50 @@ test("the recent projects to pick from leave out the target and the open project
   const state = openingFor({
     name: "acme-portal",
     path: `${cfg}/acme-portal.marasi`,
-    currentProject: "scratchpad",
-    currentPath: `${cfg}/scratchpad.marasi`,
+    current: { name: "scratchpad", path: `${cfg}/scratchpad.marasi` },
   });
   const failed = withRecents(withFailed(state, lockedError), recentProjects);
 
   assert.deepEqual(names(failed), ["ai-sec", "build", "car"]);
-  assert.deepEqual(openingScreen(failed).choices[0], { name: "ai-sec", path: `${cfg}/ai-sec.marasi` });
+  assert.equal(openingScreen(failed).choices[0].name, "ai-sec");
+  assert.equal(openingScreen(failed).choices[0].path, `${cfg}/ai-sec.marasi`);
+});
+
+// The moment the opening screen lists recent projects: 08:40:21 at +04.
+const now = Date.parse("2026-10-20T04:40:21Z");
+const openedTimes = (state) => Object.fromEntries(openingScreen(state).choices.map((choice) => [choice.name, choice.opened]));
+
+test("each recent project says when it was last opened", () => {
+  const recents = [
+    ...recentProjects,
+    { ProjectName: `${cfg}/old.marasi`, Date: "2026-08-02 11:00:00 +0400 +04" },
+    { ProjectName: `${cfg}/odd.marasi`, Date: "last Tuesday" },
+  ];
+  const state = withRecents(openingFor({ name: "target", path: `${cfg}/target.marasi` }), recents, now);
+
+  assert.deepEqual(openedTimes(state), {
+    scratchpad: "Just now",
+    "acme-portal": "1 hour ago",
+    "ai-sec": "15 hours ago",
+    build: "Yesterday",
+    car: "2 weeks ago",
+    old: "2026-08-02",
+    odd: "",
+  });
+});
+
+test("a project opened a few minutes or days ago, or last week, says so", () => {
+  const at = (date) => [{ ProjectName: `${cfg}/p.marasi`, Date: date }];
+  const opened = (date) => openingScreen(withRecents(openingFor({ name: "target" }), at(date), now)).choices[0].opened;
+
+  assert.equal(opened("2026-10-20 08:39:00 +0400 +04"), "1 minute ago");
+  assert.equal(opened("2026-10-20 08:20:00 +0400 +04"), "20 minutes ago");
+  assert.equal(opened("2026-10-17 08:00:00 +0400 +04"), "3 days ago");
+  assert.equal(opened("2026-10-11 08:00:00 +0400 +04"), "Last week");
 });
 
 test("a target or open project with no known path is left out of the list by name", () => {
-  const state = openingFor({ name: "acme-portal", path: null, currentProject: "scratchpad", currentPath: null });
+  const state = openingFor({ name: "acme-portal", path: null, current: { name: "scratchpad", path: null } });
 
   assert.deepEqual(names(withRecents(state, recentProjects)), ["ai-sec", "build", "car"]);
 });
@@ -224,8 +266,7 @@ test("a project that shares the open project's name elsewhere stays in the list"
   const state = openingFor({
     name: "acme-portal",
     path: `${cfg}/acme-portal.marasi`,
-    currentProject: "build",
-    currentPath: "/Users/r/Engagements/build.marasi",
+    current: { name: "build", path: "/Users/r/Engagements/build.marasi" },
   });
 
   assert.deepEqual(names(withRecents(state, recentProjects)), ["scratchpad", "ai-sec", "build", "car"]);

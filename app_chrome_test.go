@@ -7,9 +7,11 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	goruntime "runtime"
 	"slices"
 	"strings"
 	"testing"
+	"time"
 
 	marasi "github.com/tfkr-ae/marasi"
 	"github.com/tfkr-ae/marasi/chrome"
@@ -90,6 +92,60 @@ func TestAppChrome(t *testing.T) {
 			t.Fatalf("wanted: %v\ngot: %v", service.ErrListenerInactive, err)
 		}
 	})
+
+	t.Run("should start Chrome through the proxy without a CDP endpoint", func(t *testing.T) {
+		if goruntime.GOOS == "windows" {
+			t.Skip("test executable is a shell script")
+		}
+		app := newScratchpadApp(t)
+		if err := app.StartProxy("127.0.0.1", "0"); err != nil {
+			t.Fatalf("starting listener: %v", err)
+		}
+		executable, argsPath := writeFakeChrome(t)
+		if _, err := app.AddChromePath(executable, goruntime.GOOS); err != nil {
+			t.Fatalf("adding fake Chrome: %v", err)
+		}
+		if err := app.StartBrowser(""); err != nil {
+			t.Fatalf("starting Chrome: %v", err)
+		}
+		args := readFakeChromeArgs(t, argsPath)
+		if !strings.Contains(args, "--proxy-server=http://"+listenerAddress(t, app)+"\n") {
+			t.Fatalf("wanted: --proxy-server for the listener among arguments\ngot:\n%s", args)
+		}
+		if strings.Contains(args, "--remote-debugging-port") {
+			t.Fatalf("wanted: no --remote-debugging-port among arguments\ngot:\n%s", args)
+		}
+	})
+}
+
+// writeFakeChrome writes a Chrome stand-in that records its arguments, one
+// per line, to argsPath.
+func writeFakeChrome(t *testing.T) (executable, argsPath string) {
+	t.Helper()
+	dir := t.TempDir()
+	argsPath = filepath.Join(dir, "args")
+	executable = filepath.Join(dir, "chrome")
+	script := "#!/bin/sh\nprintf '%s\\n' \"$@\" > \"" + argsPath + ".tmp\" && mv \"" + argsPath + ".tmp\" \"" + argsPath + "\"\n"
+	if err := os.WriteFile(executable, []byte(script), 0700); err != nil {
+		t.Fatalf("writing fake Chrome: %v", err)
+	}
+	return executable, argsPath
+}
+
+// readFakeChromeArgs waits for the fake Chrome to record its arguments.
+func readFakeChromeArgs(t *testing.T, argsPath string) string {
+	t.Helper()
+	deadline := time.Now().Add(10 * time.Second)
+	for {
+		args, err := os.ReadFile(argsPath)
+		if err == nil {
+			return string(args)
+		}
+		if !time.Now().Before(deadline) {
+			t.Fatalf("reading fake Chrome arguments: %v", err)
+		}
+		time.Sleep(10 * time.Millisecond)
+	}
 }
 
 // writeInvalidMaxMessageSize appends a negative websocket_max_message_size

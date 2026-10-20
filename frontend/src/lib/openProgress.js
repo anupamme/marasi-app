@@ -244,7 +244,8 @@ export function openingScreen(state) {
   const part = loading ? loadParts[state.part].label : null;
   let sentence = "Opened.";
   if (failure?.kind === "locked") {
-    sentence = state.scratchpad ? "The scratchpad is open in another Marasi." : "Open in another Marasi.";
+    const project = state.scratchpad ? "The scratchpad" : "The project";
+    sentence = `${project} is opened by another instance.`;
   }
   else if (failure) sentence = "Couldn't open the project.";
   else if (loading) sentence = `Loading ${part.toLowerCase()}.`;

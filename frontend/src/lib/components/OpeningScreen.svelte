@@ -122,32 +122,33 @@
 				</div>
 			{:else if screen.failure}
 				<p class="mt-4 text-xs opacity-60">{screen.choicesLabel}</p>
-				<ul class="mt-1 border-y border-surface-300 dark:border-surface-600">
-					{#each screen.choices as choice (choice.path)}
-						<li>
-							<button
-								class="flex w-full items-baseline gap-3 px-2 py-1.5 text-left text-sm hover:bg-primary-500/10 {picked ===
-								choice.path
-									? '!bg-primary-500/20'
-									: ''}"
-								title={choice.path}
-								aria-pressed={picked === choice.path}
-								on:click={() => (picked = choice.path)}
-							>
-								<span class="font-medium">{choice.name}</span>
-								<span class="ml-auto text-xs opacity-60">{choice.opened}</span>
-							</button>
-						</li>
-					{/each}
-					<li class="border-t border-surface-200 dark:border-surface-700">
-						<button
-							class="flex w-full items-center gap-2 px-2 py-1.5 text-left text-sm opacity-80 hover:bg-primary-500/10"
-							on:click={() => dispatch("browse")}
-						>
-							<FolderOpen size={14} /> Browse…
-						</button>
-					</li>
-				</ul>
+				<!-- The list scrolls so the buttons and Details stay on screen. -->
+				<div class="mt-1 border-y border-surface-300 dark:border-surface-600">
+					<ul class="max-h-48 overflow-y-auto">
+						{#each screen.choices as choice (choice.path)}
+							<li>
+								<button
+									class="flex w-full items-baseline gap-3 px-2 py-1.5 text-left text-sm hover:bg-primary-500/10 {picked ===
+									choice.path
+										? '!bg-primary-500/20'
+										: ''}"
+									title={choice.path}
+									aria-pressed={picked === choice.path}
+									on:click={() => (picked = choice.path)}
+								>
+									<span class="font-medium">{choice.name}</span>
+									<span class="ml-auto text-xs opacity-60">{choice.opened}</span>
+								</button>
+							</li>
+						{/each}
+					</ul>
+					<button
+						class="flex w-full items-center gap-2 border-t border-surface-200 px-2 py-1.5 text-left text-sm opacity-80 hover:bg-primary-500/10 dark:border-surface-700"
+						on:click={() => dispatch("browse")}
+					>
+						<FolderOpen size={14} /> Browse…
+					</button>
+				</div>
 			{:else if screen.load.done < screen.load.total}
 				<div class="mt-3"><ProgressBar {...bar} /></div>
 			{/if}

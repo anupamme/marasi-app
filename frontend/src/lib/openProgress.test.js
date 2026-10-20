@@ -167,12 +167,12 @@ test("a locked project opened by bare name takes its path from the error", () =>
   });
 });
 
-test("a locked project fails the Lock step as Locked, says it's open in another Marasi, and offers Stay in and Try again", () => {
+test("a locked project fails the Lock step as Locked, says it's opened by another instance, and offers Stay in and Try again", () => {
   const state = withFailed(acme(), lockedError);
   const screen = openingScreen(state);
 
   assert.deepEqual(marks(state), ["Locked:failed", "Open:todo", "Upgrade:todo", "Load:todo"]);
-  assert.equal(screen.sentence, "Open in another Marasi.");
+  assert.equal(screen.sentence, "The project is opened by another instance.");
   assert.deepEqual(screen.failure, { kind: "locked", error: lockedError });
   assert.deepEqual(screen.actions, { stayIn: "scratchpad", tryAgain: true });
 });
@@ -293,12 +293,12 @@ test("an open in progress has no failure and offers no actions", () => {
 const scratchpad = () => openingFor({ name: "scratchpad", scratchpad: true });
 const lockedScratchpad = `opening project: project_locked: project already open: ${cfg}/scratchpad.marasi`;
 
-test("a locked scratchpad at startup says the scratchpad is open in another Marasi, offers Try again but no Stay in, and a project instead", () => {
+test("a locked scratchpad at startup says the scratchpad is opened by another instance, offers Try again but no Stay in, and a project instead", () => {
   const state = withRecents(withFailed(scratchpad(), lockedScratchpad), recentProjects);
   const screen = openingScreen(state);
 
   assert.deepEqual(marks(state), ["Locked:failed", "Open:todo", "Upgrade:todo", "Load:todo"]);
-  assert.equal(screen.sentence, "The scratchpad is open in another Marasi.");
+  assert.equal(screen.sentence, "The scratchpad is opened by another instance.");
   assert.deepEqual(screen.actions, { stayIn: null, tryAgain: true });
   assert.equal(screen.choicesLabel, "Open a project instead");
   assert.deepEqual(names(state), ["acme-portal", "ai-sec", "build", "car"]);

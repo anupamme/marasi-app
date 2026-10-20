@@ -333,6 +333,9 @@ func (a *App) OpenProject(name string) (string, error) {
 		filePath = filePath + ".marasi"
 	}
 
+	if err := checkpointHeldError(a.Proxy.CheckpointItems()); err != nil {
+		return "", err
+	}
 	confirmed, err := a.confirmLosingWork("Switch Project")
 	if err != nil {
 		return "", err
@@ -366,6 +369,28 @@ func openProjectError(err error) error {
 		return fmt.Errorf("opening project: %s: %w", projectLocked, err)
 	}
 	return err
+}
+
+// checkpointHeld refuses a switch while Checkpoint holds an item:
+// "opening project: checkpoint_held (<id>, <id>): <cause>". Marasi would
+// wait for the item, or drop it when a launch holds it
+// (marasi docs/adr/2026-10-17-project-switch-waits-for-held-checkpoint-items.md),
+// so the frontend asks to forward or drop the items first.
+const checkpointHeld = "checkpoint_held"
+
+var errCheckpointHeld = errors.New("forward or drop the held Checkpoint items before switching projects")
+
+// checkpointHeldError refuses with checkpointHeld naming the held items, or
+// is nil when none is held.
+func checkpointHeldError(items []domain.CheckpointItem) error {
+	if len(items) == 0 {
+		return nil
+	}
+	ids := make([]string, len(items))
+	for i, item := range items {
+		ids[i] = item.ID.String()
+	}
+	return codedError("opening project", checkpointHeld, ids, errCheckpointHeld)
 }
 
 // projectOpeningEvent tells the frontend that OpenProject has got past the

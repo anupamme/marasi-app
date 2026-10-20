@@ -8,12 +8,12 @@ import (
 	"path/filepath"
 	"strings"
 	"testing"
-	"time"
 
 	marasi "github.com/tfkr-ae/marasi"
 	"github.com/tfkr-ae/marasi/domain"
 	"github.com/tfkr-ae/marasi/service"
 	"github.com/tfkr-ae/marasi/wordlist"
+	"github.com/wailsapp/wails/v2/pkg/runtime"
 )
 
 func TestSetupScratchpadOpensThroughLifecycle(t *testing.T) {
@@ -94,29 +94,34 @@ func TestScratchpadPathIsTheScratchpadSetupOpens(t *testing.T) {
 	}
 }
 
-// A switch waits for a held Checkpoint item rather than refusing, and the
-// item can still be dropped while it waits (marasi docs/adr/2026-10-17-project-switch-waits-for-held-checkpoint-items.md).
-func TestOpenProjectWaitsForHeldCheckpointItem(t *testing.T) {
+// A held Checkpoint item refuses the switch with the checkpoint_held code
+// naming it, before the unsaved-work prompt and the opening screen. The open
+// project and the held item stay as they were, and once the item is dropped
+// the switch goes through.
+func TestOpenProjectRefusesWhileCheckpointItemHeld(t *testing.T) {
 	app := newCheckpointApp(t)
+	events := &recordedEvents{}
+	app.emitEvent = events.emit
+	app.messageDialog = func(runtime.MessageDialogOptions) (string, error) {
+		t.Fatal("wanted no unsaved-work prompt while an item is held")
+		return "", nil
+	}
+	app.unsavedDrafts.Store(1)
 	oldPath := scratchpadPath(t, app)
 	_, reqID, done := startAppRequestHold(t, app)
 	waitForAppCheckpoint(t, app, 1)
 
-	type opened struct {
-		name string
-		err  error
+	_, err := app.OpenProject("other")
+	if err == nil || !strings.Contains(err.Error(), checkpointHeld+" ("+reqID.String()+")") {
+		t.Fatalf("wanted a checkpoint_held error naming %s, got %v", reqID, err)
 	}
-	switched := make(chan opened, 1)
-	go func() {
-		name, err := app.OpenProject("other")
-		switched <- opened{name, err}
-	}()
-	select {
-	case got := <-switched:
-		t.Fatalf("wanted switch to wait for the held item, got %q %v", got.name, got.err)
-	case <-time.After(200 * time.Millisecond):
+	if _, ok := events.first(projectOpeningEvent); ok {
+		t.Fatal("wanted no project-opening event for a refused switch")
 	}
 	assertProjectOwned(t, oldPath)
+	if items := app.GetCheckpointItems(); len(items) != 1 || items[0].ID != reqID {
+		t.Fatalf("wanted the item still held, got %v", items)
+	}
 
 	if err := app.DropCheckpoint(reqID); err != nil {
 		t.Fatalf("dropping checkpoint: %v", err)
@@ -124,13 +129,9 @@ func TestOpenProjectWaitsForHeldCheckpointItem(t *testing.T) {
 	if err := receiveAppHoldResult(t, done); !errors.Is(err, marasi.ErrDropped) {
 		t.Fatalf("wanted: %v\ngot: %v", marasi.ErrDropped, err)
 	}
-	select {
-	case got := <-switched:
-		if got.err != nil || got.name != "other" {
-			t.Fatalf("wanted switch to other, got %q %v", got.name, got.err)
-		}
-	case <-time.After(5 * time.Second):
-		t.Fatal("wanted switch to finish once the held item was dropped")
+	app.unsavedDrafts.Store(0)
+	if name, err := app.OpenProject("other"); err != nil || name != "other" {
+		t.Fatalf("wanted switch to other once the item was dropped, got %q %v", name, err)
 	}
 	assertProjectOwned(t, projectPath(t, app, "other.marasi"))
 	assertProjectReleased(t, oldPath)

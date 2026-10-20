@@ -18,7 +18,7 @@
 		chromeError,
 		downloadCertificate,
 		listenerModal,
-		projectModal,
+		openProjectPicker,
 	} from "../lib/globalActions.js";
 	import { neutralVariant } from "../lib/launchpad/format.js";
 	import { onMount } from "svelte";
@@ -72,7 +72,7 @@
 						type="button"
 						class="btn btn-sm text-sm flex items-center {neutralVariant($modeCurrent)}"
 						on:click={() => {
-							if (!$modalStore[0]) modalStore.trigger(projectModal(toastStore));
+							if (!$modalStore[0]) openProjectPicker(toastStore, modalStore);
 						}}
 					>
 						<span class="mr-2"

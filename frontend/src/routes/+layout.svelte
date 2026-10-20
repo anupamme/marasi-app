@@ -928,11 +928,11 @@
 			state={$opening}
 			on:stay={stayInCurrentProject}
 			on:retry={retryOpen}
-			on:open={(event) => openProjectFile(event.detail, toastStore)}
+			on:open={(event) => openProjectFile(event.detail, toastStore, modalStore)}
 			on:browse={() =>
 				OpenFileDialog()
 					.then((path) => {
-						if (path) openProjectFile(path, toastStore);
+						if (path) openProjectFile(path, toastStore, modalStore);
 					})
 					.catch((err) =>
 						console.error("Opening the file dialog failed:", err),

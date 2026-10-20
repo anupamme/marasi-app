@@ -15,6 +15,11 @@ on:
         description: Version string embedded in the app, in the marasi CLI format
         required: true
         type: string
+      marasi_ref:
+        description: marasi commit to build against instead of the go.mod version (nightlies only)
+        required: false
+        type: string
+        default: ''
 
 env:
   NODE_OPTIONS: "--max-old-space-size=4096"
@@ -30,6 +35,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - if: inputs.marasi_ref != ''
+        env:
+          MARASI_REF: ${{ inputs.marasi_ref }}
+        run: go get "github.com/tfkr-ae/marasi@$MARASI_REF"
       - run: sudo apt-get -yq update && sudo apt-get -yq install libgtk-3-dev libwebkit2gtk-4.1-dev
       # main.go embeds frontend/build, which only exists after a frontend build.
       - run: mkdir -p frontend/build && touch frontend/build/.keep
@@ -73,6 +82,10 @@ jobs:
         with:
           go-version-file: go.mod
           cache: true
+      - if: inputs.marasi_ref != ''
+        env:
+          MARASI_REF: ${{ inputs.marasi_ref }}
+        run: go get "github.com/tfkr-ae/marasi@$MARASI_REF"
       - uses: actions/setup-node@v4
         with:
           node-version: 20

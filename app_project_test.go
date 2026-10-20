@@ -79,6 +79,21 @@ func TestSetupScratchpadRefusesLockedScratchpad(t *testing.T) {
 	}
 }
 
+// The frontend shows the scratchpad's file path before it opens.
+func TestScratchpadPathIsTheScratchpadSetupOpens(t *testing.T) {
+	app := newProjectApp(t)
+	if err := app.SetupScratchpad(); err != nil {
+		t.Fatalf("opening scratchpad: %v", err)
+	}
+	got, err := service.ResolveProjectPath(app.ScratchpadPath())
+	if err != nil {
+		t.Fatalf("resolving %q: %v", app.ScratchpadPath(), err)
+	}
+	if want := scratchpadPath(t, app); got != want {
+		t.Fatalf("wanted scratchpad path %q, got %q", want, got)
+	}
+}
+
 // A switch waits for a held Checkpoint item rather than refusing, and the
 // item can still be dropped while it waits (Marasi ADR-0046).
 func TestOpenProjectWaitsForHeldCheckpointItem(t *testing.T) {

@@ -333,6 +333,8 @@ func (a *App) OpenProject(name string) (string, error) {
 	if !confirmed {
 		return "", errors.New("project switch cancelled")
 	}
+	// From here the open is underway: the frontend's opening screen may show.
+	a.emitEvent(projectOpeningEvent)
 	// The project lifecycle interrupts pending launches before it switches
 	// (Marasi ADR-0031), so they end in the project they were launched in.
 	if err := a.projects.Open(context.Background(), filePath); err != nil {
@@ -359,9 +361,17 @@ func openProjectError(err error) error {
 	return err
 }
 
+// projectOpeningEvent tells the frontend that OpenProject has got past the
+// unsaved-work prompt and is opening the project.
+const projectOpeningEvent = "project-opening"
+
+// ScratchpadPath is the scratchpad's file path, which startup opens first.
+func (a *App) ScratchpadPath() string {
+	return path.Join(a.Proxy.ConfigDir, "scratchpad.marasi")
+}
+
 func (a *App) SetupScratchpad() error {
-	scratchPad := path.Join(a.Proxy.ConfigDir, "scratchpad.marasi")
-	if err := a.projects.Open(context.Background(), scratchPad); err != nil {
+	if err := a.projects.Open(context.Background(), a.ScratchpadPath()); err != nil {
 		return openProjectError(err)
 	}
 	a.prepareOpenedProject()

@@ -4,7 +4,7 @@
 
 - Launchpad dock: drag to resize, snap-collapse to a strip, auto-hide while editing
 - Launchpad file tree: Launchpad entries in entry order, numbered by position and windowed to the last 10, Group by status, Expand all / Collapse all, the floating `End of …` button
-- Entry selection (click, ⌘-click, ⇧-click, ⌘A, Esc), drag to reorder or move entries to another launchpad, the entry context menu (Move to launchpad, Order, Remove from launchpad) and ⌥↑/⌥↓ moves
+- Entry selection (click, ⌘-click, ⇧-click, ⌘A, Esc), drag to reorder or move entries to another launchpad, the entry context menu (Move to launchpad, Order, Copy browser view URL, Remove from launchpad) and ⌥↑/⌥↓ moves
 - Moves and deletes refused while a launch is pending, a pair is already in the target, or the tree is grouped or searching; the Launchpad draft follows its entry when it moves
 - Search (names locally; entry heads and bodies through Marasi), create empty launchpad, rename and description
 - Per-launchpad entry count and last status from Marasi's launchpad summary, updated live by launches
@@ -188,7 +188,19 @@ That leaves `a3, a4, a1, a2, a5`, renumbered `1`–`5`, with a1 and a2 still sel
 
 While the launch is pending, `Delete launchpad` in the top bar is disabled with `title="Launching: cancel or wait"`, and the Ledger greys `Delete` and that launchpad's `Remove from launchpad` item (see `ledger.md`). For searching, the entry search needs 3 or more characters before entries list: `{"click":"input[aria-label=\"Search launchpads\"]"},{"insert":"18099/a"},{"waitText":"matching entries","within":"[data-launchpad-tree]"}`.
 
-**Entry menu.** Right-click an entry: outside the selection it becomes the selection, without reseeding. The menu is the Ledger's `.ledger-row-menu`: a header (`#n`, method, status and URL for one entry; `N entries · in <launchpad>` with method and status counts for several), then `[data-menu-item=move]` (`Move N to launchpad`, a submenu `Adds at the end` listing the other launchpads with counts, each greyed with its refusal as the `title`), `top`, `up`, `down`, `bottom` (greyed `Already first`/`Already last`, `Grouped by status` or `Searching`) and `remove` (`Remove N from launchpad`, greyed `N launching`). A pending entry greys `move` itself, so its submenu does not open. Disabled items cannot be hovered by the driver; read their `title` from the capture instead.
+**Entry menu.** Right-click an entry: outside the selection it becomes the selection, without reseeding. The menu is the Ledger's `.ledger-row-menu`: a header (`#n`, method, status and URL for one entry; `N entries · in <launchpad>` with method and status counts for several), then `[data-menu-item=move]` (`Move N to launchpad`, a submenu `Adds at the end` listing the other launchpads with counts, each greyed with its refusal as the `title`), `top`, `up`, `down`, `bottom` (greyed `Already first`/`Already last`, `Grouped by status` or `Searching`), `browser-view` (`Copy browser view URL`, greyed `One entry at a time` for several, `No response yet` for a pending or cancelled entry, `Not for a WebSocket upgrade` for a `101`) and `remove` (`Remove N from launchpad`, greyed `N launching`). A pending entry greys `move` itself, so its submenu does not open. Disabled items cannot be hovered by the driver; read their `title` from the capture instead.
+
+**Browser view URL.** With an entry open, the Response header has `Browser view` (`.lp-browser-view`, disabled with the same reason as its `title`), and `⌘⇧V` (`launchpad.copy-browser-view-url`; it yields to a focused editor, so click `.lp-topbar` first) runs it: both copy `http://marasi/view/<entry uuid>` and toast `Copied the browser view URL. Open it in a browser that uses Marasi's proxy`; on a pending entry `⌘⇧V` only toasts `No response yet`. Through the proxy that URL answers `302` to the pair's original URL, and the stored response is served there without contacting the origin (marasi `docs/adr/2026-10-20-a-browser-view-serves-the-stored-response-once-at-its-original-url.md`): `curl -s -L -x 127.0.0.1:<proxy port> http://marasi/view/<uuid>` returns the stored body and the origin logs no request. Proven:
+
+```json
+{"name":"browser-view-header","steps":[
+ {"waitSelector":".lp-browser-view:not([disabled])"},{"click":".lp-browser-view"},{"waitText":"Copied the browser view URL","within":".snackbar-wrapper"},
+ {"click":".lp-topbar"},{"key":"cmd+shift+v"},{"waitText":"Copied the browser view URL","within":".snackbar-wrapper"},
+ {"click":".lp-entry","hasText":"/launchpad-replay","button":"right"},{"waitSelector":".ledger-row-menu [data-menu-item=browser-view]:not([disabled])"},
+ {"click":"[data-menu-item=browser-view]"},{"waitText":"Copied the browser view URL","within":".snackbar-wrapper"}]}
+```
+
+During `launch-cancel`, while the entry is pending: `{"waitSelector":".lp-browser-view[disabled][title=\"No response yet\"]"},{"click":".lp-topbar"},{"key":"cmd+shift+v"},{"waitText":"No response yet","within":".snackbar-wrapper"}`.
 
 ```json
 {"name":"menu-move","steps":[
